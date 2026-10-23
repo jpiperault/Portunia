@@ -285,3 +285,16 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .tun-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #191a1f; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .tun-item.on { border-color: #2c5a44; }
 .tun-error { color: var(--danger); }
+
+/* Import / export */
+.imp-file { display: flex; gap: 8px; }
+.imp-path, .imp-folder input { height: 34px; padding: 0 10px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); font-size: 12.5px; }
+.imp-path { flex: 1; min-width: 0; font-family: 'Cascadia Mono', Consolas, monospace; }
+.imp-actions { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: flex-end; gap: 8px; }
+.imp-folder { display: flex; flex-direction: column; gap: 4px; margin-right: auto; }
+.imp-list { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
+.imp-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; background: #191a1f; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.imp-row input { margin-top: 3px; accent-color: var(--accent); }
+.imp-row.off { opacity: .6; cursor: default; }
+.imp-line { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.imp-note { color: #f5be85; }

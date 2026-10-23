@@ -4907,11 +4907,12 @@ dependencies = [
 
 [[package]]
 name = "termoria"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
  "keyring",
+ "quick-xml",
  "russh",
  "russh-sftp",
  "serde",
@@ -4922,6 +4923,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tokio",
  "uuid",
+ "winreg",
 ]
 
 [[package]]

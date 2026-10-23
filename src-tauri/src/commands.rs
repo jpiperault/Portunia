@@ -16,6 +16,7 @@ use crate::connector::{
     TerminalConnection, TunnelSpec, TunnelStatus,
     ViewKind,
 };
+use crate::importers::{self, Candidate};
 use crate::registry::Registry;
 use crate::secrets;
 use crate::store::{Session, Snippet, Store};
@@ -436,4 +437,77 @@ pub async fn tunnel_start(state: State<'_, AppState>, connection_id: String, spe
 pub fn tunnel_stop(state: State<'_, AppState>, connection_id: String, id: String) -> CmdResult<()> {
     forwarder_of(&state, &connection_id)?.stop(&id);
     Ok(())
+}
+
+// ---------- Import / export ----------
+
+fn import_path(source: &str, path: Option<String>) -> PathBuf {
+    match path.filter(|p| !p.trim().is_empty()) {
+        Some(p) => PathBuf::from(p),
+        None if source == "mremoteng" => importers::default_mremoteng(),
+        None => importers::default_ssh_config(),
+    }
+}
+
+/// Emplacement habituel du fichier d'une source (affiché dans l'interface).
+#[tauri::command]
+pub fn import_default_path(source: String) -> String {
+    import_path(&source, None).display().to_string()
+}
+
+/// Sessions trouvées dans une source, avant confirmation.
+#[tauri::command]
+pub fn import_preview(
+    state: State<'_, AppState>,
+    source: String,
+    path: Option<String>,
+    folder: String,
+) -> CmdResult<Vec<Candidate>> {
+    let mut candidates = match source.as_str() {
+        "ssh-config" => importers::ssh_config(&import_path(&source, path), &folder),
+        "putty" => importers::putty(&folder),
+        "mremoteng" => importers::mremoteng(&import_path(&source, path), &folder),
+        _ => return Err("Source d'import inconnue".into()),
+    }
+    .map_err(full)?;
+    let existing: Vec<String> = state.store.lock().unwrap().list().iter().map(importers::identity).collect();
+    for c in &mut candidates {
+        c.duplicate = existing.contains(&importers::identity(&c.session));
+    }
+    Ok(candidates)
+}
+
+#[tauri::command]
+pub fn import_apply(state: State<'_, AppState>, sessions: Vec<Session>) -> CmdResult<usize> {
+    state.store.lock().unwrap().add_sessions(sessions).map_err(full)
+}
+
+#[tauri::command]
+pub fn export_backup(state: State<'_, AppState>, path: String) -> CmdResult<usize> {
+    let (sessions, folders, snippets) = state.store.lock().unwrap().export_parts();
+    let count = sessions.len();
+    let backup = importers::Backup { app: "termoria".into(), version: 1, sessions, folders, snippets };
+    let text = serde_json::to_string_pretty(&backup).map_err(err)?;
+    std::fs::write(&path, text).map_err(|e| format!("Écriture impossible : {e}"))?;
+    Ok(count)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupReport {
+    added: usize,
+    skipped: usize,
+    snippets: usize,
+}
+
+#[tauri::command]
+pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<BackupReport> {
+    let backup = importers::read_backup(&PathBuf::from(path)).map_err(full)?;
+    let (added, skipped, snippets) = state
+        .store
+        .lock()
+        .unwrap()
+        .merge_backup(backup.sessions, backup.folders, backup.snippets)
+        .map_err(full)?;
+    Ok(BackupReport { added, skipped, snippets })
 }

@@ -1,6 +1,7 @@
 mod commands;
 mod connector;
 mod connectors;
+mod importers;
 mod registry;
 mod secrets;
 mod store;
@@ -50,6 +51,11 @@ pub fn run() {
             commands::tunnel_list,
             commands::tunnel_start,
             commands::tunnel_stop,
+            commands::import_default_path,
+            commands::import_preview,
+            commands::import_apply,
+            commands::export_backup,
+            commands::import_backup,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

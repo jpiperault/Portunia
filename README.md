@@ -44,6 +44,7 @@ Autres fonctions :
 - tunnels SSH : port local (ssh -L) et proxy SOCKS5 (ssh -D), ouverts à la connexion ou à la demande, n'écoutant que sur 127.0.0.1 ;
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
+- import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Termoria ;
 - mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
 - sessions enregistrées dans `%APPDATA%\fr.termoria.app\sessions.json`.
 
@@ -56,7 +57,8 @@ src-tauri/src/
   connector.rs     contrat d'une extension (trait Connector, manifeste, champs)
   registry.rs      liste des extensions disponibles
   connectors/      une extension par fichier : ssh, rdp, web, telnet (+ sftp.rs : fichiers, forward.rs : tunnels)
-  store.rs         sessions enregistrées (JSON)
+  store.rs         sessions, dossiers et commandes enregistrés (JSON)
+  importers.rs     import ssh config / PuTTY / mRemoteNG, sauvegarde
   secrets.rs       Gestionnaire d'identifiants Windows
   commands.rs      commandes appelées par l'interface
 src/
@@ -70,6 +72,7 @@ src/
   settings.ts      paramètres de l'interface
   snippets.ts      commandes enregistrées (palette et gestion)
   tunnels.ts       tunnels SSH (éditeur et suivi)
+  importexport.ts  import / export
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :
@@ -90,4 +93,4 @@ Le cœur ne connaît aucun protocole. Une extension :
 - VNC et port série.
 - RDP intégré dans un onglet plutôt que dans une fenêtre séparée.
 - Serveur de rebond (bastion), téléchargement de dossiers entiers.
-- Import des sessions PuTTY / mRemoteNG.
+

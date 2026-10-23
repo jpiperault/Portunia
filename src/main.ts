@@ -11,6 +11,7 @@ import { leafOf, parentOf, SessionTree } from './tree';
 import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
 import { openTunnels } from './tunnels';
+import { openImportExport } from './importexport';
 import { openSettingsDialog } from './settings';
 
 interface Tab {
@@ -287,7 +288,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.8.0'),
+    h('span', {}, 'v0.9.0'),
   );
 }
 
@@ -489,6 +490,8 @@ $('open-settings').append(icon('settings'), h('span', { class: 'grow' }, 'Param�
 $('open-settings').addEventListener('click', openSettingsDialog);
 $('open-snippets').append(icon('commands'), h('span', { class: 'grow' }, 'Commandes enregistrées'));
 $('open-snippets').addEventListener('click', () => openSnippetManager(snippetContext()));
+$('open-import').append(icon('upload'), h('span', { class: 'grow' }, 'Importer / exporter'));
+$('open-import').addEventListener('click', () => openImportExport((msg) => { toast(msg); reload(); }, toast));
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });
 
 // Glisser-déposer depuis l'Explorateur Windows sur le panneau Fichiers = envoi au serveur.

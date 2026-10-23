@@ -64,6 +64,14 @@ export interface TunnelStatus {
   lastError: string | null;
 }
 
+export type ImportSource = 'ssh-config' | 'putty' | 'mremoteng';
+
+export interface ImportCandidate {
+  session: Session;
+  note: string | null;
+  duplicate: boolean;
+}
+
 export type SnippetScope =
   | { kind: 'all' }
   | { kind: 'folder'; path: string }
@@ -130,6 +138,13 @@ export const api = {
   tunnelList: (connectionId: string) => invoke<TunnelStatus[]>('tunnel_list', { connectionId }),
   tunnelStart: (connectionId: string, spec: TunnelSpec) => invoke<void>('tunnel_start', { connectionId, spec }),
   tunnelStop: (connectionId: string, id: string) => invoke<void>('tunnel_stop', { connectionId, id }),
+
+  importDefaultPath: (source: ImportSource) => invoke<string>('import_default_path', { source }),
+  importPreview: (source: ImportSource, path: string | null, folder: string) =>
+    invoke<ImportCandidate[]>('import_preview', { source, path, folder }),
+  importApply: (sessions: Session[]) => invoke<number>('import_apply', { sessions }),
+  exportBackup: (path: string) => invoke<number>('export_backup', { path }),
+  importBackup: (path: string) => invoke<{ added: number; skipped: number; snippets: number }>('import_backup', { path }),
 
   listSnippets: () => invoke<Snippet[]>('list_snippets'),
   saveSnippet: (snippet: Snippet) => invoke<Snippet>('save_snippet', { snippet }),

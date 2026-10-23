@@ -235,6 +235,72 @@ impl Store {
         self.persist()
     }
 
+    /// Ajoute des sessions importées (nouveaux identifiants, sans mot de passe).
+    pub fn add_sessions(&mut self, sessions: Vec<Session>) -> Result<usize> {
+        let mut added = 0;
+        for mut session in sessions.into_iter().filter(|s| !s.protocol.is_empty()) {
+            session.id = uuid::Uuid::new_v4().to_string();
+            session.name = session.name.trim().to_string();
+            if session.name.is_empty() {
+                session.name = "Session importée".into();
+            }
+            session.folder = normalize_folder(&session.folder);
+            session.secret_keys.clear();
+            self.sessions.push(session);
+            added += 1;
+        }
+        self.persist()?;
+        Ok(added)
+    }
+
+    /// Contenu d'une sauvegarde : sessions (sans secrets), dossiers, commandes.
+    pub fn export_parts(&self) -> (Vec<Session>, Vec<String>, Vec<Snippet>) {
+        let sessions = self
+            .sessions
+            .iter()
+            .cloned()
+            .map(|mut s| {
+                s.secret_keys.clear();
+                s
+            })
+            .collect();
+        (sessions, self.folders(), self.snippets.clone())
+    }
+
+    /// Restaure une sauvegarde : ce qui existe déjà (même identifiant) est conservé.
+    /// Renvoie (sessions ajoutées, sessions déjà présentes, commandes ajoutées).
+    pub fn merge_backup(
+        &mut self,
+        sessions: Vec<Session>,
+        folders: Vec<String>,
+        snippets: Vec<Snippet>,
+    ) -> Result<(usize, usize, usize)> {
+        let (mut added, mut skipped, mut snips) = (0, 0, 0);
+        for mut session in sessions {
+            if session.id.is_empty() || self.sessions.iter().any(|s| s.id == session.id) {
+                skipped += 1;
+                continue;
+            }
+            session.folder = normalize_folder(&session.folder);
+            session.secret_keys.clear();
+            self.sessions.push(session);
+            added += 1;
+        }
+        for folder in folders.iter().map(|f| normalize_folder(f)).filter(|f| !f.is_empty()) {
+            if !self.folders.contains(&folder) {
+                self.folders.push(folder);
+            }
+        }
+        for snippet in snippets {
+            if !self.snippets.iter().any(|s| s.id == snippet.id) {
+                self.snippets.push(snippet);
+                snips += 1;
+            }
+        }
+        self.persist()?;
+        Ok((added, skipped, snips))
+    }
+
     pub fn snippets(&self) -> Vec<Snippet> {
         self.snippets.clone()
     }
