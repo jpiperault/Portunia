@@ -10,6 +10,14 @@ use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
+        // Relancer Termoria ramène la fenêtre déjà ouverte au lieu d'en ouvrir une seconde.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -56,6 +64,7 @@ pub fn run() {
             commands::import_apply,
             commands::export_backup,
             commands::import_backup,
+            commands::field_suggestions,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

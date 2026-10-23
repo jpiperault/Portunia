@@ -51,6 +51,8 @@ pub enum FieldKind {
     Choice { options: Vec<ChoiceOption> },
     /// Liste de tunnels (`Vec<TunnelSpec>`), éditée par un composant dédié.
     Tunnels,
+    /// Texte libre avec des suggestions fournies par le connecteur (ex. ports COM présents).
+    Suggest { source: String },
 }
 
 #[derive(Serialize, Clone)]
@@ -303,6 +305,10 @@ pub trait Connector: Send + Sync {
     fn manifest(&self) -> Manifest;
     /// Appelé hors du thread de l'interface : peut bloquer (réseau).
     fn connect(&self, ctx: ConnectContext) -> Result<Outcome>;
+    /// Suggestions pour un champ `Suggest` (appelé à l'ouverture du formulaire).
+    fn suggestions(&self, _source: &str) -> Vec<ChoiceOption> {
+        Vec::new()
+    }
 }
 
 /// Commandes envoyées au thread d'une connexion terminal.

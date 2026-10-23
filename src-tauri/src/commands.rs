@@ -12,7 +12,7 @@ use serde_json::Value;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::connector::{
-    ConnectContext, FieldKind, Manifest, Outcome, PortForwarder, RemoteEntry, RemoteFiles, Sink,
+    ChoiceOption, ConnectContext, FieldKind, Manifest, Outcome, PortForwarder, RemoteEntry, RemoteFiles, Sink,
     TerminalConnection, TunnelSpec, TunnelStatus,
     ViewKind,
 };
@@ -510,4 +510,10 @@ pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<Back
         .merge_backup(backup.sessions, backup.folders, backup.snippets)
         .map_err(full)?;
     Ok(BackupReport { added, skipped, snippets })
+}
+
+/// Suggestions d'un champ (ex. ports COM présents), fournies par l'extension.
+#[tauri::command]
+pub fn field_suggestions(state: State<'_, AppState>, protocol: String, source: String) -> Vec<ChoiceOption> {
+    state.registry.get(&protocol).map(|c| c.suggestions(&source)).unwrap_or_default()
 }

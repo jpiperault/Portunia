@@ -59,6 +59,7 @@ button { cursor: pointer; }
 .badge-rdp { background: #1e2f4d; color: #8ab6ff; }
 .badge-web { background: #33284d; color: #c7b2ff; }
 .badge-telnet, .badge-vnc { background: #3d2e1c; color: #f5be85; }
+.badge-serial { background: #2b3540; color: #a9c7e0; }
 .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; border: 1.5px solid #6b6f78; display: inline-block; }
 .dot.on { background: var(--ok); border-color: var(--ok); }
 .dot.wait { background: var(--warn); border-color: var(--warn); }

@@ -72,12 +72,24 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder 
         }
         default: {
           const isNum = f.kind.type === 'number';
+          // Champ « suggest » : texte libre + liste proposée par l'extension (ex. ports COM).
+          const listId = f.kind.type === 'suggest' ? `sugg-${f.key}` : undefined;
+          const datalist = listId ? h('datalist', { id: listId }) : null;
+          if (datalist && f.kind.type === 'suggest') {
+            api.fieldSuggestions(protocol.id, f.kind.source)
+              .then((opts) => {
+                datalist.replaceChildren(...opts.map((o) => h('option', { value: o.value }, o.label)));
+                if (!current && opts.length === 1) { values[f.key] = opts[0].value; renderFields(); }
+              })
+              .catch(() => {});
+          }
           return h('label', { class: `fld${isNum ? ' fld-small' : ''}` }, f.label + (f.required ? ' *' : ''),
             h('input', {
-              type: isNum ? 'number' : 'text', value: current == null ? '' : String(current),
+              type: isNum ? 'number' : 'text', value: current == null ? '' : String(current), list: listId,
               placeholder: f.placeholder ?? '', spellcheck: 'false',
               oninput: (e: Event) => { const v = (e.target as HTMLInputElement).value; values[f.key] = isNum && v !== '' ? Number(v) : v; },
-            }));
+            }),
+            datalist);
         }
       }
     }

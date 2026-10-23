@@ -34,6 +34,7 @@ L'installateur se trouve dans `src-tauri/target/release/bundle/nsis/`.
 | Bureau à distance (RDP) | Fenêtre du client Windows (mstsc) | Rien à installer. |
 | Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
+| Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
 
 Autres fonctions :
 
@@ -56,7 +57,7 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 src-tauri/src/
   connector.rs     contrat d'une extension (trait Connector, manifeste, champs)
   registry.rs      liste des extensions disponibles
-  connectors/      une extension par fichier : ssh, rdp, web, telnet (+ sftp.rs : fichiers, forward.rs : tunnels)
+  connectors/      une extension par fichier : ssh, rdp, web, telnet, serial (+ sftp.rs : fichiers, forward.rs : tunnels)
   store.rs         sessions, dossiers et commandes enregistrés (JSON)
   importers.rs     import ssh config / PuTTY / mRemoteNG, sauvegarde
   secrets.rs       Gestionnaire d'identifiants Windows
@@ -90,7 +91,7 @@ Le cœur ne connaît aucun protocole. Une extension :
 ## Pistes pour la suite
 
 - Extensions externes chargées sans recompiler (modules WASM).
-- VNC et port série.
+- VNC.
 - RDP intégré dans un onglet plutôt que dans une fenêtre séparée.
 - Serveur de rebond (bastion), téléchargement de dossiers entiers.
 

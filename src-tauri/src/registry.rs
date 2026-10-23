@@ -17,6 +17,7 @@ impl Registry {
         registry.register(Arc::new(connectors::rdp::RdpConnector));
         registry.register(Arc::new(connectors::web::WebConnector));
         registry.register(Arc::new(connectors::telnet::TelnetConnector));
+        registry.register(Arc::new(connectors::serial::SerialConnector));
         registry
     }
 

@@ -2,6 +2,7 @@
 
 pub mod forward;
 pub mod rdp;
+pub mod serial;
 pub mod sftp;
 pub mod ssh;
 pub mod telnet;

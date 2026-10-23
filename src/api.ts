@@ -12,7 +12,8 @@ export type FieldKind =
   | { type: 'file' }
   | { type: 'bool' }
   | { type: 'choice'; options: ChoiceOption[] }
-  | { type: 'tunnels' };
+  | { type: 'tunnels' }
+  | { type: 'suggest'; source: string };
 
 export interface Field {
   key: string;
@@ -145,6 +146,8 @@ export const api = {
   importApply: (sessions: Session[]) => invoke<number>('import_apply', { sessions }),
   exportBackup: (path: string) => invoke<number>('export_backup', { path }),
   importBackup: (path: string) => invoke<{ added: number; skipped: number; snippets: number }>('import_backup', { path }),
+
+  fieldSuggestions: (protocol: string, source: string) => invoke<ChoiceOption[]>('field_suggestions', { protocol, source }),
 
   listSnippets: () => invoke<Snippet[]>('list_snippets'),
   saveSnippet: (snippet: Snippet) => invoke<Snippet>('save_snippet', { snippet }),
