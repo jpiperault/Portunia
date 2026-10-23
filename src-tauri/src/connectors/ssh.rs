@@ -2,6 +2,7 @@
 //! chacha20-poly1305…), compatibles avec OpenSSH 10 et suivants.
 
 use std::{
+    borrow::Cow,
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
@@ -11,12 +12,14 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 use russh::{
+    cipher,
     client::{self, KeyboardInteractiveAuthResponse},
+    kex,
     keys::{
-        agent::client::AgentClient, load_secret_key, HashAlg, PrivateKeyWithHashAlg, PublicKey,
-        PublicKeyOrCertificate,
+        agent::client::AgentClient, load_secret_key, Algorithm, HashAlg, PrivateKeyWithHashAlg,
+        PublicKey, PublicKeyOrCertificate,
     },
-    ChannelMsg, Disconnect,
+    mac, ChannelMsg, Disconnect, Names, Preferred,
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
@@ -29,7 +32,7 @@ impl Connector for SshConnector {
         Manifest {
             id: "ssh".into(),
             name: "SSH".into(),
-            version: "0.2.0".into(),
+            version: "0.3.0".into(),
             description: "Terminal sécurisé : clé privée, mot de passe ou agent.".into(),
             view: ViewKind::Terminal,
             builtin: true,
@@ -56,6 +59,12 @@ impl Connector for SshConnector {
                     .show_if("auth", "key"),
                 Field::new("password", "Mot de passe", FieldKind::Secret)
                     .show_if("auth", "password"),
+                Field::new(
+                    "legacy",
+                    "Compatibilité anciens équipements (autorise des algorithmes faibles)",
+                    FieldKind::Bool,
+                )
+                .default(false),
             ],
         }
     }
@@ -110,6 +119,7 @@ async fn open(ctx: &ConnectContext) -> Result<(client::Handle<Handler>, Channel)
 
     let config = Arc::new(client::Config {
         keepalive_interval: Some(Duration::from_secs(30)),
+        preferred: if ctx.bool("legacy") { legacy_preferred() } else { Preferred::DEFAULT },
         ..Default::default()
     });
     let rejection = Arc::new(Mutex::new(None));
@@ -231,6 +241,60 @@ where
     Ok(false)
 }
 
+// Algorithmes anciens, ajoutés APRÈS les modernes : ils ne sont choisis que
+// si le serveur ne propose rien de mieux.
+const LEGACY_KEX: &[kex::Name] = &[kex::DH_GEX_SHA1, kex::DH_G14_SHA1, kex::DH_G1_SHA1];
+const LEGACY_CIPHERS: &[cipher::Name] = &[
+    cipher::AES_256_CBC,
+    cipher::AES_192_CBC,
+    cipher::AES_128_CBC,
+    cipher::TRIPLE_DES_CBC,
+];
+const LEGACY_MACS: &[mac::Name] = &[mac::HMAC_SHA1_ETM, mac::HMAC_SHA1];
+
+fn legacy_preferred() -> Preferred {
+    let base = Preferred::DEFAULT;
+    // Les pseudo-algorithmes d'extension (ext-info, strict-kex) restent en fin de liste.
+    let (real, extensions): (Vec<kex::Name>, Vec<kex::Name>) = base
+        .kex
+        .iter()
+        .copied()
+        .partition(|k| !k.as_ref().contains("@openssh.com") && !k.as_ref().starts_with("ext-info"));
+    let kex = real.into_iter().chain(LEGACY_KEX.iter().copied()).chain(extensions).collect::<Vec<_>>();
+    let mut key = base.key.to_vec();
+    key.push(Algorithm::Dsa);
+    Preferred {
+        kex: Cow::Owned(kex),
+        key: Cow::Owned(key),
+        cipher: Cow::Owned(base.cipher.iter().chain(LEGACY_CIPHERS).copied().collect()),
+        mac: Cow::Owned(base.mac.iter().chain(LEGACY_MACS).copied().collect()),
+        ..base
+    }
+}
+
+/// Liste des algorithmes faibles réellement négociés avec le serveur.
+fn weak_algorithms(names: &Names) -> Vec<String> {
+    let mut weak = Vec::new();
+    if LEGACY_KEX.contains(&names.kex) {
+        weak.push(format!("échange de clés {}", names.kex.as_ref()));
+    }
+    if LEGACY_CIPHERS.contains(&names.cipher) {
+        weak.push(format!("chiffrement {}", names.cipher.as_ref()));
+    }
+    for m in [&names.client_mac, &names.server_mac] {
+        if LEGACY_MACS.contains(m) {
+            weak.push(format!("intégrité {}", m.as_ref()));
+            break;
+        }
+    }
+    match names.key {
+        Algorithm::Dsa => weak.push("clé de serveur ssh-dss".into()),
+        Algorithm::Rsa { hash: None } => weak.push("clé de serveur ssh-rsa (SHA-1)".into()),
+        _ => {}
+    }
+    weak
+}
+
 fn default_key() -> Option<PathBuf> {
     let home = std::env::var_os("USERPROFILE")?;
     ["id_ed25519", "id_ecdsa", "id_rsa"]
@@ -274,6 +338,27 @@ static KNOWN_HOSTS_LOCK: Mutex<()> = Mutex::new(());
 
 impl client::Handler for Handler {
     type Error = russh::Error;
+
+    /// Avertit dans le terminal si la connexion utilise un algorithme faible.
+    async fn kex_done(
+        &mut self,
+        _shared_secret: Option<&[u8]>,
+        names: &Names,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let weak = weak_algorithms(names);
+        if !weak.is_empty() {
+            self.sink.data(
+                format!(
+                    "\x1b[33m[Termoria] Attention : connexion peu sûre ({}). \
+                     Mettez à jour l'équipement si possible.\x1b[0m\r\n",
+                    weak.join(", ")
+                )
+                .as_bytes(),
+            );
+        }
+        Ok(())
+    }
 
     /// Vérifie la clé du serveur (« confiance au premier usage ») :
     /// une clé qui change bloque la connexion.
