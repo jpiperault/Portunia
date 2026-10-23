@@ -82,7 +82,7 @@ pub fn save_session(state: State<'_, AppState>, input: SaveSessionInput) -> CmdR
     if session.name.is_empty() {
         return Err("Donnez un nom à la session".into());
     }
-    session.folder = session.folder.trim().to_string();
+    session.folder = crate::store::normalize_folder(&session.folder);
     if session.id.is_empty() {
         session.id = uuid::Uuid::new_v4().to_string();
     }
@@ -348,4 +348,47 @@ pub async fn fs_rename(
 ) -> CmdResult<()> {
     let files = files_of(&state, &connection_id)?;
     files.rename(from, to).await.map_err(full)
+}
+
+// ---------- Dossiers de sessions ----------
+
+#[tauri::command]
+pub fn list_folders(state: State<'_, AppState>) -> Vec<String> {
+    state.store.lock().unwrap().folders()
+}
+
+#[tauri::command]
+pub fn create_folder(state: State<'_, AppState>, path: String) -> CmdResult<String> {
+    state.store.lock().unwrap().create_folder(&path).map_err(full)
+}
+
+#[tauri::command]
+pub fn rename_folder(state: State<'_, AppState>, from: String, to: String) -> CmdResult<()> {
+    state.store.lock().unwrap().rename_folder(&from, &to).map_err(full)
+}
+
+#[tauri::command]
+pub fn delete_folder(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    state.store.lock().unwrap().delete_folder(&path).map_err(full)
+}
+
+#[tauri::command]
+pub fn move_sessions(state: State<'_, AppState>, ids: Vec<String>, folder: String) -> CmdResult<()> {
+    state.store.lock().unwrap().move_sessions(&ids, &folder).map_err(full)
+}
+
+/// Copie d'une session, mots de passe enregistrés compris.
+#[tauri::command]
+pub fn duplicate_session(state: State<'_, AppState>, id: String) -> CmdResult<Session> {
+    let mut store = state.store.lock().unwrap();
+    let original = store.get(&id).ok_or("Session introuvable")?;
+    let mut copy = original.clone();
+    copy.id = uuid::Uuid::new_v4().to_string();
+    copy.name = format!("{} (copie)", original.name);
+    for key in &original.secret_keys {
+        if let Some(secret) = secrets::get(&original.id, key).map_err(err)? {
+            secrets::set(&copy.id, key, &secret).map_err(err)?;
+        }
+    }
+    store.upsert(copy).map_err(full)
 }

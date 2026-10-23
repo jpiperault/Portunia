@@ -128,7 +128,9 @@ async fn open(ctx: &ConnectContext) -> Result<(client::Handle<Handler>, Channel)
     let user = ctx.require("username", "Utilisateur")?;
 
     let config = Arc::new(client::Config {
-        keepalive_interval: Some(Duration::from_secs(30)),
+        // Détecte une connexion morte en moins d'une minute (réseau coupé, veille).
+        keepalive_interval: Some(Duration::from_secs(15)),
+        keepalive_max: 3,
         preferred: if ctx.bool("legacy") { legacy_preferred() } else { Preferred::DEFAULT },
         ..Default::default()
     });
@@ -329,7 +331,9 @@ async fn pump(
             },
             msg = read.wait() => match msg {
                 Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => sink.data(&data),
-                Some(ChannelMsg::Eof | ChannelMsg::Close) | None => return Ok(()),
+                Some(ChannelMsg::Eof | ChannelMsg::Close | ChannelMsg::ExitStatus { .. }) => return Ok(()),
+                // Canal coupé sans fin de session : connexion perdue (réseau, veille…).
+                None => bail!("connexion interrompue"),
                 Some(_) => {}
             },
         }

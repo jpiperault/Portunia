@@ -7,6 +7,8 @@ import { renderExtensions } from './extensions';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { FilePanel } from './files';
 import { TerminalView, TermState } from './terminal';
+import { leafOf, parentOf, SessionTree } from './tree';
+import { openSettingsDialog } from './settings';
 
 interface Tab {
   id: string;
@@ -26,7 +28,7 @@ const state = {
   tabs: [] as Tab[],
   active: null as string | null,
   filter: '',
-  collapsed: new Set<string>(),
+  folders: [] as string[],
   showFiles: true,
 };
 
@@ -39,11 +41,10 @@ const details = $('details');
 const statusBar = $('status');
 const search = $<HTMLInputElement>('search');
 
-const NO_FOLDER = 'Sans dossier';
 const protocolOf = (id?: string) => state.protocols.find((p) => p.id === id);
 const sessionOf = (id?: string) => state.sessions.find((s) => s.id === id);
 const activeTab = () => state.tabs.find((t) => t.id === state.active);
-const folders = () => [...new Set(state.sessions.map((s) => s.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const folders = () => state.folders;
 const isConnected = (sessionId: string) => state.tabs.some((t) => t.sessionId === sessionId && t.state === 'connected');
 
 function toast(message: string, kind: 'info' | 'error' = 'info') {
@@ -54,52 +55,57 @@ function toast(message: string, kind: 'info' | 'error' = 'info') {
 
 // ---------- Arbre des sessions ----------
 
-function matches(s: Session, q: string) {
-  if (!q) return true;
-  const hay = [s.name, s.folder, s.protocol, ...s.tags, ...Object.values(s.values).map(String)].join(' ').toLowerCase();
-  return q.split(/\s+/).every((w) => hay.includes(w));
+const sessionTree = new SessionTree(tree, {
+  isConnected,
+  activeSessionId: () => activeTab()?.sessionId,
+  openSession: (s) => openSession(s),
+  editSession: (s) => editSession(s),
+  duplicateSession: (s) => act(async () => {
+    const copy = await api.duplicateSession(s.id);
+    toast(`Session dupliquée : ${copy.name}`);
+  }),
+  removeSession: (s) => removeSession(s),
+  newSession: (folder) => newSession(folder),
+  newFolder: (parent) => promptNewFolder(parent),
+  renameFolder: (path) => {
+    const name = prompt('Nouveau nom du dossier :', leafOf(path))?.trim();
+    if (!name || name === leafOf(path)) return;
+    const parent = parentOf(path);
+    act(() => api.renameFolder(path, parent ? `${parent}/${name}` : name));
+  },
+  deleteFolder: (path) => {
+    const inside = state.sessions.filter((s) => s.folder === path || s.folder.startsWith(`${path}/`)).length;
+    const where = parentOf(path) ? `le dossier « ${parentOf(path)} »` : 'la racine';
+    const detail = inside ? `\nSes ${inside} session(s) et sous-dossiers seront déplacés dans ${where} (rien n'est supprimé).` : '';
+    if (confirm(`Supprimer le dossier « ${leafOf(path)} » ?${detail}`)) act(() => api.deleteFolder(path));
+  },
+  openAll: (path) => {
+    const list = state.sessions.filter((s) => s.folder === path || s.folder.startsWith(`${path}/`));
+    if (list.length > 8 && !confirm(`Ouvrir ${list.length} sessions ?`)) return;
+    list.forEach((s) => openSession(s));
+  },
+  moveSessions: (ids, folder) => act(() => api.moveSessions(ids, folder)),
+  moveFolder: (path, parent) => act(() => api.renameFolder(path, parent ? `${parent}/${leafOf(path)}` : leafOf(path))),
+});
+tree.addEventListener('tree-change', () => renderTree());
+
+function promptNewFolder(parent: string) {
+  const name = prompt(parent ? `Nouveau sous-dossier dans « ${parent} » :` : 'Nom du nouveau dossier :')?.trim();
+  if (name) act(() => api.createFolder(parent ? `${parent}/${name}` : name));
+}
+
+/** Lance une action sur les sessions, affiche l'erreur éventuelle, puis recharge. */
+async function act(action: () => Promise<unknown>) {
+  try {
+    await action();
+  } catch (e) {
+    toast(errorText(e), 'error');
+  }
+  await reload();
 }
 
 function renderTree() {
-  const q = state.filter.trim().toLowerCase();
-  const groups = new Map<string, Session[]>();
-  for (const s of state.sessions.filter((s) => matches(s, q))) {
-    const key = s.folder || NO_FOLDER;
-    groups.set(key, [...(groups.get(key) ?? []), s]);
-  }
-  const names = [...groups.keys()].sort((a, b) => (a === NO_FOLDER ? 1 : b === NO_FOLDER ? -1 : a.localeCompare(b)));
-
-  if (!state.sessions.length) {
-    tree.replaceChildren(h('div', { class: 'empty-tree' },
-      h('p', {}, 'Aucune session enregistrée.'),
-      h('button', { class: 'btn primary', onclick: () => newSession() }, 'Créer une session')));
-    return;
-  }
-  if (!names.length) {
-    tree.replaceChildren(h('p', { class: 'empty-tree muted' }, 'Aucun résultat.'));
-    return;
-  }
-
-  tree.replaceChildren(...names.map((folder) => {
-    const open = q !== '' || !state.collapsed.has(folder);
-    const items = groups.get(folder)!.sort((a, b) => a.name.localeCompare(b.name));
-    return h('div', { class: 'group' },
-      h('button', {
-        class: 'tree-item group-head', 'aria-expanded': String(open),
-        onclick: () => { state.collapsed.has(folder) ? state.collapsed.delete(folder) : state.collapsed.add(folder); renderTree(); },
-      }, icon(open ? 'chevronDown' : 'chevronRight', 12), h('span', { class: 'grow' }, folder), h('span', { class: 'count' }, String(items.length))),
-      open && h('div', { class: 'group-items' }, ...items.map((s) => {
-        const tab = state.tabs.find((t) => t.sessionId === s.id);
-        return h('div', { class: `tree-row${tab && tab.id === state.active ? ' active' : ''}` },
-          h('button', { class: 'tree-item session', title: 'Ouvrir', onclick: () => openSession(s) },
-            h('span', { class: `dot${isConnected(s.id) ? ' on' : ''}` }),
-            h('span', { class: 'grow ellipsis' }, s.name),
-            badge(s.protocol)),
-          h('div', { class: 'row-actions' },
-            h('button', { class: 'icon-btn sm', 'aria-label': `Modifier ${s.name}`, title: 'Modifier', onclick: () => editSession(s) }, icon('edit', 14)),
-            h('button', { class: 'icon-btn sm', 'aria-label': `Supprimer ${s.name}`, title: 'Supprimer', onclick: () => removeSession(s) }, icon('trash', 14))));
-      })));
-  }));
+  sessionTree.render(state.folders, state.sessions, state.filter);
 }
 
 // ---------- Onglets ----------
@@ -110,7 +116,7 @@ function renderTabs() {
       const selected = t.id === state.active;
       return h('div', { class: `tab${selected ? ' active' : ''}` },
         h('button', { role: 'tab', 'aria-selected': String(selected), class: 'tab-main', onclick: () => activate(t.id) },
-          t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' ? 'wait' : ''}` }) : icon('puzzle', 14),
+          t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon('puzzle', 14),
           h('span', { class: 'ellipsis' }, t.title),
           t.protocol && badge(t.protocol)),
         h('button', { class: 'icon-btn sm', 'aria-label': `Fermer ${t.title}`, title: 'Fermer (Ctrl Maj W)', onclick: () => closeTab(t.id) }, icon('close', 13)));
@@ -130,7 +136,7 @@ function renderToolbar() {
   toolbar.hidden = false;
   const v = session.values;
   const target = [v.username && `${v.username}@`, v.host ?? v.url, v.port && `:${v.port}`].filter(Boolean).join('');
-  const label = { connecting: 'connexion…', connected: 'connecté', closed: 'déconnecté' }[tab.state];
+  const label = { connecting: 'connexion…', connected: 'connecté', reconnecting: 'reconnexion…', closed: 'déconnecté' }[tab.state];
   toolbar.replaceChildren(
     h('div', { class: 'toolbar-info' },
       icon('terminal'), h('strong', {}, target || session.name),
@@ -138,6 +144,8 @@ function renderToolbar() {
       h('span', { class: 'muted' }, `· ${label}`)),
     h('div', { class: 'toolbar-actions' },
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
+      tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => tab.term?.cancelReconnect() }, icon('close', 14), 'Annuler la reconnexion'),
+      tab.term && h('button', { class: 'icon-btn', 'aria-label': 'Rechercher dans le terminal', title: 'Rechercher (Ctrl Maj F)', onclick: () => tab.term?.openSearch() }, icon('search')),
       tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), 'Déconnecter'),
       tab.files && h('button', {
         class: `btn${state.showFiles ? ' on' : ''}`, 'aria-pressed': String(state.showFiles), title: 'Afficher / masquer l\'explorateur de fichiers',
@@ -164,7 +172,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.3.0'),
+    h('span', {}, 'v0.5.0'),
   );
 }
 
@@ -243,15 +251,12 @@ async function openSession(session: Session) {
 }
 
 function reconnect(tab: Tab) {
-  const session = sessionOf(tab.sessionId);
-  if (!session || !tab.term) return;
-  tab.term.term.reset();
-  tab.term.connect(session.id, session.name);
+  tab.term?.reconnectNow();
 }
 
 async function reload() {
   try {
-    [state.protocols, state.sessions] = await Promise.all([api.listProtocols(), api.listSessions()]);
+    [state.protocols, state.sessions, state.folders] = await Promise.all([api.listProtocols(), api.listSessions(), api.listFolders()]);
   } catch (e) {
     toast(errorText(e), 'error');
   }
@@ -262,8 +267,8 @@ async function reload() {
   renderAll();
 }
 
-async function newSession() {
-  const result = await openSessionDialog({ protocols: state.protocols, folders: folders() });
+async function newSession(folder = '') {
+  const result = await openSessionDialog({ protocols: state.protocols, folders: folders(), defaultFolder: folder });
   await afterDialog(result);
 }
 
@@ -307,10 +312,14 @@ function openExtensions() {
 
 // ---------- Démarrage ----------
 
+$('new-folder').append(icon('folderPlus'));
+$('new-folder').addEventListener('click', () => promptNewFolder(''));
 $('new-session').append(icon('plus'));
 $('new-session').addEventListener('click', () => newSession());
 $('open-extensions').append(icon('puzzle'), h('span', { class: 'grow' }, 'Extensions'));
 $('open-extensions').addEventListener('click', openExtensions);
+$('open-settings').append(icon('settings'), h('span', { class: 'grow' }, 'Paramètres'));
+$('open-settings').addEventListener('click', openSettingsDialog);
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });
 
 // Glisser-déposer depuis l'Explorateur Windows sur le panneau Fichiers = envoi au serveur.
@@ -336,6 +345,7 @@ document.addEventListener('keydown', (e) => {
   if (key === 'k') { e.preventDefault(); search.focus(); search.select(); }
   else if (key === 'n') { e.preventDefault(); newSession(); }
   else if (key === 'w' && state.active) { e.preventDefault(); closeTab(state.active); }
+  else if (key === 'f') { e.preventDefault(); activeTab()?.term?.openSearch(); }
 });
 
 reload();

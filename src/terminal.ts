@@ -1,8 +1,25 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { openUrl } from '@tauri-apps/plugin-opener';
 import { api, errorText, TermEvent } from './api';
+import { h, icon } from './dom';
+import { showMenu } from './menu';
+import { fontStack, onSettingsChange, settings, updateSettings } from './settings';
 
-export type TermState = 'connecting' | 'connected' | 'closed';
+export type TermState = 'connecting' | 'connected' | 'reconnecting' | 'closed';
+
+/** Délais entre deux tentatives de reconnexion (secondes), le dernier se répète. */
+const RETRY_DELAYS = [2, 5, 10, 20, 30];
+const MAX_RETRIES = 20;
+
+const SEARCH_DECORATIONS = {
+  matchBackground: '#5B4A1C',
+  activeMatchBackground: '#9A6A1F',
+  matchOverviewRuler: '#F0A35B',
+  activeMatchColorOverviewRuler: '#FFD08A',
+};
 
 function decode(b64: string): Uint8Array {
   const bin = atob(b64);
@@ -11,23 +28,38 @@ function decode(b64: string): Uint8Array {
   return bytes;
 }
 
+const copy = (text: string) => navigator.clipboard.writeText(text).catch(() => {});
+
 /** Vue terminal d'un onglet : xterm.js relié à une connexion du cœur Rust. */
 export class TerminalView {
   readonly term: Terminal;
   private readonly fit = new FitAddon();
+  private readonly search = new SearchAddon();
   private readonly observer: ResizeObserver;
+  private readonly unsubscribe: () => void;
   private connectionId: string | null = null;
+  private sessionId = '';
+  private label = '';
+  /** Une connexion a déjà réussi : une coupure déclenche la reconnexion automatique. */
+  private wasConnected = false;
+  private retry = 0;
+  private retryTimer: number | null = null;
+  private searchBar: HTMLElement | null = null;
+  private disposed = false;
+  private connecting = false;
 
   constructor(
     readonly container: HTMLElement,
     private readonly onState: (state: TermState, reason?: string) => void,
   ) {
+    const s = settings();
     this.term = new Terminal({
-      fontFamily: '"Cascadia Mono", "JetBrains Mono", Consolas, monospace',
-      fontSize: 13,
+      fontFamily: fontStack(s),
+      fontSize: s.fontSize,
+      cursorStyle: s.cursorStyle,
+      scrollback: s.scrollback,
       cursorBlink: true,
-      allowProposedApi: false,
-      scrollback: 5000,
+      allowProposedApi: true, // requis par la recherche (surlignage des résultats)
       theme: {
         background: '#111215',
         foreground: '#D6D8DD',
@@ -36,19 +68,76 @@ export class TerminalView {
       },
     });
     this.term.loadAddon(this.fit);
+    this.term.loadAddon(this.search);
+    // Ctrl+clic sur un lien : ouvert dans le navigateur (un simple clic sélectionne).
+    this.term.loadAddon(new WebLinksAddon((event, uri) => {
+      if (event.ctrlKey) openUrl(uri).catch(() => {});
+    }));
     this.term.open(container);
-    // Ctrl+Maj+… est réservé à l'application (raccourcis, copier/coller) :
-    // Ctrl+W, Ctrl+K… restent aux programmes du terminal.
+
+    // Ctrl+Maj+… est réservé à l'application : Ctrl+W, Ctrl+K… restent aux programmes du terminal.
     this.term.attachCustomKeyEventHandler((e) => {
-      if (!(e.ctrlKey && e.shiftKey) || e.type !== 'keydown') return !(e.ctrlKey && e.shiftKey);
+      if (!(e.ctrlKey && e.shiftKey)) return true;
+      if (e.type !== 'keydown') return false;
       const key = e.key.toLowerCase();
-      if (key === 'c' && this.term.hasSelection()) navigator.clipboard.writeText(this.term.getSelection()).catch(() => {});
-      if (key === 'v') navigator.clipboard.readText().then((t) => this.term.paste(t)).catch(() => {});
+      if (key === 'c' && this.term.hasSelection()) copy(this.term.getSelection());
+      else if (key === 'v') this.pasteClipboard();
+      else if (key === 'f') this.openSearch();
       return false;
     });
+
     this.term.onData((data) => {
-      if (this.connectionId) api.termWrite(this.connectionId, data).catch(() => {});
+      if (this.connectionId) {
+        api.termWrite(this.connectionId, data).catch(() => {});
+      } else if (data === '\r' && this.sessionId && !this.retryTimer) {
+        this.reconnectNow(); // Entrée sur une session fermée = se reconnecter
+      } else if (data === '\x1b' && this.retryTimer) {
+        this.cancelReconnect();
+      } else if (data === '\r' && this.retryTimer) {
+        this.reconnectNow();
+      }
     });
+
+    this.term.onSelectionChange(() => {
+      if (settings().copyOnSelect && this.term.hasSelection()) copy(this.term.getSelection());
+    });
+
+    container.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (settings().rightClickPaste) {
+        if (this.term.hasSelection()) {
+          copy(this.term.getSelection());
+          this.term.clearSelection();
+        } else {
+          this.pasteClipboard();
+        }
+        return;
+      }
+      showMenu(e.clientX, e.clientY, [
+        { label: 'Copier', icon: 'copy', action: () => copy(this.term.getSelection()) },
+        { label: 'Coller', action: () => this.pasteClipboard() },
+        { label: 'Rechercher…', action: () => this.openSearch() },
+        'separator',
+        { label: 'Effacer l\'écran', action: () => this.term.clear() },
+      ]);
+    });
+
+    // Ctrl + molette : taille du texte (pour tous les terminaux).
+    container.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      updateSettings({ fontSize: settings().fontSize + (e.deltaY < 0 ? 1 : -1) });
+    }, { passive: false, capture: true });
+
+    this.unsubscribe = onSettingsChange((next) => {
+      this.term.options.fontFamily = fontStack(next);
+      this.term.options.fontSize = next.fontSize;
+      this.term.options.cursorStyle = next.cursorStyle;
+      this.term.options.scrollback = next.scrollback;
+      this.refit();
+    });
+
     this.observer = new ResizeObserver(() => this.refit());
     this.observer.observe(container);
   }
@@ -60,7 +149,7 @@ export class TerminalView {
 
   /** Recalcule la taille ; ignoré quand l'onglet est caché. */
   refit() {
-    if (!this.container.clientWidth || !this.container.clientHeight) return;
+    if (this.disposed || !this.container.clientWidth || !this.container.clientHeight) return;
     this.fit.fit();
     if (this.connectionId) {
       api.termResize(this.connectionId, this.term.cols, this.term.rows).catch(() => {});
@@ -68,30 +157,140 @@ export class TerminalView {
   }
 
   async connect(sessionId: string, label: string) {
+    this.sessionId = sessionId;
+    this.label = label;
     this.refit();
-    this.onState('connecting');
+    this.onState(this.retry ? 'reconnecting' : 'connecting');
     this.term.write(`\x1b[90mConnexion à ${label}…\x1b[0m\r\n`);
+    this.connecting = true;
     try {
-      const res = await api.connect(sessionId, this.term.cols, this.term.rows, (e) => this.onEvent(e));
+      const res = await api.connect(sessionId, this.term.cols, this.term.rows, (e) => this.onEvent(e))
+        .finally(() => { this.connecting = false; });
+      if (this.disposed) {
+        if (res.connectionId) api.disconnect(res.connectionId).catch(() => {});
+        return;
+      }
       this.connectionId = res.connectionId;
+      this.wasConnected = true;
+      this.retry = 0;
       this.onState('connected');
       this.term.focus();
     } catch (e) {
       const reason = errorText(e);
-      this.term.write(`\r\n\x1b[31m${reason.replace(/\n/g, '\r\n')}\x1b[0m\r\n`);
-      this.onState('closed', reason);
+      this.term.write(`\x1b[31m${reason.replace(/\n/g, '\r\n')}\x1b[0m\r\n`);
+      if (this.retry && this.retry < MAX_RETRIES) {
+        this.scheduleReconnect();
+      } else {
+        this.retry = 0;
+        this.term.write('\x1b[90mAppuyez sur Entrée pour réessayer.\x1b[0m\r\n');
+        this.onState('closed', reason);
+      }
     }
   }
 
   private onEvent(e: TermEvent) {
     if (e.event === 'data') {
       this.term.write(decode(e.data));
-    } else {
-      this.connectionId = null;
-      const msg = e.data ? `\x1b[31mConnexion perdue : ${e.data}` : '\x1b[90mSession terminée';
-      this.term.write(`\r\n${msg}\x1b[0m\r\n`);
-      this.onState('closed', e.data ?? undefined);
+      return;
     }
+    this.connectionId = null;
+    if (this.disposed) return;
+    if (e.data) {
+      this.term.write(`\r\n\x1b[31mConnexion perdue : ${e.data}\x1b[0m\r\n`);
+      // Coupure réseau, mise en veille… : on se reconnecte tout seul.
+      if (settings().autoReconnect && this.wasConnected) {
+        this.scheduleReconnect();
+        return;
+      }
+    } else {
+      this.term.write('\r\n\x1b[90mSession terminée. Appuyez sur Entrée pour vous reconnecter.\x1b[0m\r\n');
+    }
+    this.onState('closed', e.data ?? undefined);
+  }
+
+  private scheduleReconnect() {
+    const delay = RETRY_DELAYS[Math.min(this.retry, RETRY_DELAYS.length - 1)];
+    this.retry++;
+    this.onState('reconnecting');
+    let left = delay;
+    const tick = () => {
+      this.term.write(`\r\x1b[2K\x1b[33mNouvelle tentative (${this.retry}/${MAX_RETRIES}) dans ${left} s — Entrée : maintenant, Échap : annuler\x1b[0m`);
+      if (left-- <= 0) {
+        this.clearTimer();
+        this.term.write('\r\n');
+        this.connect(this.sessionId, this.label);
+        return;
+      }
+      this.retryTimer = window.setTimeout(tick, 1000);
+    };
+    tick();
+  }
+
+  private clearTimer() {
+    if (this.retryTimer !== null) window.clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  /** Reconnexion immédiate (bouton « Reconnecter », Entrée). */
+  reconnectNow() {
+    if (this.connectionId || this.connecting || !this.sessionId) return;
+    const waiting = this.retryTimer !== null;
+    this.clearTimer();
+    if (!waiting) this.retry = 0;
+    this.term.write('\r\n');
+    this.connect(this.sessionId, this.label);
+  }
+
+  cancelReconnect() {
+    this.clearTimer();
+    this.retry = 0;
+    this.term.write('\r\n\x1b[90mReconnexion annulée. Appuyez sur Entrée pour réessayer.\x1b[0m\r\n');
+    this.onState('closed');
+  }
+
+  private pasteClipboard() {
+    navigator.clipboard.readText().then((t) => { if (t) this.term.paste(t); }).catch(() => {});
+  }
+
+  // ---------- Recherche (Ctrl+Maj+F) ----------
+
+  openSearch() {
+    if (this.searchBar) {
+      this.searchBar.querySelector('input')?.select();
+      return;
+    }
+    const count = h('span', { class: 'muted small search-count' });
+    const input = h('input', { type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher dans le terminal', spellcheck: 'false' });
+    const find = (backwards = false) => {
+      const opts = { decorations: SEARCH_DECORATIONS };
+      if (!input.value) { this.search.clearDecorations(); count.textContent = ''; return; }
+      if (backwards) this.search.findPrevious(input.value, opts);
+      else this.search.findNext(input.value, { ...opts, incremental: true });
+    };
+    const results = this.search.onDidChangeResults(({ resultIndex, resultCount }) => {
+      count.textContent = resultCount ? `${resultIndex + 1} / ${resultCount}` : 'aucun résultat';
+    });
+    const close = () => {
+      results.dispose();
+      this.search.clearDecorations();
+      this.searchBar?.remove();
+      this.searchBar = null;
+      this.term.focus();
+    };
+    input.addEventListener('input', () => find());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); find(e.shiftKey); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    });
+    this.searchBar = h('div', { class: 'term-search' },
+      input, count,
+      h('button', { class: 'icon-btn sm', 'aria-label': 'Résultat précédent', title: 'Précédent (Maj+Entrée)', onclick: () => find(true) }, icon('up', 14)),
+      h('button', { class: 'icon-btn sm', 'aria-label': 'Résultat suivant', title: 'Suivant (Entrée)', onclick: () => find() }, icon('chevronDown', 14)),
+      h('button', { class: 'icon-btn sm', 'aria-label': 'Fermer la recherche', title: 'Fermer (Échap)', onclick: close }, icon('close', 14)));
+    this.container.append(this.searchBar);
+    if (this.term.hasSelection()) input.value = this.term.getSelection();
+    input.focus();
+    find();
   }
 
   focus() {
@@ -99,8 +298,11 @@ export class TerminalView {
   }
 
   dispose() {
+    this.disposed = true;
+    this.clearTimer();
     if (this.connectionId) api.disconnect(this.connectionId).catch(() => {});
     this.connectionId = null;
+    this.unsubscribe();
     this.observer.disconnect();
     this.term.dispose();
   }

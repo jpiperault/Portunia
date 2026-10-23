@@ -194,3 +194,46 @@ button { cursor: pointer; }
 .ext-card-head { display: flex; align-items: center; gap: 12px; }
 .ext-card-head h4 { margin: 0; font-size: 15px; }
 .ext-ico { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+
+/* Dossiers de sessions */
+.head-actions { display: flex; gap: 2px; }
+.tree { gap: 1px; }
+.folder-ico { display: flex; color: #f5be85; }
+.folder-row .group-head { color: var(--text-2); font-weight: 600; }
+.tree-row.drop-target { background: var(--accent-soft); outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
+.tree.drop-target { outline: 1.5px dashed var(--accent); outline-offset: -2px; border-radius: 6px; }
+body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
+.drag-ghost {
+  position: fixed; z-index: 30; pointer-events: none; display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; background: #26282e; border: 1px solid var(--accent); border-radius: 6px; font-size: 12px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / .4);
+}
+
+/* Menu contextuel */
+.menu {
+  position: fixed; z-index: 40; min-width: 200px; padding: 4px; background: #26282e;
+  border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 10px 28px rgb(0 0 0 / .45);
+  display: flex; flex-direction: column;
+}
+.menu-item {
+  display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; background: transparent; border: 0;
+  border-radius: 5px; color: var(--text); font-size: 13px; text-align: left;
+}
+.menu-item:hover, .menu-item:focus-visible { background: var(--accent-soft); outline: none; }
+.menu-item.danger { color: var(--danger); }
+.menu-pad { width: 14px; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--line-strong); }
+
+/* Terminal : recherche et paramètres */
+.term-view { position: relative; }
+.term-search {
+  position: absolute; top: 8px; right: 18px; z-index: 5; display: flex; align-items: center; gap: 4px;
+  padding: 4px 4px 4px 8px; background: #26282e; border: 1px solid var(--line-strong); border-radius: 8px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / .4);
+}
+.term-search input { width: 200px; height: 28px; padding: 0 8px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 5px; font-size: 13px; }
+.search-count { min-width: 76px; text-align: right; }
+.check.setting { align-items: flex-start; }
+.check.setting input { margin-top: 3px; }
+.block { display: block; }
+.dlg-body h3.label { margin: 4px 0 -6px; }

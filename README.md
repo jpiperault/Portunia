@@ -1,4 +1,4 @@
-﻿# Termoria
+# Termoria
 
 Gestionnaire de sessions distantes pour Windows : toutes vos connexions (SSH, Bureau à distance, consoles web, Telnet…) dans une seule fenêtre. Léger (Tauri 2 + Rust, interface sans framework) et extensible (un protocole = une extension).
 
@@ -37,12 +37,14 @@ L'installateur se trouve dans `src-tauri/target/release/bundle/nsis/`.
 
 Autres fonctions :
 
-- arbre des sessions par dossiers, recherche (Ctrl+Maj+K), onglets ;
+- arbre des sessions avec dossiers et sous-dossiers (dossiers vides possibles), glisser-déposer pour ranger, menu clic droit (dupliquer, ouvrir tout un dossier…), recherche (Ctrl+Maj+K), onglets ;
+- terminal : recherche dans l'historique (Ctrl+Maj+F), police et taille réglables (Ctrl + molette), copier/coller au clic droit, liens ouverts par Ctrl+clic ;
+- reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
 - mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
 - sessions enregistrées dans `%APPDATA%\fr.termoria.app\sessions.json`.
 
-Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+C / Ctrl+Maj+V copier / coller dans le terminal.
+Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F rechercher, Ctrl+Maj+C / Ctrl+Maj+V copier / coller dans le terminal, F2 renommer, Suppr supprimer.
 
 ## Architecture
 
@@ -60,6 +62,9 @@ src/
   terminal.ts      vue terminal (xterm.js)
   extensions.ts    page Extensions
   files.ts         explorateur de fichiers du serveur
+  tree.ts          arbre des sessions (dossiers, glisser-déposer)
+  menu.ts          menu contextuel
+  settings.ts      paramètres de l'interface
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :

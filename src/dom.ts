@@ -46,6 +46,12 @@ const ICONS: Record<string, string> = {
   home: 'M3 11l9-7 9 7M5 10v10h14V10',
   up: 'M12 19V5M5 12l7-7 7 7',
   files: 'M8 3h7l4 4v11H8zM15 3v4h4M5 7v14h11',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  copy: 'M9 9h11v11H9zM5 15V4h11',
+  play: 'M7 5l12 7-12 7z',
+  move: 'M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20',
+  search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
+  settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1',
 };
 
 export function icon(name: keyof typeof ICONS | string, size = 16): SVGSVGElement {

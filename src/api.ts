@@ -88,6 +88,13 @@ export const api = {
     invoke<void>('term_resize', { connectionId, cols, rows }),
   disconnect: (connectionId: string) => invoke<void>('disconnect', { connectionId }),
 
+  listFolders: () => invoke<string[]>('list_folders'),
+  createFolder: (path: string) => invoke<string>('create_folder', { path }),
+  renameFolder: (from: string, to: string) => invoke<void>('rename_folder', { from, to }),
+  deleteFolder: (path: string) => invoke<void>('delete_folder', { path }),
+  moveSessions: (ids: string[], folder: string) => invoke<void>('move_sessions', { ids, folder }),
+  duplicateSession: (id: string) => invoke<Session>('duplicate_session', { id }),
+
   fsHome: (connectionId: string) => invoke<string>('fs_home', { connectionId }),
   fsList: (connectionId: string, path: string) => invoke<RemoteEntry[]>('fs_list', { connectionId, path }),
   fsDownload: (connectionId: string, remote: string, local: string, onProgress: (p: TransferProgress) => void) =>
