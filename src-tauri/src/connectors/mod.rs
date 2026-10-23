@@ -1,5 +1,6 @@
 //! Extensions intégrées. Chaque fichier est un protocole indépendant.
 
+pub mod forward;
 pub mod rdp;
 pub mod sftp;
 pub mod ssh;

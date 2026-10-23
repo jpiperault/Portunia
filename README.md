@@ -41,6 +41,7 @@ Autres fonctions :
 - terminal : recherche dans l'historique (Ctrl+Maj+F), police et taille réglables (Ctrl + molette), copier/coller au clic droit, liens ouverts par Ctrl+clic ;
 - écran partagé (jusqu'à 4 sessions côte à côte) et saisie multiple (Ctrl+Maj+B) pour taper la même chose sur plusieurs serveurs ;
 - commandes enregistrées (Ctrl+Maj+P) : par session, par dossier ou pour toutes, avec variables {{host}}, {{username}}… ;
+- tunnels SSH : port local (ssh -L) et proxy SOCKS5 (ssh -D), ouverts à la connexion ou à la demande, n'écoutant que sur 127.0.0.1 ;
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
 - mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
@@ -54,7 +55,7 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 src-tauri/src/
   connector.rs     contrat d'une extension (trait Connector, manifeste, champs)
   registry.rs      liste des extensions disponibles
-  connectors/      une extension par fichier : ssh, rdp, web, telnet (+ sftp.rs : explorateur de fichiers)
+  connectors/      une extension par fichier : ssh, rdp, web, telnet (+ sftp.rs : fichiers, forward.rs : tunnels)
   store.rs         sessions enregistrées (JSON)
   secrets.rs       Gestionnaire d'identifiants Windows
   commands.rs      commandes appelées par l'interface
@@ -68,6 +69,7 @@ src/
   menu.ts          menu contextuel
   settings.ts      paramètres de l'interface
   snippets.ts      commandes enregistrées (palette et gestion)
+  tunnels.ts       tunnels SSH (éditeur et suivi)
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :
@@ -87,5 +89,5 @@ Le cœur ne connaît aucun protocole. Une extension :
 - Extensions externes chargées sans recompiler (modules WASM).
 - VNC et port série.
 - RDP intégré dans un onglet plutôt que dans une fenêtre séparée.
-- Tunnels SSH, serveur de rebond, téléchargement de dossiers entiers.
+- Serveur de rebond (bastion), téléchargement de dossiers entiers.
 - Import des sessions PuTTY / mRemoteNG.

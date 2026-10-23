@@ -17,7 +17,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::AppHandle;
 
@@ -49,6 +49,8 @@ pub enum FieldKind {
     File,
     Bool,
     Choice { options: Vec<ChoiceOption> },
+    /// Liste de tunnels (`Vec<TunnelSpec>`), éditée par un composant dédié.
+    Tunnels,
 }
 
 #[derive(Serialize, Clone)]
@@ -133,6 +135,8 @@ pub struct Manifest {
     pub builtin: bool,
     /// La connexion propose un explorateur de fichiers distant (voir `RemoteFiles`).
     pub file_browser: bool,
+    /// La connexion sait ouvrir des tunnels (voir `PortForwarder`).
+    pub port_forwarding: bool,
     pub fields: Vec<Field>,
 }
 
@@ -152,6 +156,63 @@ pub trait TerminalConnection: Send + Sync {
     fn files(&self) -> Option<Arc<dyn RemoteFiles>> {
         None
     }
+    /// Tunnels (redirection de ports), si le protocole le permet.
+    fn forwarder(&self) -> Option<Arc<dyn PortForwarder>> {
+        None
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TunnelKind {
+    /// Un port de ce PC mène à `remote_host:remote_port` vu depuis le serveur (ssh -L).
+    Local,
+    /// Proxy SOCKS5 sur ce PC : tout passe par le serveur (ssh -D).
+    Dynamic,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelSpec {
+    pub id: String,
+    pub kind: TunnelKind,
+    pub bind_port: u16,
+    #[serde(default)]
+    pub remote_host: String,
+    #[serde(default)]
+    pub remote_port: u16,
+    /// Ouvert automatiquement à la connexion.
+    #[serde(default)]
+    pub auto_start: bool,
+}
+
+impl TunnelSpec {
+    pub fn describe(&self) -> String {
+        match self.kind {
+            TunnelKind::Local => format!(
+                "localhost:{} → {}:{}",
+                self.bind_port, self.remote_host, self.remote_port
+            ),
+            TunnelKind::Dynamic => format!("proxy SOCKS localhost:{}", self.bind_port),
+        }
+    }
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct TunnelStatus {
+    pub spec: TunnelSpec,
+    /// Connexions en cours à travers le tunnel.
+    pub connections: u32,
+    /// Dernière erreur rencontrée par une connexion du tunnel.
+    pub last_error: Option<String>,
+}
+
+/// Tunnels ouverts sur une connexion (ils se ferment avec elle).
+pub trait PortForwarder: Send + Sync {
+    fn start(&self, spec: TunnelSpec) -> BoxFuture<'_, ()>;
+    fn stop(&self, id: &str);
+    fn list(&self) -> Vec<TunnelStatus>;
 }
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;

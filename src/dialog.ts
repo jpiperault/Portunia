@@ -1,6 +1,7 @@
 // Formulaire « Nouvelle session » : les champs viennent du manifeste de l'extension.
 import { api, errorText, Field, Manifest, Session } from './api';
 import { h, icon, viewIcon } from './dom';
+import { tunnelEditor } from './tunnels';
 
 export interface DialogResult {
   session: Session;
@@ -58,6 +59,8 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder 
               h('label', { class: `seg-opt${String(current) === o.value ? ' on' : ''}` },
                 h('input', { type: 'radio', name: `f-${f.key}`, value: o.value, checked: String(current) === o.value, onchange: () => set(o.value) }),
                 o.label))));
+        case 'tunnels':
+          return tunnelEditor(current, (list) => { values[f.key] = list.map((t) => ({ ...t })); });
         case 'secret': {
           const saved = existing?.protocol === protocol.id && existing.secretKeys.includes(f.key);
           return h('label', { class: 'fld' }, f.label,

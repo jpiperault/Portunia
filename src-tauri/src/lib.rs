@@ -47,6 +47,9 @@ pub fn run() {
             commands::list_snippets,
             commands::save_snippet,
             commands::delete_snippet,
+            commands::tunnel_list,
+            commands::tunnel_start,
+            commands::tunnel_stop,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

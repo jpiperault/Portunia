@@ -271,3 +271,17 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .snip-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: #191a1f; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .snip-cmd { width: 100%; padding: 8px 11px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); font: 12.5px/1.5 'Cascadia Mono', Consolas, monospace; resize: vertical; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Tunnels */
+.tun-editor { gap: 8px; }
+.tun-help { margin: 0; line-height: 1.5; }
+.tun-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tun-row select, .tun-row input:not([type=checkbox]) { height: 32px; padding: 0 8px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); font-size: 13px; }
+.tun-row .tun-port { width: 84px; }
+.tun-remote { display: inline-flex; align-items: center; gap: 4px; }
+.tun-remote[hidden] { display: none; }
+.tun-remote input[type=text] { width: 170px; }
+.tun-list { display: flex; flex-direction: column; gap: 6px; }
+.tun-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #191a1f; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.tun-item.on { border-color: #2c5a44; }
+.tun-error { color: var(--danger); }

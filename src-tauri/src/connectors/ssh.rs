@@ -23,6 +23,7 @@ use russh::{
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
+use super::forward::SshForwarder;
 use super::sftp::SftpFiles;
 use crate::connector::*;
 
@@ -38,6 +39,7 @@ impl Connector for SshConnector {
             view: ViewKind::Terminal,
             builtin: true,
             file_browser: true,
+            port_forwarding: true,
             fields: vec![
                 Field::new("host", "Hôte", FieldKind::Text)
                     .required()
@@ -67,6 +69,7 @@ impl Connector for SshConnector {
                     FieldKind::Bool,
                 )
                 .default(false),
+                Field::new("tunnels", "Tunnels", FieldKind::Tunnels),
             ],
         }
     }
@@ -80,6 +83,22 @@ impl Connector for SshConnector {
         let handle = Arc::new(handle);
         // L'explorateur de fichiers ouvre son propre canal SFTP sur la même connexion.
         let files: Arc<dyn RemoteFiles> = Arc::new(SftpFiles::new(handle.clone()));
+        let forwarder: Arc<dyn PortForwarder> = Arc::new(SshForwarder::new(handle.clone()));
+
+        // Tunnels à ouvrir dès la connexion.
+        let tunnels: Vec<TunnelSpec> = ctx
+            .values
+            .get("tunnels")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+        for spec in tunnels.into_iter().filter(|t| t.auto_start) {
+            let line = match tauri::async_runtime::block_on(forwarder.start(spec.clone())) {
+                Ok(()) => format!("\x1b[90m[Termoria] Tunnel ouvert : {}\x1b[0m\r\n", spec.describe()),
+                Err(e) => format!("\x1b[33m[Termoria] Tunnel {} impossible : {e:#}\x1b[0m\r\n", spec.describe()),
+            };
+            sink.data(line.as_bytes());
+        }
+
         tauri::async_runtime::spawn(async move {
             let (mut read, write) = channel.split();
             let result = pump(&mut read, &write, rx, sink.as_ref()).await;
@@ -89,13 +108,14 @@ impl Connector for SshConnector {
                 .await;
             sink.closed(result.err().map(|e| format!("{e:#}")));
         });
-        Ok(Outcome::Terminal(Box::new(SshConnection { tx, files })))
+        Ok(Outcome::Terminal(Box::new(SshConnection { tx, files, forwarder })))
     }
 }
 
 struct SshConnection {
     tx: UnboundedSender<Cmd>,
     files: Arc<dyn RemoteFiles>,
+    forwarder: Arc<dyn PortForwarder>,
 }
 
 impl TerminalConnection for SshConnection {
@@ -117,6 +137,10 @@ impl TerminalConnection for SshConnection {
 
     fn files(&self) -> Option<Arc<dyn RemoteFiles>> {
         Some(self.files.clone())
+    }
+
+    fn forwarder(&self) -> Option<Arc<dyn PortForwarder>> {
+        Some(self.forwarder.clone())
     }
 }
 

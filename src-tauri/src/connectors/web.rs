@@ -16,6 +16,7 @@ impl Connector for WebConnector {
             view: ViewKind::Web,
             builtin: true,
             file_browser: false,
+            port_forwarding: false,
             fields: vec![Field::new("url", "Adresse", FieldKind::Text)
                 .required()
                 .placeholder("https://192.168.1.10:5001")],

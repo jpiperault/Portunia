@@ -11,7 +11,8 @@ export type FieldKind =
   | { type: 'secret' }
   | { type: 'file' }
   | { type: 'bool' }
-  | { type: 'choice'; options: ChoiceOption[] };
+  | { type: 'choice'; options: ChoiceOption[] }
+  | { type: 'tunnels' };
 
 export interface Field {
   key: string;
@@ -31,6 +32,7 @@ export interface Manifest {
   view: ViewKind;
   builtin: boolean;
   fileBrowser: boolean;
+  portForwarding: boolean;
   fields: Field[];
 }
 
@@ -45,6 +47,22 @@ export interface RemoteEntry {
 }
 
 export interface TransferProgress { done: number; total: number }
+
+export interface TunnelSpec {
+  id: string;
+  /** local = ssh -L (un port du PC mène à une machine vue depuis le serveur) ; dynamic = proxy SOCKS (ssh -D). */
+  kind: 'local' | 'dynamic';
+  bindPort: number;
+  remoteHost: string;
+  remotePort: number;
+  autoStart: boolean;
+}
+
+export interface TunnelStatus {
+  spec: TunnelSpec;
+  connections: number;
+  lastError: string | null;
+}
 
 export type SnippetScope =
   | { kind: 'all' }
@@ -108,6 +126,10 @@ export const api = {
   deleteFolder: (path: string) => invoke<void>('delete_folder', { path }),
   moveSessions: (ids: string[], folder: string) => invoke<void>('move_sessions', { ids, folder }),
   duplicateSession: (id: string) => invoke<Session>('duplicate_session', { id }),
+
+  tunnelList: (connectionId: string) => invoke<TunnelStatus[]>('tunnel_list', { connectionId }),
+  tunnelStart: (connectionId: string, spec: TunnelSpec) => invoke<void>('tunnel_start', { connectionId, spec }),
+  tunnelStop: (connectionId: string, id: string) => invoke<void>('tunnel_stop', { connectionId, id }),
 
   listSnippets: () => invoke<Snippet[]>('list_snippets'),
   saveSnippet: (snippet: Snippet) => invoke<Snippet>('save_snippet', { snippet }),

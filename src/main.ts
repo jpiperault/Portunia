@@ -10,6 +10,7 @@ import { TerminalView, TermState } from './terminal';
 import { leafOf, parentOf, SessionTree } from './tree';
 import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
+import { openTunnels } from './tunnels';
 import { openSettingsDialog } from './settings';
 
 interface Tab {
@@ -248,6 +249,10 @@ function renderToolbar() {
     h('div', { class: 'toolbar-actions' },
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
       tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => tab.term?.cancelReconnect() }, icon('close', 14), 'Annuler la reconnexion'),
+      tab.state === 'connected' && protocolOf(session.protocol)?.portForwarding && h('button', {
+        class: 'btn', title: 'Redirections de ports à travers cette session',
+        onclick: () => { const id = tab.term?.connection; if (id) openTunnels(session, id, toast, () => reload()); },
+      }, icon('tunnel', 14), 'Tunnels'),
       tab.term && h('button', { class: 'btn', title: 'Commandes enregistrées (Ctrl Maj P)', onclick: () => openPalette(snippetContext()) }, icon('commands', 14), 'Commandes'),
       tab.term && h('button', { class: 'icon-btn', 'aria-label': 'Rechercher dans le terminal', title: 'Rechercher (Ctrl Maj F)', onclick: () => tab.term?.openSearch() }, icon('search')),
       h('button', { class: `btn${isSplit() ? ' on' : ''}`, title: 'Afficher plusieurs sessions côte à côte', onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), 'Écran partagé'),
@@ -282,7 +287,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.7.0'),
+    h('span', {}, 'v0.8.0'),
   );
 }
 

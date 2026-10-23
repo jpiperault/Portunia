@@ -22,6 +22,7 @@ impl Connector for TelnetConnector {
             view: ViewKind::Terminal,
             builtin: true,
             file_browser: false,
+            port_forwarding: false,
             fields: vec![
                 Field::new("host", "Hôte", FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(23),

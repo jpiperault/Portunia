@@ -12,7 +12,8 @@ use serde_json::Value;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::connector::{
-    ConnectContext, FieldKind, Manifest, Outcome, RemoteEntry, RemoteFiles, Sink, TerminalConnection,
+    ConnectContext, FieldKind, Manifest, Outcome, PortForwarder, RemoteEntry, RemoteFiles, Sink,
+    TerminalConnection, TunnelSpec, TunnelStatus,
     ViewKind,
 };
 use crate::registry::Registry;
@@ -408,4 +409,31 @@ pub fn save_snippet(state: State<'_, AppState>, snippet: Snippet) -> CmdResult<S
 #[tauri::command]
 pub fn delete_snippet(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.store.lock().unwrap().delete_snippet(&id).map_err(full)
+}
+
+// ---------- Tunnels ----------
+
+fn forwarder_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn PortForwarder>> {
+    let connections = state.connections.lock().unwrap();
+    let connection = connections.get(connection_id).ok_or("Session fermée")?;
+    connection
+        .forwarder()
+        .ok_or_else(|| "Ce protocole ne propose pas de tunnels".into())
+}
+
+#[tauri::command]
+pub fn tunnel_list(state: State<'_, AppState>, connection_id: String) -> CmdResult<Vec<TunnelStatus>> {
+    Ok(forwarder_of(&state, &connection_id)?.list())
+}
+
+#[tauri::command]
+pub async fn tunnel_start(state: State<'_, AppState>, connection_id: String, spec: TunnelSpec) -> CmdResult<()> {
+    let forwarder = forwarder_of(&state, &connection_id)?;
+    forwarder.start(spec).await.map_err(full)
+}
+
+#[tauri::command]
+pub fn tunnel_stop(state: State<'_, AppState>, connection_id: String, id: String) -> CmdResult<()> {
+    forwarder_of(&state, &connection_id)?.stop(&id);
+    Ok(())
 }
