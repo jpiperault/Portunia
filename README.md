@@ -2,7 +2,11 @@
 
 Gestionnaire de sessions distantes pour Windows : toutes vos connexions (SSH, Bureau à distance, consoles web, Telnet…) dans une seule fenêtre. Léger (Tauri 2 + Rust, interface sans framework) et extensible (un protocole = une extension).
 
-## Installer les outils (une seule fois)
+## Installer Termoria
+
+Téléchargez `Termoria_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Termonia/releases) et lancez-le (installation pour l'utilisateur courant, sans droits administrateur). Termoria se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
+
+## Installer les outils de développement (une seule fois)
 
 1. **Outils de compilation C++ de Visual Studio** : installez « Build Tools for Visual Studio » et cochez « Développement Desktop en C++ ».
 2. **Rust** : installez `rustup` depuis https://rustup.rs (choisissez la chaîne `stable-x86_64-pc-windows-msvc`).
@@ -16,22 +20,28 @@ npm install
 npm run tauri dev
 ```
 
-La première compilation Rust prend quelques minutes, les suivantes sont rapides.
+La première compilation Rust prend quelques minutes, les suivantes sont rapides. Le moteur RDP (`rdp-helper/`) est compilé automatiquement au lancement.
 
-## Produire l'installateur
+## Publier une version
 
-```bash
-npm run tauri build
-```
+1. Mettre à jour le numéro de version dans `package.json`, `src-tauri/Cargo.toml` et `src-tauri/tauri.conf.json`.
+2. Committer, puis pousser un tag `vX.Y.Z` :
+   ```bash
+   git tag v0.13.0
+   git push origin main --tags
+   ```
+3. GitHub Actions (`.github/workflows/release.yml`) compile l'installateur, le signe et publie la release avec `latest.json`, que Termoria consulte pour se mettre à jour.
 
-L'installateur se trouve dans `src-tauri/target/release/bundle/nsis/`.
+La signature utilise la clé `~/.tauri/termoria.key` (secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` du dépôt). La clé publique est dans `tauri.conf.json`. **Ne perdez pas la clé privée** : sans elle, les versions installées ne peuvent plus être mises à jour.
+
+Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (chemin ou contenu de la clé) et son mot de passe, puis `npm run tauri build`. L'installateur est dans `src-tauri/target/release/bundle/nsis/`.
 
 ## Fonctionnalités
 
 | Protocole | Affichage | Remarques |
 |---|---|---|
 | SSH | Onglet terminal | Clé privée, mot de passe ou agent (Pageant / OpenSSH). Les clés des serveurs sont mémorisées à la première connexion, et une clé qui change bloque la connexion. SSH-2 uniquement, compatible OpenSSH 10. Option « Compatibilité anciens équipements » pour les serveurs qui n'acceptent que des algorithmes anciens (diffie-hellman-group1/14-sha1, aes-cbc, 3des-cbc, hmac-sha1, ssh-dss) : ils ne sont utilisés qu'en dernier recours, avec un avertissement dans le terminal. |
-| Bureau à distance (RDP) | Fenêtre du client Windows (mstsc) | Rien à installer. |
+| Bureau à distance (RDP) | Onglet écran (IronRDP) ou client Windows | Dans un onglet avec le moteur IronRDP (authentification NLA, compte de domaine), ou dans le client Bureau à distance de Windows au choix. |
 | Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
@@ -58,7 +68,10 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 src-tauri/src/
   connector.rs     contrat d'une extension (trait Connector, manifeste, champs)
   registry.rs      liste des extensions disponibles
-  connectors/      une extension par fichier : ssh, rdp, web, telnet, serial, vnc (+ sftp.rs : fichiers, forward.rs : tunnels)
+  connectors/      une extension par fichier : ssh, rdp, web, telnet, serial, vnc
+rdp-helper/        moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
+scripts/           compilation du moteur RDP
+.github/workflows/ publication automatique des versions (+ sftp.rs : fichiers, forward.rs : tunnels)
   store.rs         sessions, dossiers et commandes enregistrés (JSON)
   importers.rs     import ssh config / PuTTY / mRemoteNG, sauvegarde
   secrets.rs       Gestionnaire d'identifiants Windows
@@ -76,6 +89,7 @@ src/
   snippets.ts      commandes enregistrées (palette et gestion)
   tunnels.ts       tunnels SSH (éditeur et suivi)
   importexport.ts  import / export
+  updates.ts       mises à jour automatiques
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :
@@ -93,6 +107,5 @@ Le cœur ne connaît aucun protocole. Une extension :
 ## Pistes pour la suite
 
 - Extensions externes chargées sans recompiler (modules WASM).
-- RDP intégré dans un onglet plutôt que dans une fenêtre séparée.
 - Serveur de rebond (bastion), téléchargement de dossiers entiers.
 

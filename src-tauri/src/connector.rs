@@ -29,7 +29,9 @@ pub enum ViewKind {
     Terminal,
     /// Écran distant affiché dans un onglet (VNC…) : voir `ScreenEvent`.
     Screen,
-    /// Bureau à distance ouvert dans une application externe (client RDP de Windows).
+    /// Session ouverte dans une application externe. Plus utilisé par les extensions
+    /// intégrées (le RDP s'affiche dans un onglet), mais disponible pour d'autres.
+    #[allow(dead_code)]
     Desktop,
     /// Page web (consoles d'administration).
     Web,
@@ -154,7 +156,7 @@ pub trait Sink: Send + Sync {
 }
 
 /// Ce qu'une connexion graphique envoie à l'interface.
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ScreenEvent {
     /// Taille de l'écran distant (efface l'image).
@@ -178,8 +180,13 @@ pub enum ScreenEvent {
 #[derive(Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum InputEvent {
-    /// Touche au format X11 « keysym ».
-    Key { keysym: u32, down: bool },
+    /// `keysym` : touche X11 (VNC) ; `code` : touche physique du navigateur (RDP).
+    Key {
+        keysym: u32,
+        down: bool,
+        #[serde(default)]
+        code: Option<String>,
+    },
     /// Position en pixels de l'écran distant ; boutons : 1 gauche, 2 milieu, 4 droit, 8/16 molette.
     Pointer { x: u16, y: u16, buttons: u8 },
     Clipboard { text: String },

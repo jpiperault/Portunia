@@ -1,5 +1,6 @@
 // Préférences de l'interface, enregistrées sur ce PC.
 import { h, icon } from './dom';
+import { checkForUpdates } from './updates';
 
 export interface Settings {
   fontFamily: string;
@@ -10,6 +11,8 @@ export interface Settings {
   /** Clic droit : copie la sélection, sinon colle (comme PuTTY). */
   rightClickPaste: boolean;
   autoReconnect: boolean;
+  /** Vérifier les mises à jour au démarrage. */
+  autoUpdate: boolean;
 }
 
 export const DEFAULTS: Settings = {
@@ -20,6 +23,7 @@ export const DEFAULTS: Settings = {
   copyOnSelect: false,
   rightClickPaste: true,
   autoReconnect: true,
+  autoUpdate: true,
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
@@ -53,9 +57,9 @@ export function onSettingsChange(fn: (s: Settings) => void): () => void {
 /** Pile de polices : la police choisie, puis des valeurs sûres. */
 export const fontStack = (s: Settings) => `"${s.fontFamily}", "Cascadia Mono", Consolas, monospace`;
 
-export function openSettingsDialog() {
+export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'error') => void) {
   const s = settings();
-  const check = (key: 'copyOnSelect' | 'rightClickPaste' | 'autoReconnect', label: string, hint: string) =>
+  const check = (key: 'copyOnSelect' | 'rightClickPaste' | 'autoReconnect' | 'autoUpdate', label: string, hint: string) =>
     h('label', { class: 'check setting' },
       h('input', { type: 'checkbox', checked: s[key], onchange: (e: Event) => updateSettings({ [key]: (e.target as HTMLInputElement).checked }) }),
       h('span', {}, label, h('span', { class: 'muted small block' }, hint)));
@@ -89,9 +93,12 @@ export function openSettingsDialog() {
         check('rightClickPaste', 'Clic droit : copier ou coller', 'Avec une sélection, le clic droit copie ; sinon il colle (comme PuTTY).'),
         h('h3', { class: 'label' }, 'Connexion'),
         check('autoReconnect', 'Reconnexion automatique', 'Après une coupure réseau ou une mise en veille, Termoria se reconnecte tout seul.'),
+        h('h3', { class: 'label' }, 'Mises à jour'),
+        check('autoUpdate', 'Vérifier les mises à jour au démarrage', 'Une bannière propose la nouvelle version ; rien ne s’installe sans votre accord.'),
+        h('button', { type: 'button', class: 'btn', style: 'align-self: flex-start', onclick: () => checkForUpdates(toastFn) }, icon('refresh', 14), 'Rechercher maintenant'),
         h('p', { class: 'muted small' }, 'Raccourcis : Ctrl+Maj+F rechercher dans le terminal · Ctrl+clic sur un lien pour l\'ouvrir · Ctrl+Maj+C / V copier / coller.')),
       h('footer', { class: 'dlg-foot' },
-        h('button', { type: 'button', class: 'btn', onclick: () => { updateSettings({ ...DEFAULTS }); dialog.close(); openSettingsDialog(); } }, 'Valeurs par défaut'),
+        h('button', { type: 'button', class: 'btn', onclick: () => { updateSettings({ ...DEFAULTS }); dialog.close(); openSettingsDialog(toastFn); } }, 'Valeurs par défaut'),
         h('button', { type: 'submit', class: 'btn primary' }, 'Fermer'))));
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);

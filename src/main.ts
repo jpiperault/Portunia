@@ -13,7 +13,8 @@ import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
 import { openTunnels } from './tunnels';
 import { openImportExport } from './importexport';
-import { openSettingsDialog } from './settings';
+import { openSettingsDialog, settings } from './settings';
+import { checkForUpdates } from './updates';
 
 interface Tab {
   id: string;
@@ -297,7 +298,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.11.0'),
+    h('span', {}, 'v0.13.0'),
   );
 }
 
@@ -425,6 +426,7 @@ async function openSession(session: Session) {
   state.tabs.push(tab);
   if (proto.view === 'screen') {
     tab.screen = new ScreenView(termEl, onState);
+    tab.screen.onDetached = (message) => { toast(message); closeTab(tab.id); };
     activate(tab.id);
     await tab.screen.connect(session.id, session.name);
     return;
@@ -504,7 +506,7 @@ $('new-session').addEventListener('click', () => newSession());
 $('open-extensions').append(icon('puzzle'), h('span', { class: 'grow' }, 'Extensions'));
 $('open-extensions').addEventListener('click', openExtensions);
 $('open-settings').append(icon('settings'), h('span', { class: 'grow' }, 'Paramètres'));
-$('open-settings').addEventListener('click', openSettingsDialog);
+$('open-settings').addEventListener('click', () => openSettingsDialog(toast));
 $('open-snippets').append(icon('commands'), h('span', { class: 'grow' }, 'Commandes enregistrées'));
 $('open-snippets').addEventListener('click', () => openSnippetManager(snippetContext()));
 $('open-import').append(icon('upload'), h('span', { class: 'grow' }, 'Importer / exporter'));
@@ -540,3 +542,5 @@ document.addEventListener('keydown', (e) => {
 });
 
 reload();
+// Vérification discrète des mises à jour, une fois l'application chargée.
+if (settings().autoUpdate) setTimeout(() => checkForUpdates(toast, true), 4000);

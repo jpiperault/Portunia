@@ -48,6 +48,8 @@ export class ScreenView {
   private lastMove = 0;
   /** true : l'image s'adapte à l'onglet ; false : taille réelle avec défilement. */
   fit = true;
+  /** La session s'est ouverte hors de Termoria (message à afficher). */
+  onDetached?: (message: string) => void;
 
   constructor(readonly container: HTMLElement, private readonly onState: (s: TermState, reason?: string) => void) {
     container.classList.add('screen-view');
@@ -67,9 +69,14 @@ export class ScreenView {
     this.onState('connecting');
     this.connecting = true;
     try {
-      const res = await api.connect(sessionId, 80, 24, (e) => this.onEvent(e)).finally(() => { this.connecting = false; });
+      const res = await api.connect(sessionId, Math.max(640, this.container.clientWidth), Math.max(480, this.container.clientHeight), (e) => this.onEvent(e)).finally(() => { this.connecting = false; });
       if (this.disposed) {
         if (res.connectionId) api.disconnect(res.connectionId).catch(() => {});
+        return;
+      }
+      if (!res.connectionId) {
+        // Ouvert ailleurs (client Bureau à distance de Windows) : l'onglet n'a plus d'utilité.
+        this.onDetached?.(res.message ?? `${label} ouvert`);
         return;
       }
       this.connectionId = res.connectionId;
@@ -195,18 +202,18 @@ export class ScreenView {
       if (keysym === null) return;
       e.preventDefault();
       this.pressed.set(e.code, keysym);
-      this.send({ type: 'key', keysym, down: true });
+      this.send({ type: 'key', keysym, down: true, code: e.code });
     });
     c.addEventListener('keyup', (e) => {
       const keysym = this.pressed.get(e.code) ?? keysymOf(e);
       this.pressed.delete(e.code);
       if (keysym === null) return;
       e.preventDefault();
-      this.send({ type: 'key', keysym, down: false });
+      this.send({ type: 'key', keysym, down: false, code: e.code });
     });
     // Fenêtre quittée touches enfoncées : on les relâche côté serveur.
     c.addEventListener('blur', () => {
-      for (const keysym of this.pressed.values()) this.send({ type: 'key', keysym, down: false });
+      for (const [code, keysym] of this.pressed) this.send({ type: 'key', keysym, down: false, code });
       this.pressed.clear();
     });
 
@@ -216,8 +223,9 @@ export class ScreenView {
 
   /** Ctrl+Alt+Suppr, impossible à taper directement sous Windows. */
   sendCtrlAltDel() {
-    for (const k of [0xffe3, 0xffe9, 0xffff]) this.send({ type: 'key', keysym: k, down: true });
-    for (const k of [0xffff, 0xffe9, 0xffe3]) this.send({ type: 'key', keysym: k, down: false });
+    const keys: [number, string][] = [[0xffe3, 'ControlLeft'], [0xffe9, 'AltLeft'], [0xffff, 'Delete']];
+    for (const [keysym, code] of keys) this.send({ type: 'key', keysym, down: true, code });
+    for (const [keysym, code] of [...keys].reverse()) this.send({ type: 'key', keysym, down: false, code });
     this.focus();
   }
 

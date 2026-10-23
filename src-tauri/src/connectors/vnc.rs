@@ -159,7 +159,7 @@ fn to_screen(event: VncEvent) -> Result<Option<ScreenEvent>> {
 
 fn to_x11(input: InputEvent) -> X11Event {
     match input {
-        InputEvent::Key { keysym, down } => X11Event::KeyEvent((keysym, down).into()),
+        InputEvent::Key { keysym, down, .. } => X11Event::KeyEvent((keysym, down).into()),
         InputEvent::Pointer { x, y, buttons } => X11Event::PointerEvent((x, y, buttons).into()),
         InputEvent::Clipboard { text } => X11Event::CopyText(text),
     }

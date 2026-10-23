@@ -117,7 +117,7 @@ export type ScreenEvent =
   | { type: 'clipboard'; text: string };
 
 export type InputEvent =
-  | { type: 'key'; keysym: number; down: boolean }
+  | { type: 'key'; keysym: number; down: boolean; code?: string }
   | { type: 'pointer'; x: number; y: number; buttons: number }
   | { type: 'clipboard'; text: string };
 

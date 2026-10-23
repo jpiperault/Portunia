@@ -1,0 +1,50 @@
+# Publie une version de Termoria : à chaque tag vX.Y.Z poussé sur GitHub,
+# compile l'installateur Windows, le signe pour les mises à jour automatiques
+# et crée la release (avec latest.json, lu par Termoria pour se mettre à jour).
+#
+# Secrets à définir dans le dépôt (Settings > Secrets and variables > Actions) :
+#   TAURI_SIGNING_PRIVATE_KEY           contenu du fichier termoria.key
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  mot de passe choisi à sa création
+name: Publier une version
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            rdp-helper -> target
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Termoria ${{ github.ref_name }}
+          releaseBody: Voir les nouveautés dans le README et l'historique des commits.
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
