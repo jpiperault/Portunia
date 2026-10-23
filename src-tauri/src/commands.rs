@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
-use crate::connector::{ConnectContext, FieldKind, Manifest, Outcome, Sink, TerminalConnection, ViewKind};
+use crate::connector::{
+    ConnectContext, FieldKind, Manifest, Outcome, RemoteEntry, RemoteFiles, Sink, TerminalConnection,
+    ViewKind,
+};
 use crate::registry::Registry;
 use crate::secrets;
 use crate::store::{Session, Store};
@@ -251,4 +254,98 @@ pub fn disconnect(state: State<'_, AppState>, connection_id: String) {
     if let Some(connection) = connection {
         connection.close();
     }
+}
+
+// ---------- Explorateur de fichiers distant ----------
+
+fn files_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteFiles>> {
+    let connections = state.connections.lock().unwrap();
+    let connection = connections.get(connection_id).ok_or("Session fermée")?;
+    connection
+        .files()
+        .ok_or_else(|| "Ce protocole ne propose pas d'explorateur de fichiers".into())
+}
+
+fn full(e: anyhow::Error) -> String {
+    format!("{e:#}")
+}
+
+#[derive(Serialize, Clone)]
+pub struct TransferProgress {
+    done: u64,
+    total: u64,
+}
+
+#[tauri::command]
+pub async fn fs_home(state: State<'_, AppState>, connection_id: String) -> CmdResult<String> {
+    let files = files_of(&state, &connection_id)?;
+    files.home().await.map_err(full)
+}
+
+#[tauri::command]
+pub async fn fs_list(
+    state: State<'_, AppState>,
+    connection_id: String,
+    path: String,
+) -> CmdResult<Vec<RemoteEntry>> {
+    let files = files_of(&state, &connection_id)?;
+    files.list(path).await.map_err(full)
+}
+
+#[tauri::command]
+pub async fn fs_download(
+    state: State<'_, AppState>,
+    connection_id: String,
+    remote: String,
+    local: String,
+    on_progress: Channel<TransferProgress>,
+) -> CmdResult<()> {
+    let files = files_of(&state, &connection_id)?;
+    let progress = Arc::new(move |done, total| {
+        let _ = on_progress.send(TransferProgress { done, total });
+    });
+    files.download(remote, PathBuf::from(local), progress).await.map_err(full)
+}
+
+#[tauri::command]
+pub async fn fs_upload(
+    state: State<'_, AppState>,
+    connection_id: String,
+    local: String,
+    remote: String,
+    on_progress: Channel<TransferProgress>,
+) -> CmdResult<()> {
+    let files = files_of(&state, &connection_id)?;
+    let progress = Arc::new(move |done, total| {
+        let _ = on_progress.send(TransferProgress { done, total });
+    });
+    files.upload(PathBuf::from(local), remote, progress).await.map_err(full)
+}
+
+#[tauri::command]
+pub async fn fs_mkdir(state: State<'_, AppState>, connection_id: String, path: String) -> CmdResult<()> {
+    let files = files_of(&state, &connection_id)?;
+    files.mkdir(path).await.map_err(full)
+}
+
+#[tauri::command]
+pub async fn fs_remove(
+    state: State<'_, AppState>,
+    connection_id: String,
+    path: String,
+    is_dir: bool,
+) -> CmdResult<()> {
+    let files = files_of(&state, &connection_id)?;
+    files.remove(path, is_dir).await.map_err(full)
+}
+
+#[tauri::command]
+pub async fn fs_rename(
+    state: State<'_, AppState>,
+    connection_id: String,
+    from: String,
+    to: String,
+) -> CmdResult<()> {
+    let files = files_of(&state, &connection_id)?;
+    files.rename(from, to).await.map_err(full)
 }

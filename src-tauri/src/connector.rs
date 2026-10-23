@@ -7,7 +7,9 @@
 
 use std::{
     collections::HashMap,
+    future::Future,
     path::PathBuf,
+    pin::Pin,
     sync::{
         mpsc::{self, Receiver, Sender},
         Arc,
@@ -129,6 +131,8 @@ pub struct Manifest {
     pub description: String,
     pub view: ViewKind,
     pub builtin: bool,
+    /// La connexion propose un explorateur de fichiers distant (voir `RemoteFiles`).
+    pub file_browser: bool,
     pub fields: Vec<Field>,
 }
 
@@ -144,6 +148,40 @@ pub trait TerminalConnection: Send + Sync {
     fn write(&self, data: &[u8]) -> Result<()>;
     fn resize(&self, cols: u16, rows: u16) -> Result<()>;
     fn close(&self);
+    /// Accès aux fichiers du serveur, si le protocole le permet.
+    fn files(&self) -> Option<Arc<dyn RemoteFiles>> {
+        None
+    }
+}
+
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
+
+/// Avancement d'un transfert : (octets transférés, taille totale).
+pub type Progress = Arc<dyn Fn(u64, u64) + Send + Sync>;
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteEntry {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub is_link: bool,
+    pub size: u64,
+    /// Date de modification (secondes Unix).
+    pub modified: Option<u64>,
+    pub permissions: Option<u32>,
+}
+
+/// Explorateur de fichiers distant. Les chemins sont ceux du serveur (`/`).
+pub trait RemoteFiles: Send + Sync {
+    fn home(&self) -> BoxFuture<'_, String>;
+    fn list(&self, path: String) -> BoxFuture<'_, Vec<RemoteEntry>>;
+    fn download(&self, remote: String, local: PathBuf, progress: Progress) -> BoxFuture<'_, ()>;
+    fn upload(&self, local: PathBuf, remote: String, progress: Progress) -> BoxFuture<'_, ()>;
+    fn mkdir(&self, path: String) -> BoxFuture<'_, ()>;
+    /// Supprime un fichier, ou un dossier et tout son contenu.
+    fn remove(&self, path: String, is_dir: bool) -> BoxFuture<'_, ()>;
+    fn rename(&self, from: String, to: String) -> BoxFuture<'_, ()>;
 }
 
 pub enum Outcome {

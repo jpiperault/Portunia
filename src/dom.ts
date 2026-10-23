@@ -37,6 +37,15 @@ const ICONS: Record<string, string> = {
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6',
   power: 'M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0',
+  folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5',
+  file: 'M6 3h8l4 4v14H6zM14 3v4h4',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
+  download: 'M12 4v12M7 11l5 5 5-5M4 20h16',
+  home: 'M3 11l9-7 9 7M5 10v10h14V10',
+  up: 'M12 19V5M5 12l7-7 7 7',
+  files: 'M8 3h7l4 4v11H8zM15 3v4h4M5 7v14h11',
 };
 
 export function icon(name: keyof typeof ICONS | string, size = 16): SVGSVGElement {

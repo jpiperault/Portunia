@@ -9,6 +9,7 @@ use tauri::Manager;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -29,6 +30,13 @@ pub fn run() {
             commands::term_write,
             commands::term_resize,
             commands::disconnect,
+            commands::fs_home,
+            commands::fs_list,
+            commands::fs_download,
+            commands::fs_upload,
+            commands::fs_mkdir,
+            commands::fs_remove,
+            commands::fs_rename,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

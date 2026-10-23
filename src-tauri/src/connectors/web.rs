@@ -15,6 +15,7 @@ impl Connector for WebConnector {
             description: "Ouvre une console d'administration dans une fenêtre dédiée, isolée de l'application.".into(),
             view: ViewKind::Web,
             builtin: true,
+            file_browser: false,
             fields: vec![Field::new("url", "Adresse", FieldKind::Text)
                 .required()
                 .placeholder("https://192.168.1.10:5001")],

@@ -53,6 +53,11 @@ export class TerminalView {
     this.observer.observe(container);
   }
 
+  /** Identifiant de la connexion en cours côté Rust, ou null. */
+  get connection(): string | null {
+    return this.connectionId;
+  }
+
   /** Recalcule la taille ; ignoré quand l'onglet est caché. */
   refit() {
     if (!this.container.clientWidth || !this.container.clientHeight) return;

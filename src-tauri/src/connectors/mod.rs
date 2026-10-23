@@ -1,6 +1,7 @@
 //! Extensions intégrées. Chaque fichier est un protocole indépendant.
 
 pub mod rdp;
+pub mod sftp;
 pub mod ssh;
 pub mod telnet;
 pub mod web;

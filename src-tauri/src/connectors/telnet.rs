@@ -21,6 +21,7 @@ impl Connector for TelnetConnector {
             description: "Équipements réseau anciens. Non chiffré : à réserver au réseau local.".into(),
             view: ViewKind::Terminal,
             builtin: true,
+            file_browser: false,
             fields: vec![
                 Field::new("host", "Hôte", FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(23),

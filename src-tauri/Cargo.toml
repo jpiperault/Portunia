@@ -1,6 +1,6 @@
 [package]
 name = "termoria"
-version = "0.2.0"
+version = "0.3.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 
@@ -19,8 +19,10 @@ anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 russh = { version = "0.64", default-features = false, features = ["ring", "rsa", "flate2", "des", "dsa"] }
-tokio = { version = "1", features = ["sync", "macros", "time"] }
+tokio = { version = "1", features = ["sync", "macros", "time", "fs", "io-util"] }
 keyring = { version = "3", features = ["windows-native"] }
+russh-sftp = "3"
+tauri-plugin-dialog = "2"
 
 # Exécutable le plus petit possible en release.
 [profile.release]

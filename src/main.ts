@@ -4,6 +4,8 @@ import { api, errorText, Manifest, Session } from './api';
 import { badge, h, icon } from './dom';
 import { openSessionDialog } from './dialog';
 import { renderExtensions } from './extensions';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { FilePanel } from './files';
 import { TerminalView, TermState } from './terminal';
 
 interface Tab {
@@ -14,6 +16,7 @@ interface Tab {
   protocol?: string;
   view: HTMLElement;
   term?: TerminalView;
+  files?: FilePanel;
   state: TermState;
 }
 
@@ -24,6 +27,7 @@ const state = {
   active: null as string | null,
   filter: '',
   collapsed: new Set<string>(),
+  showFiles: true,
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -135,33 +139,23 @@ function renderToolbar() {
     h('div', { class: 'toolbar-actions' },
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
       tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), 'Déconnecter'),
+      tab.files && h('button', {
+        class: `btn${state.showFiles ? ' on' : ''}`, 'aria-pressed': String(state.showFiles), title: 'Afficher / masquer l\'explorateur de fichiers',
+        onclick: () => { state.showFiles = !state.showFiles; renderAll(); requestAnimationFrame(() => tab.term?.refit()); },
+      }, icon('files', 14), 'Fichiers'),
       h('button', { class: 'btn', onclick: () => editSession(session) }, icon('edit', 14), 'Modifier')),
   );
 }
 
-function renderDetails() {
-  const session = sessionOf(activeTab()?.sessionId);
-  const proto = protocolOf(session?.protocol);
-  if (!session || !proto) {
+/** Panneau de droite : explorateur de fichiers du serveur de l'onglet actif. */
+function renderSidePanel() {
+  const files = activeTab()?.files;
+  if (!files || !state.showFiles) {
     details.hidden = true;
     return;
   }
   details.hidden = false;
-  const rows = proto.fields
-    .filter((f) => f.kind.type !== 'secret' && session.values[f.key] != null && session.values[f.key] !== '')
-    .flatMap((f) => {
-      let value = session.values[f.key];
-      if (f.kind.type === 'choice') value = f.kind.options.find((o) => o.value === value)?.label ?? value;
-      if (f.kind.type === 'bool') value = value ? 'Oui' : 'Non';
-      return [h('dt', {}, f.label), h('dd', {}, String(value))];
-    });
-  details.replaceChildren(
-    h('h2', {}, session.name),
-    h('p', { class: 'muted' }, proto.name),
-    h('dl', {}, ...rows),
-    ...(session.tags.length ? [h('div', { class: 'chips' }, ...session.tags.map((t) => h('span', { class: 'chip' }, t)))] : []),
-    h('p', { class: 'muted small foot' }, `Fourni par l'extension ${proto.name} ${proto.version}`),
-  );
+  if (details.firstChild !== files.el) details.replaceChildren(files.el);
 }
 
 function renderStatus() {
@@ -170,7 +164,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.2.0'),
+    h('span', {}, 'v0.3.0'),
   );
 }
 
@@ -189,7 +183,7 @@ function renderAll() {
   renderTree();
   renderTabs();
   renderToolbar();
-  renderDetails();
+  renderSidePanel();
   renderStatus();
   renderViews();
 }
@@ -234,9 +228,13 @@ async function openSession(session: Session) {
   const view = h('div', { class: 'term-view' });
   views.append(view);
   const tab: Tab = { id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: session.id, protocol: session.protocol, view, state: 'connecting' };
+  if (proto.fileBrowser) tab.files = new FilePanel(toast);
   tab.term = new TerminalView(view, (s, reason) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
+    const id = tab.term?.connection;
+    if (s === 'connected' && id) tab.files?.attach(id);
+    if (s === 'closed') tab.files?.detach();
     renderAll();
   });
   state.tabs.push(tab);
@@ -314,6 +312,23 @@ $('new-session').addEventListener('click', () => newSession());
 $('open-extensions').append(icon('puzzle'), h('span', { class: 'grow' }, 'Extensions'));
 $('open-extensions').addEventListener('click', openExtensions);
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });
+
+// Glisser-déposer depuis l'Explorateur Windows sur le panneau Fichiers = envoi au serveur.
+function overFiles(pos: { x: number; y: number }) {
+  if (details.hidden) return false;
+  const r = details.getBoundingClientRect();
+  const x = pos.x / devicePixelRatio;
+  const y = pos.y / devicePixelRatio;
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+getCurrentWebview().onDragDropEvent(({ payload }) => {
+  const files = activeTab()?.files;
+  if (!files) return;
+  if (payload.type === 'leave') return files.setDropping(false);
+  const inside = overFiles(payload.position);
+  files.setDropping(payload.type !== 'drop' && inside);
+  if (payload.type === 'drop' && inside) files.uploadPaths(payload.paths);
+});
 
 document.addEventListener('keydown', (e) => {
   if (!e.ctrlKey || !e.shiftKey || document.querySelector('dialog[open]')) return;

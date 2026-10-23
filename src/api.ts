@@ -30,7 +30,26 @@ export interface Manifest {
   description: string;
   view: ViewKind;
   builtin: boolean;
+  fileBrowser: boolean;
   fields: Field[];
+}
+
+export interface RemoteEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  isLink: boolean;
+  size: number;
+  modified: number | null;
+  permissions: number | null;
+}
+
+export interface TransferProgress { done: number; total: number }
+
+function progressChannel(onProgress: (p: TransferProgress) => void) {
+  const channel = new Channel<TransferProgress>();
+  channel.onmessage = onProgress;
+  return channel;
 }
 
 export interface Session {
@@ -68,6 +87,16 @@ export const api = {
   termResize: (connectionId: string, cols: number, rows: number) =>
     invoke<void>('term_resize', { connectionId, cols, rows }),
   disconnect: (connectionId: string) => invoke<void>('disconnect', { connectionId }),
+
+  fsHome: (connectionId: string) => invoke<string>('fs_home', { connectionId }),
+  fsList: (connectionId: string, path: string) => invoke<RemoteEntry[]>('fs_list', { connectionId, path }),
+  fsDownload: (connectionId: string, remote: string, local: string, onProgress: (p: TransferProgress) => void) =>
+    invoke<void>('fs_download', { connectionId, remote, local, onProgress: progressChannel(onProgress) }),
+  fsUpload: (connectionId: string, local: string, remote: string, onProgress: (p: TransferProgress) => void) =>
+    invoke<void>('fs_upload', { connectionId, local, remote, onProgress: progressChannel(onProgress) }),
+  fsMkdir: (connectionId: string, path: string) => invoke<void>('fs_mkdir', { connectionId, path }),
+  fsRemove: (connectionId: string, path: string, isDir: boolean) => invoke<void>('fs_remove', { connectionId, path, isDir }),
+  fsRename: (connectionId: string, from: string, to: string) => invoke<void>('fs_rename', { connectionId, from, to }),
 };
 
 /** Les erreurs Rust arrivent sous forme de texte. */

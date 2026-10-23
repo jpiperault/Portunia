@@ -1,4 +1,4 @@
-# Termoria
+﻿# Termoria
 
 Gestionnaire de sessions distantes pour Windows : toutes vos connexions (SSH, Bureau à distance, consoles web, Telnet…) dans une seule fenêtre. Léger (Tauri 2 + Rust, interface sans framework) et extensible (un protocole = une extension).
 
@@ -26,7 +26,7 @@ npm run tauri build
 
 L'installateur se trouve dans `src-tauri/target/release/bundle/nsis/`.
 
-## Ce que fait la version 0.1
+## Fonctionnalités
 
 | Protocole | Affichage | Remarques |
 |---|---|---|
@@ -38,6 +38,7 @@ L'installateur se trouve dans `src-tauri/target/release/bundle/nsis/`.
 Autres fonctions :
 
 - arbre des sessions par dossiers, recherche (Ctrl+Maj+K), onglets ;
+- explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
 - mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
 - sessions enregistrées dans `%APPDATA%\fr.termoria.app\sessions.json`.
 
@@ -49,7 +50,7 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+C
 src-tauri/src/
   connector.rs     contrat d'une extension (trait Connector, manifeste, champs)
   registry.rs      liste des extensions disponibles
-  connectors/      une extension par fichier : ssh, rdp, web, telnet
+  connectors/      une extension par fichier : ssh, rdp, web, telnet (+ sftp.rs : explorateur de fichiers)
   store.rs         sessions enregistrées (JSON)
   secrets.rs       Gestionnaire d'identifiants Windows
   commands.rs      commandes appelées par l'interface
@@ -58,6 +59,7 @@ src/
   dialog.ts        formulaire généré à partir du manifeste de l'extension
   terminal.ts      vue terminal (xterm.js)
   extensions.ts    page Extensions
+  files.ts         explorateur de fichiers du serveur
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :
@@ -77,5 +79,5 @@ Le cœur ne connaît aucun protocole. Une extension :
 - Extensions externes chargées sans recompiler (modules WASM).
 - VNC et port série.
 - RDP intégré dans un onglet plutôt que dans une fenêtre séparée.
-- Transfert de fichiers SFTP, tunnels SSH, serveur de rebond.
+- Tunnels SSH, serveur de rebond, téléchargement de dossiers entiers.
 - Import des sessions PuTTY / mRemoteNG.

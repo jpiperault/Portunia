@@ -23,6 +23,7 @@ use russh::{
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
+use super::sftp::SftpFiles;
 use crate::connector::*;
 
 pub struct SshConnector;
@@ -36,6 +37,7 @@ impl Connector for SshConnector {
             description: "Terminal sécurisé : clé privée, mot de passe ou agent.".into(),
             view: ViewKind::Terminal,
             builtin: true,
+            file_browser: true,
             fields: vec![
                 Field::new("host", "Hôte", FieldKind::Text)
                     .required()
@@ -75,6 +77,9 @@ impl Connector for SshConnector {
         let (tx, rx) = unbounded_channel();
         let sink = ctx.sink.clone();
         let (handle, channel) = tauri::async_runtime::block_on(open(&ctx))?;
+        let handle = Arc::new(handle);
+        // L'explorateur de fichiers ouvre son propre canal SFTP sur la même connexion.
+        let files: Arc<dyn RemoteFiles> = Arc::new(SftpFiles::new(handle.clone()));
         tauri::async_runtime::spawn(async move {
             let (mut read, write) = channel.split();
             let result = pump(&mut read, &write, rx, sink.as_ref()).await;
@@ -84,12 +89,13 @@ impl Connector for SshConnector {
                 .await;
             sink.closed(result.err().map(|e| format!("{e:#}")));
         });
-        Ok(Outcome::Terminal(Box::new(SshConnection { tx })))
+        Ok(Outcome::Terminal(Box::new(SshConnection { tx, files })))
     }
 }
 
 struct SshConnection {
     tx: UnboundedSender<Cmd>,
+    files: Arc<dyn RemoteFiles>,
 }
 
 impl TerminalConnection for SshConnection {
@@ -107,6 +113,10 @@ impl TerminalConnection for SshConnection {
 
     fn close(&self) {
         let _ = self.tx.send(Cmd::Close);
+    }
+
+    fn files(&self) -> Option<Arc<dyn RemoteFiles>> {
+        Some(self.files.clone())
     }
 }
 

@@ -17,6 +17,7 @@ impl Connector for RdpConnector {
             description: "S'appuie sur le client RDP de Windows. S'ouvre dans sa propre fenêtre.".into(),
             view: ViewKind::Desktop,
             builtin: true,
+            file_browser: false,
             fields: vec![
                 Field::new("host", "Hôte", FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(3389),
