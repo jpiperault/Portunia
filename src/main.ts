@@ -8,6 +8,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { FilePanel } from './files';
 import { TerminalView, TermState } from './terminal';
 import { leafOf, parentOf, SessionTree } from './tree';
+import { showMenu } from './menu';
 import { openSettingsDialog } from './settings';
 
 interface Tab {
@@ -20,6 +21,10 @@ interface Tab {
   term?: TerminalView;
   files?: FilePanel;
   state: TermState;
+  /** En-tête affiché quand l'onglet est dans l'écran partagé. */
+  paneHead?: HTMLElement;
+  /** Reçoit la saisie multiple. */
+  receive: boolean;
 }
 
 const state = {
@@ -30,6 +35,10 @@ const state = {
   filter: '',
   folders: [] as string[],
   showFiles: true,
+  /** Onglets affichés côte à côte (2 à 4), vide = un seul onglet à l'écran. */
+  split: [] as string[],
+  /** Saisie multiple : la frappe part vers toutes les sessions de l'écran partagé. */
+  broadcast: false,
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -110,16 +119,91 @@ function renderTree() {
 
 // ---------- Onglets ----------
 
+// ---------- Écran partagé ----------
+
+const MAX_PANES = 4;
+
+/** Onglets à l'écran : l'écran partagé s'il contient l'onglet actif, sinon l'onglet actif seul. */
+function visibleTabs(): Tab[] {
+  if (state.split.length > 1 && state.active && state.split.includes(state.active)) {
+    return state.split.map((id) => state.tabs.find((t) => t.id === id)).filter((t): t is Tab => !!t);
+  }
+  const tab = activeTab();
+  return tab ? [tab] : [];
+}
+
+const isSplit = () => visibleTabs().length > 1;
+
+function addToSplit(tabId: string) {
+  const base = isSplit() ? [...state.split] : state.active ? [state.active] : [];
+  if (base.includes(tabId)) return;
+  if (base.length >= MAX_PANES) return toast(`L'écran partagé est limité à ${MAX_PANES} sessions`, 'error');
+  state.split = [...base, tabId];
+  activate(state.active ?? tabId);
+}
+
+function removeFromSplit(tabId: string) {
+  state.split = state.split.filter((id) => id !== tabId);
+  if (state.split.length < 2) {
+    state.split = [];
+    state.broadcast = false;
+  }
+  if (state.active === tabId && state.split.length) state.active = state.split[0];
+  activate(state.active ?? tabId);
+}
+
+function leaveSplit() {
+  state.split = [];
+  state.broadcast = false;
+  if (state.active) activate(state.active);
+}
+
+/** Saisie multiple : envoie la frappe à toutes les sessions visibles qui la reçoivent. */
+function broadcastFrom(source: Tab, data: string): boolean {
+  const visible = visibleTabs();
+  if (!state.broadcast || visible.length < 2 || !visible.includes(source)) return false;
+  for (const t of visible) {
+    if (t === source || t.receive) t.term?.send(data);
+  }
+  return true;
+}
+
+function splitMenu(e: MouseEvent) {
+  const candidates = state.tabs.filter((t) => t.kind === 'session' && !visibleTabs().includes(t));
+  showMenu(e.clientX, e.clientY, [
+    ...(candidates.length
+      ? candidates.map((t) => ({ label: `Afficher à côté : ${t.title}`, icon: 'split', action: () => addToSplit(t.id) }))
+      : [{ label: 'Ouvrez d\'abord une autre session', action: () => {} }]),
+    ...(isSplit() ? ['separator' as const, { label: 'Quitter l\'écran partagé', icon: 'close', action: leaveSplit }] : []),
+  ]);
+}
+
+function tabMenu(t: Tab, e: MouseEvent) {
+  e.preventDefault();
+  const inSplit = isSplit() && visibleTabs().includes(t);
+  showMenu(e.clientX, e.clientY, [
+    ...(t.kind === 'session' && !inSplit && t.id !== state.active && activeTab()?.kind === 'session'
+      ? [{ label: 'Afficher à côté de l\'onglet actif', icon: 'split', action: () => addToSplit(t.id) }]
+      : []),
+    ...(inSplit ? [{ label: 'Retirer de l\'écran partagé', icon: 'split', action: () => removeFromSplit(t.id) }] : []),
+    { label: 'Fermer', icon: 'close', action: () => closeTab(t.id) },
+    { label: 'Fermer les autres onglets', action: () => state.tabs.filter((o) => o !== t).forEach((o) => closeTab(o.id)) },
+  ]);
+}
+
 function renderTabs() {
   tabsBar.replaceChildren(
     ...state.tabs.map((t) => {
       const selected = t.id === state.active;
-      return h('div', { class: `tab${selected ? ' active' : ''}` },
+      const shown = isSplit() && visibleTabs().includes(t);
+      const tabEl = h('div', { class: `tab${selected ? ' active' : ''}${shown && !selected ? ' shown' : ''}` },
         h('button', { role: 'tab', 'aria-selected': String(selected), class: 'tab-main', onclick: () => activate(t.id) },
           t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon('puzzle', 14),
           h('span', { class: 'ellipsis' }, t.title),
           t.protocol && badge(t.protocol)),
         h('button', { class: 'icon-btn sm', 'aria-label': `Fermer ${t.title}`, title: 'Fermer (Ctrl Maj W)', onclick: () => closeTab(t.id) }, icon('close', 13)));
+      tabEl.addEventListener('contextmenu', (e) => tabMenu(t, e));
+      return tabEl;
     }),
     h('button', { class: 'icon-btn', 'aria-label': 'Nouvelle session', title: 'Nouvelle session', onclick: () => newSession() }, icon('plus')),
   );
@@ -146,6 +230,12 @@ function renderToolbar() {
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
       tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => tab.term?.cancelReconnect() }, icon('close', 14), 'Annuler la reconnexion'),
       tab.term && h('button', { class: 'icon-btn', 'aria-label': 'Rechercher dans le terminal', title: 'Rechercher (Ctrl Maj F)', onclick: () => tab.term?.openSearch() }, icon('search')),
+      h('button', { class: `btn${isSplit() ? ' on' : ''}`, title: 'Afficher plusieurs sessions côte à côte', onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), 'Écran partagé'),
+      isSplit() && h('button', {
+        class: `btn${state.broadcast ? ' warn' : ''}`, 'aria-pressed': String(state.broadcast),
+        title: 'Envoyer la frappe à toutes les sessions affichées (Ctrl Maj B)',
+        onclick: () => toggleBroadcast(),
+      }, icon('broadcast', 14), state.broadcast ? 'Saisie multiple : ACTIVE' : 'Saisie multiple'),
       tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), 'Déconnecter'),
       tab.files && h('button', {
         class: `btn${state.showFiles ? ' on' : ''}`, 'aria-pressed': String(state.showFiles), title: 'Afficher / masquer l\'explorateur de fichiers',
@@ -172,12 +262,30 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.5.0'),
+    h('span', {}, 'v0.6.0'),
   );
 }
 
+function toggleBroadcast() {
+  if (!isSplit()) return;
+  state.broadcast = !state.broadcast;
+  renderAll();
+  activeTab()?.term?.focus();
+}
+
 function renderViews() {
-  for (const t of state.tabs) t.view.hidden = t.id !== state.active;
+  const visible = visibleTabs();
+  const split = visible.length > 1;
+  views.className = `views${split ? ` split-${visible.length}` : ''}`;
+  for (const t of state.tabs) {
+    const index = visible.indexOf(t);
+    t.view.hidden = index < 0;
+    t.view.style.order = String(index);
+    t.view.classList.toggle('focused', split && t.id === state.active);
+    t.view.classList.toggle('tall', split && visible.length === 3 && index === 0);
+    t.view.classList.toggle('receiving', split && state.broadcast && (t.receive || t.id === state.active));
+    if (t.paneHead) renderPaneHead(t, split);
+  }
   views.querySelector('.welcome')?.remove();
   if (!state.tabs.length) {
     views.append(h('div', { class: 'welcome' },
@@ -185,6 +293,21 @@ function renderViews() {
       h('p', { class: 'muted' }, 'Choisissez une session à gauche, ou créez-en une.'),
       h('button', { class: 'btn primary', onclick: () => newSession() }, icon('plus', 14), 'Nouvelle session')));
   }
+}
+
+/** En-tête d'un volet de l'écran partagé. */
+function renderPaneHead(t: Tab, split: boolean) {
+  const head = t.paneHead!;
+  head.hidden = !split;
+  if (!split) return;
+  head.replaceChildren(h('div', { class: 'pane-head-inner' },
+    h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'closed' ? '' : 'wait'}` }),
+    h('span', { class: 'grow ellipsis' }, t.title),
+    t.protocol && badge(t.protocol),
+    state.broadcast && h('label', { class: 'pane-receive', title: 'Cette session reçoit la saisie multiple' },
+      h('input', { type: 'checkbox', checked: t.receive || t.id === state.active, disabled: t.id === state.active, onchange: (e: Event) => { t.receive = (e.target as HTMLInputElement).checked; renderViews(); } }),
+      'reçoit'),
+    h('button', { class: 'icon-btn sm', 'aria-label': `Retirer ${t.title} de l'écran partagé`, title: 'Retirer de l\'écran partagé', onclick: () => removeFromSplit(t.id) }, icon('close', 12))));
 }
 
 function renderAll() {
@@ -200,7 +323,10 @@ function activate(id: string) {
   state.active = id;
   renderAll();
   const tab = activeTab();
-  requestAnimationFrame(() => { tab?.term?.refit(); tab?.term?.focus(); });
+  requestAnimationFrame(() => {
+    for (const t of visibleTabs()) t.term?.refit();
+    tab?.term?.focus();
+  });
 }
 
 function closeTab(id: string) {
@@ -209,8 +335,14 @@ function closeTab(id: string) {
   const [tab] = state.tabs.splice(index, 1);
   tab.term?.dispose();
   tab.view.remove();
-  if (state.active === id) state.active = state.tabs[Math.min(index, state.tabs.length - 1)]?.id ?? null;
-  renderAll();
+  const wasSplit = state.split.includes(id);
+  state.split = state.split.filter((s) => s !== id);
+  if (state.split.length < 2) { state.split = []; state.broadcast = false; }
+  if (state.active === id) {
+    state.active = (wasSplit && state.split[0]) || state.tabs[Math.min(index, state.tabs.length - 1)]?.id || null;
+  }
+  if (state.active) activate(state.active);
+  else renderAll();
 }
 
 // ---------- Sessions ----------
@@ -233,11 +365,20 @@ async function openSession(session: Session) {
   const existing = state.tabs.find((t) => t.sessionId === session.id);
   if (existing) return activate(existing.id);
 
-  const view = h('div', { class: 'term-view' });
+  const termEl = h('div', { class: 'term-view' });
+  const paneHead = h('div', { class: 'pane-head', hidden: true });
+  const view = h('div', { class: 'pane' }, paneHead, termEl);
   views.append(view);
-  const tab: Tab = { id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: session.id, protocol: session.protocol, view, state: 'connecting' };
+  const tab: Tab = {
+    id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: session.id, protocol: session.protocol,
+    view, paneHead, state: 'connecting', receive: true,
+  };
+  // Cliquer dans un volet de l'écran partagé le rend actif.
+  view.addEventListener('pointerdown', (e) => {
+    if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
+  }, true);
   if (proto.fileBrowser) tab.files = new FilePanel(toast);
-  tab.term = new TerminalView(view, (s, reason) => {
+  tab.term = new TerminalView(termEl, (s, reason) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
     const id = tab.term?.connection;
@@ -247,6 +388,7 @@ async function openSession(session: Session) {
   });
   state.tabs.push(tab);
   activate(tab.id);
+  tab.term.inputHook = (data) => broadcastFrom(tab, data);
   await tab.term.connect(session.id, session.name);
 }
 
@@ -305,7 +447,7 @@ function openExtensions() {
     existing.view = view;
     return activate(existing.id);
   }
-  const tab: Tab = { id: crypto.randomUUID(), kind: 'extensions', title: 'Extensions', view, state: 'connected' };
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'extensions', title: 'Extensions', view, state: 'connected', receive: false };
   state.tabs.push(tab);
   activate(tab.id);
 }
@@ -346,6 +488,7 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'n') { e.preventDefault(); newSession(); }
   else if (key === 'w' && state.active) { e.preventDefault(); closeTab(state.active); }
   else if (key === 'f') { e.preventDefault(); activeTab()?.term?.openSearch(); }
+  else if (key === 'b') { e.preventDefault(); toggleBroadcast(); }
 });
 
 reload();

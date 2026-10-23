@@ -47,6 +47,13 @@ export class TerminalView {
   private searchBar: HTMLElement | null = null;
   private disposed = false;
   private connecting = false;
+  /** Renvoie true si la saisie a été prise en charge ailleurs (saisie multiple). */
+  inputHook?: (data: string) => boolean;
+
+  /** Envoie du texte à la session comme s'il était tapé (sans passer par la saisie multiple). */
+  send(data: string) {
+    if (this.connectionId) api.termWrite(this.connectionId, data).catch(() => {});
+  }
 
   constructor(
     readonly container: HTMLElement,
@@ -88,6 +95,8 @@ export class TerminalView {
 
     this.term.onData((data) => {
       if (this.connectionId) {
+        // Saisie multiple : l'application peut rediriger la frappe vers plusieurs sessions.
+        if (this.inputHook?.(data)) return;
         api.termWrite(this.connectionId, data).catch(() => {});
       } else if (data === '\r' && this.sessionId && !this.retryTimer) {
         this.reconnectNow(); // Entrée sur une session fermée = se reconnecter
