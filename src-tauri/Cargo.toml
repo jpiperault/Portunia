@@ -1,6 +1,6 @@
 [package]
 name = "termoria"
-version = "0.10.0"
+version = "0.11.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 
@@ -28,6 +28,7 @@ winreg = "0.56.0"
 quick-xml = "0.42.0"
 serialport = { version = "4.10.1", default-features = false }
 tauri-plugin-single-instance = "2"
+vnc-rs = "0.6"
 
 # Exécutable le plus petit possible en release.
 [profile.release]

@@ -7,6 +7,7 @@ import { renderExtensions } from './extensions';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { FilePanel } from './files';
 import { TerminalView, TermState } from './terminal';
+import { ScreenView } from './screen';
 import { leafOf, parentOf, SessionTree } from './tree';
 import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
@@ -23,6 +24,8 @@ interface Tab {
   view: HTMLElement;
   term?: TerminalView;
   files?: FilePanel;
+  /** Écran distant (VNC…) à la place du terminal. */
+  screen?: ScreenView;
   state: TermState;
   /** En-tête affiché quand l'onglet est dans l'écran partagé. */
   paneHead?: HTMLElement;
@@ -122,6 +125,9 @@ function renderTree() {
 }
 
 // ---------- Onglets ----------
+
+/** Vue d'un onglet de session : terminal ou écran distant. */
+const viewOf = (tab: Tab): TerminalView | ScreenView | undefined => tab.term ?? tab.screen;
 
 // ---------- Écran partagé ----------
 
@@ -249,11 +255,14 @@ function renderToolbar() {
       h('span', { class: 'muted' }, `· ${label}`)),
     h('div', { class: 'toolbar-actions' },
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
-      tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => tab.term?.cancelReconnect() }, icon('close', 14), 'Annuler la reconnexion'),
+      tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => viewOf(tab)?.cancelReconnect() }, icon('close', 14), 'Annuler la reconnexion'),
       tab.state === 'connected' && protocolOf(session.protocol)?.portForwarding && h('button', {
         class: 'btn', title: 'Redirections de ports à travers cette session',
         onclick: () => { const id = tab.term?.connection; if (id) openTunnels(session, id, toast, () => reload()); },
       }, icon('tunnel', 14), 'Tunnels'),
+      tab.screen && h('button', { class: 'btn', title: 'Envoyer Ctrl+Alt+Suppr à l’écran distant', onclick: () => tab.screen?.sendCtrlAltDel() }, 'Ctrl+Alt+Suppr'),
+      tab.screen && h('button', { class: 'btn', title: 'Copier le presse-papiers de Windows vers l’écran distant', onclick: () => tab.screen?.sendClipboard() }, icon('copy', 14), 'Presse-papiers'),
+      tab.screen && h('button', { class: 'btn', title: 'Adapter l’image à l’onglet ou afficher en taille réelle', onclick: () => { tab.screen?.toggleFit(); renderToolbar(); } }, tab.screen.fit ? 'Taille réelle' : 'Ajuster à la fenêtre'),
       tab.term && h('button', { class: 'btn', title: 'Commandes enregistrées (Ctrl Maj P)', onclick: () => openPalette(snippetContext()) }, icon('commands', 14), 'Commandes'),
       tab.term && h('button', { class: 'icon-btn', 'aria-label': 'Rechercher dans le terminal', title: 'Rechercher (Ctrl Maj F)', onclick: () => tab.term?.openSearch() }, icon('search')),
       h('button', { class: `btn${isSplit() ? ' on' : ''}`, title: 'Afficher plusieurs sessions côte à côte', onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), 'Écran partagé'),
@@ -265,7 +274,7 @@ function renderToolbar() {
       tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), 'Déconnecter'),
       tab.files && h('button', {
         class: `btn${state.showFiles ? ' on' : ''}`, 'aria-pressed': String(state.showFiles), title: 'Afficher / masquer l\'explorateur de fichiers',
-        onclick: () => { state.showFiles = !state.showFiles; renderAll(); requestAnimationFrame(() => tab.term?.refit()); },
+        onclick: () => { state.showFiles = !state.showFiles; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
       }, icon('files', 14), 'Fichiers'),
       h('button', { class: 'btn', onclick: () => editSession(session) }, icon('edit', 14), 'Modifier')),
   );
@@ -288,7 +297,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.10.0'),
+    h('span', {}, 'v0.11.0'),
   );
 }
 
@@ -296,7 +305,8 @@ function toggleBroadcast() {
   if (!isSplit()) return;
   state.broadcast = !state.broadcast;
   renderAll();
-  activeTab()?.term?.focus();
+  const focused = activeTab();
+  if (focused) viewOf(focused)?.focus();
 }
 
 function renderViews() {
@@ -350,8 +360,8 @@ function activate(id: string) {
   renderAll();
   const tab = activeTab();
   requestAnimationFrame(() => {
-    for (const t of visibleTabs()) t.term?.refit();
-    tab?.term?.focus();
+    for (const t of visibleTabs()) viewOf(t)?.refit();
+    if (tab) viewOf(tab)?.focus();
   });
 }
 
@@ -359,7 +369,7 @@ function closeTab(id: string) {
   const index = state.tabs.findIndex((t) => t.id === id);
   if (index < 0) return;
   const [tab] = state.tabs.splice(index, 1);
-  tab.term?.dispose();
+  viewOf(tab)?.dispose();
   tab.view.remove();
   const wasSplit = state.split.includes(id);
   state.split = state.split.filter((s) => s !== id);
@@ -377,8 +387,8 @@ async function openSession(session: Session) {
   const proto = protocolOf(session.protocol);
   if (!proto) return toast(`Extension « ${session.protocol} » non installée`, 'error');
 
-  // Bureau à distance et web s'ouvrent dans leur propre fenêtre.
-  if (proto.view !== 'terminal') {
+  // Bureau à distance (client Windows) et web s'ouvrent dans leur propre fenêtre.
+  if (proto.view === 'desktop' || proto.view === 'web') {
     try {
       const res = await api.connect(session.id, 80, 24, () => {});
       toast(res.message ?? `${session.name} ouvert`);
@@ -404,22 +414,29 @@ async function openSession(session: Session) {
     if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
   }, true);
   if (proto.fileBrowser) tab.files = new FilePanel(toast);
-  tab.term = new TerminalView(termEl, (s, reason) => {
+  const onState = (s: TermState, reason?: string) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
-    const id = tab.term?.connection;
+    const id = viewOf(tab)?.connection;
     if (s === 'connected' && id) tab.files?.attach(id);
     if (s === 'closed') tab.files?.detach();
     renderAll();
-  });
+  };
   state.tabs.push(tab);
+  if (proto.view === 'screen') {
+    tab.screen = new ScreenView(termEl, onState);
+    activate(tab.id);
+    await tab.screen.connect(session.id, session.name);
+    return;
+  }
+  tab.term = new TerminalView(termEl, onState);
   activate(tab.id);
   tab.term.inputHook = (data) => broadcastFrom(tab, data);
   await tab.term.connect(session.id, session.name);
 }
 
 function reconnect(tab: Tab) {
-  tab.term?.reconnectNow();
+  viewOf(tab)?.reconnectNow();
 }
 
 async function reload() {

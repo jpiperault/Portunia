@@ -202,6 +202,7 @@ export class TerminalView {
       this.term.write(decode(e.data));
       return;
     }
+    if (e.event !== 'closed') return;
     this.connectionId = null;
     if (this.disposed) return;
     if (e.data) {

@@ -12,7 +12,7 @@ use serde_json::Value;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
 use crate::connector::{
-    ChoiceOption, ConnectContext, FieldKind, Manifest, Outcome, PortForwarder, RemoteEntry, RemoteFiles, Sink,
+    ChoiceOption, ConnectContext, FieldKind, InputEvent, Manifest, Outcome, PortForwarder, ScreenEvent, RemoteEntry, RemoteFiles, Sink,
     TerminalConnection, TunnelSpec, TunnelStatus,
     ViewKind,
 };
@@ -131,6 +131,8 @@ pub enum TermEvent {
     /// Octets reçus, encodés en base64.
     Data(String),
     Closed(Option<String>),
+    /// Image d'un écran distant (vue Screen).
+    Screen(ScreenEvent),
 }
 
 struct ChannelSink {
@@ -142,6 +144,10 @@ struct ChannelSink {
 impl Sink for ChannelSink {
     fn data(&self, bytes: &[u8]) {
         let _ = self.channel.send(TermEvent::Data(B64.encode(bytes)));
+    }
+
+    fn screen(&self, event: ScreenEvent) {
+        let _ = self.channel.send(TermEvent::Screen(event));
     }
 
     fn closed(&self, reason: Option<String>) {
@@ -516,4 +522,12 @@ pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<Back
 #[tauri::command]
 pub fn field_suggestions(state: State<'_, AppState>, protocol: String, source: String) -> Vec<ChoiceOption> {
     state.registry.get(&protocol).map(|c| c.suggestions(&source)).unwrap_or_default()
+}
+
+/// Clavier / souris / presse-papiers vers un écran distant.
+#[tauri::command]
+pub fn screen_input(state: State<'_, AppState>, connection_id: String, event: InputEvent) -> CmdResult<()> {
+    let connections = state.connections.lock().unwrap();
+    let connection = connections.get(&connection_id).ok_or("Session fermée")?;
+    connection.input(event).map_err(err)
 }

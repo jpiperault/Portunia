@@ -299,3 +299,13 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .imp-row.off { opacity: .6; cursor: default; }
 .imp-line { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
 .imp-note { color: #f5be85; }
+
+/* Écran distant (VNC) */
+.screen-view { position: relative; overflow: auto; background: #0b0b0d; padding: 0; display: flex; align-items: flex-start; justify-content: flex-start; }
+.screen-view.fit { overflow: hidden; align-items: center; justify-content: center; }
+.screen-canvas { display: block; outline: none; cursor: default; image-rendering: auto; }
+.screen-view.fit .screen-canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+.screen-canvas:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.screen-status { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; white-space: pre-line; color: var(--muted); background: rgb(11 11 13 / .85); cursor: pointer; }
+.screen-status.error { color: #ffb4b4; }
+.badge-vnc { background: #3d2e1c; color: #f5be85; }

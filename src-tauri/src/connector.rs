@@ -27,7 +27,9 @@ use tauri::AppHandle;
 pub enum ViewKind {
     /// Terminal intégré dans un onglet (SSH, Telnet, série…).
     Terminal,
-    /// Bureau à distance (RDP, VNC…).
+    /// Écran distant affiché dans un onglet (VNC…) : voir `ScreenEvent`.
+    Screen,
+    /// Bureau à distance ouvert dans une application externe (client RDP de Windows).
     Desktop,
     /// Page web (consoles d'administration).
     Web,
@@ -145,8 +147,42 @@ pub struct Manifest {
 /// Où un connecteur terminal envoie ce qu'il reçoit.
 pub trait Sink: Send + Sync {
     fn data(&self, bytes: &[u8]);
+    /// Image d'un écran distant (vue `Screen`).
+    fn screen(&self, _event: ScreenEvent) {}
     /// Fin de la connexion ; `reason` est renseigné en cas d'erreur.
     fn closed(&self, reason: Option<String>);
+}
+
+/// Ce qu'une connexion graphique envoie à l'interface.
+#[derive(Serialize, Clone, Debug)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ScreenEvent {
+    /// Taille de l'écran distant (efface l'image).
+    #[serde(rename_all = "camelCase")]
+    Resize { width: u16, height: u16 },
+    /// Pixels RGBA bruts, encodés en base64.
+    #[serde(rename_all = "camelCase")]
+    Image { x: u16, y: u16, width: u16, height: u16, rgba: String },
+    /// Image JPEG encodée en base64.
+    #[serde(rename_all = "camelCase")]
+    Jpeg { x: u16, y: u16, width: u16, height: u16, data: String },
+    /// Copie d'une zone de l'écran vers une autre.
+    #[serde(rename_all = "camelCase")]
+    Copy { x: u16, y: u16, width: u16, height: u16, src_x: u16, src_y: u16 },
+    Bell,
+    /// Le presse-papiers distant a changé.
+    Clipboard { text: String },
+}
+
+/// Clavier, souris et presse-papiers envoyés à un écran distant.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum InputEvent {
+    /// Touche au format X11 « keysym ».
+    Key { keysym: u32, down: bool },
+    /// Position en pixels de l'écran distant ; boutons : 1 gauche, 2 milieu, 4 droit, 8/16 molette.
+    Pointer { x: u16, y: u16, buttons: u8 },
+    Clipboard { text: String },
 }
 
 /// Connexion terminal ouverte, pilotée par l'interface.
@@ -161,6 +197,10 @@ pub trait TerminalConnection: Send + Sync {
     /// Tunnels (redirection de ports), si le protocole le permet.
     fn forwarder(&self) -> Option<Arc<dyn PortForwarder>> {
         None
+    }
+    /// Clavier / souris pour un écran distant (vue `Screen`).
+    fn input(&self, _event: InputEvent) -> Result<()> {
+        Err(anyhow!("Cette session n'accepte pas ce type de saisie"))
     }
 }
 

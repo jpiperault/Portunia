@@ -65,6 +65,7 @@ pub fn run() {
             commands::export_backup,
             commands::import_backup,
             commands::field_suggestions,
+            commands::screen_input,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

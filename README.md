@@ -34,6 +34,7 @@ L'installateur se trouve dans `src-tauri/target/release/bundle/nsis/`.
 | Bureau à distance (RDP) | Fenêtre du client Windows (mstsc) | Rien à installer. |
 | Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
+| VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
 | Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
 
 Autres fonctions :
@@ -57,7 +58,7 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 src-tauri/src/
   connector.rs     contrat d'une extension (trait Connector, manifeste, champs)
   registry.rs      liste des extensions disponibles
-  connectors/      une extension par fichier : ssh, rdp, web, telnet, serial (+ sftp.rs : fichiers, forward.rs : tunnels)
+  connectors/      une extension par fichier : ssh, rdp, web, telnet, serial, vnc (+ sftp.rs : fichiers, forward.rs : tunnels)
   store.rs         sessions, dossiers et commandes enregistrés (JSON)
   importers.rs     import ssh config / PuTTY / mRemoteNG, sauvegarde
   secrets.rs       Gestionnaire d'identifiants Windows
@@ -66,6 +67,7 @@ src/
   main.ts          arbre, onglets, panneau de détails
   dialog.ts        formulaire généré à partir du manifeste de l'extension
   terminal.ts      vue terminal (xterm.js)
+  screen.ts        vue écran distant (canvas, clavier, souris)
   extensions.ts    page Extensions
   files.ts         explorateur de fichiers du serveur
   tree.ts          arbre des sessions (dossiers, glisser-déposer)
@@ -91,7 +93,6 @@ Le cœur ne connaît aucun protocole. Une extension :
 ## Pistes pour la suite
 
 - Extensions externes chargées sans recompiler (modules WASM).
-- VNC.
 - RDP intégré dans un onglet plutôt que dans une fenêtre séparée.
 - Serveur de rebond (bastion), téléchargement de dossiers entiers.
 

@@ -1,7 +1,7 @@
 // Appels vers le cœur Rust (voir src-tauri/src/commands.rs).
 import { Channel, invoke } from '@tauri-apps/api/core';
 
-export type ViewKind = 'terminal' | 'desktop' | 'web';
+export type ViewKind = 'terminal' | 'screen' | 'desktop' | 'web';
 
 export interface ChoiceOption { value: string; label: string }
 
@@ -105,7 +105,21 @@ export interface Session {
 
 export type TermEvent =
   | { event: 'data'; data: string }
-  | { event: 'closed'; data: string | null };
+  | { event: 'closed'; data: string | null }
+  | { event: 'screen'; data: ScreenEvent };
+
+export type ScreenEvent =
+  | { type: 'resize'; width: number; height: number }
+  | { type: 'image'; x: number; y: number; width: number; height: number; rgba: string }
+  | { type: 'jpeg'; x: number; y: number; width: number; height: number; data: string }
+  | { type: 'copy'; x: number; y: number; width: number; height: number; srcX: number; srcY: number }
+  | { type: 'bell' }
+  | { type: 'clipboard'; text: string };
+
+export type InputEvent =
+  | { type: 'key'; keysym: number; down: boolean }
+  | { type: 'pointer'; x: number; y: number; buttons: number }
+  | { type: 'clipboard'; text: string };
 
 export interface ConnectResponse {
   connectionId: string | null;
@@ -128,6 +142,7 @@ export const api = {
   termResize: (connectionId: string, cols: number, rows: number) =>
     invoke<void>('term_resize', { connectionId, cols, rows }),
   disconnect: (connectionId: string) => invoke<void>('disconnect', { connectionId }),
+  screenInput: (connectionId: string, event: InputEvent) => invoke<void>('screen_input', { connectionId, event }),
 
   listFolders: () => invoke<string[]>('list_folders'),
   createFolder: (path: string) => invoke<string>('create_folder', { path }),

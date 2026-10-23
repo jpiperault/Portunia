@@ -3,7 +3,8 @@ import { h, icon, viewIcon } from './dom';
 
 const VIEW_LABEL: Record<string, string> = {
   terminal: 'Vue terminal',
-  desktop: 'Bureau à distance',
+  screen: 'Écran dans un onglet',
+  desktop: 'Application externe',
   web: 'Vue web',
 };
 
