@@ -1,0 +1,31 @@
+[package]
+name = "termoria"
+version = "0.1.0"
+description = "Gestionnaire de sessions distantes léger et extensible"
+edition = "2021"
+
+[lib]
+name = "termoria_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+russh = { version = "0.64", default-features = false, features = ["ring", "rsa", "flate2"] }
+tokio = { version = "1", features = ["sync", "macros", "time"] }
+keyring = { version = "3", features = ["windows-native"] }
+
+# Exécutable le plus petit possible en release.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

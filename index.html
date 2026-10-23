@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Termoria</title>
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar" aria-label="Sessions">
+      <label class="search">
+        <span class="sr-only">Rechercher une session</span>
+        <input id="search" type="search" placeholder="Rechercher…  (Ctrl Maj K)" autocomplete="off">
+      </label>
+      <div class="sidebar-head">
+        <span class="label">Sessions</span>
+        <button id="new-session" class="icon-btn" aria-label="Nouvelle session" title="Nouvelle session (Ctrl Maj N)"></button>
+      </div>
+      <div id="tree" class="tree"></div>
+      <div class="sidebar-foot">
+        <button id="open-extensions" class="tree-item"></button>
+      </div>
+    </nav>
+    <main class="work">
+      <div id="tabs" class="tabs" role="tablist" aria-label="Sessions ouvertes"></div>
+      <div id="toolbar" class="toolbar"></div>
+      <div class="content">
+        <div id="views" class="views"></div>
+        <aside id="details" class="details" aria-label="Détails de la session"></aside>
+      </div>
+    </main>
+  </div>
+  <footer id="status" class="statusbar"></footer>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
