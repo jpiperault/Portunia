@@ -25,6 +25,35 @@ pub struct Session {
     pub secret_keys: Vec<String>,
 }
 
+/// Sessions auxquelles une commande enregistrée est proposée.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Scope {
+    All,
+    /// Les sessions de ce dossier et de ses sous-dossiers.
+    Folder { path: String },
+    Session { id: String },
+}
+
+/// Commande enregistrée, envoyée au terminal en un clic.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Snippet {
+    #[serde(default)]
+    pub id: String,
+    pub name: String,
+    /// Peut contenir plusieurs lignes et des variables : {{host}}, {{username}}…
+    pub command: String,
+    pub scope: Scope,
+    /// Appuyer sur Entrée après la commande.
+    #[serde(default = "yes")]
+    pub run: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Default)]
 struct FileFormat {
     version: u32,
@@ -33,12 +62,15 @@ struct FileFormat {
     /// Chemins séparés par `/` : « Production/Web ».
     #[serde(default)]
     folders: Vec<String>,
+    #[serde(default)]
+    snippets: Vec<Snippet>,
 }
 
 pub struct Store {
     path: PathBuf,
     sessions: Vec<Session>,
     folders: Vec<String>,
+    snippets: Vec<Snippet>,
 }
 
 /// « /Prod//Web/ » → « Prod/Web ». Chaîne vide = racine.
@@ -80,14 +112,16 @@ impl Store {
             path,
             sessions: file.sessions,
             folders: file.folders,
+            snippets: file.snippets,
         }
     }
 
     fn persist(&self) -> Result<()> {
         let file = FileFormat {
-            version: 2,
+            version: 3,
             sessions: self.sessions.clone(),
             folders: self.folders.clone(),
+            snippets: self.snippets.clone(),
         };
         let tmp = self.path.with_extension("json.tmp");
         fs::write(&tmp, serde_json::to_string_pretty(&file)?)
@@ -164,7 +198,19 @@ impl Store {
                 session.folder = moved;
             }
         }
+        self.move_snippet_scopes(&from, &to);
         self.persist()
+    }
+
+    /// Les commandes d'un dossier déplacé le suivent (vers la racine : toutes les sessions).
+    fn move_snippet_scopes(&mut self, from: &str, to: &str) {
+        for snippet in &mut self.snippets {
+            if let Scope::Folder { path } = &snippet.scope {
+                if let Some(moved) = reparent(path, from, to) {
+                    snippet.scope = if moved.is_empty() { Scope::All } else { Scope::Folder { path: moved } };
+                }
+            }
+        }
     }
 
     /// Supprime un dossier ; son contenu (sessions et sous-dossiers) remonte d'un niveau.
@@ -185,6 +231,36 @@ impl Store {
                 session.folder = moved;
             }
         }
+        self.move_snippet_scopes(&path, &parent);
+        self.persist()
+    }
+
+    pub fn snippets(&self) -> Vec<Snippet> {
+        self.snippets.clone()
+    }
+
+    pub fn upsert_snippet(&mut self, mut snippet: Snippet) -> Result<Snippet> {
+        snippet.name = snippet.name.trim().to_string();
+        if snippet.name.is_empty() || snippet.command.trim().is_empty() {
+            bail!("Donnez un nom et une commande");
+        }
+        if let Scope::Folder { path } = &snippet.scope {
+            let path = normalize_folder(path);
+            snippet.scope = if path.is_empty() { Scope::All } else { Scope::Folder { path } };
+        }
+        if snippet.id.is_empty() {
+            snippet.id = uuid::Uuid::new_v4().to_string();
+        }
+        match self.snippets.iter_mut().find(|s| s.id == snippet.id) {
+            Some(existing) => *existing = snippet.clone(),
+            None => self.snippets.push(snippet.clone()),
+        }
+        self.persist()?;
+        Ok(snippet)
+    }
+
+    pub fn delete_snippet(&mut self, id: &str) -> Result<()> {
+        self.snippets.retain(|s| s.id != id);
         self.persist()
     }
 
@@ -201,6 +277,8 @@ impl Store {
             return Ok(None);
         };
         let removed = self.sessions.remove(index);
+        // Les commandes propres à cette session disparaissent avec elle.
+        self.snippets.retain(|s| s.scope != Scope::Session { id: id.to_string() });
         self.persist()?;
         Ok(Some(removed))
     }
@@ -283,5 +361,55 @@ mod tests {
         assert_eq!(folder_of(&reloaded, "a"), "Prod");
         assert_eq!(folder_of(&reloaded, "b"), "Prod");
         let _ = fs::remove_dir_all(dir);
+    }
+
+    fn snippet(store: &mut Store, scope: Scope) -> String {
+        store
+            .upsert_snippet(Snippet {
+                id: String::new(),
+                name: "logs".into(),
+                command: "tail -f /var/log/syslog".into(),
+                scope,
+                run: true,
+            })
+            .unwrap()
+            .id
+    }
+
+    fn scope_of(store: &Store, id: &str) -> Scope {
+        store.snippets().into_iter().find(|s| s.id == id).unwrap().scope
+    }
+
+    #[test]
+    fn les_commandes_suivent_les_dossiers() {
+        let (mut store, _) = store_with(&[], &[("a", "Prod/Web")]);
+        let web = snippet(&mut store, Scope::Folder { path: "/Prod/Web/".into() });
+        let prod = snippet(&mut store, Scope::Folder { path: "Prod".into() });
+        assert_eq!(scope_of(&store, &web), Scope::Folder { path: "Prod/Web".into() });
+
+        store.rename_folder("Prod", "Clients/Prod").unwrap();
+        assert_eq!(scope_of(&store, &web), Scope::Folder { path: "Clients/Prod/Web".into() });
+
+        store.delete_folder("Clients").unwrap();
+        assert_eq!(scope_of(&store, &web), Scope::Folder { path: "Prod/Web".into() });
+        store.delete_folder("Prod").unwrap();
+        assert_eq!(scope_of(&store, &prod), Scope::All, "un dossier supprimé à la racine : toutes les sessions");
+    }
+
+    #[test]
+    fn supprimer_une_session_supprime_ses_commandes() {
+        let (mut store, _) = store_with(&[], &[("a", ""), ("b", "")]);
+        snippet(&mut store, Scope::Session { id: "a".into() });
+        let keep = snippet(&mut store, Scope::Session { id: "b".into() });
+        store.remove("a").unwrap();
+        assert_eq!(store.snippets().len(), 1);
+        assert_eq!(store.snippets()[0].id, keep);
+    }
+
+    #[test]
+    fn refuse_une_commande_vide() {
+        let (mut store, _) = store_with(&[], &[]);
+        let empty = Snippet { id: String::new(), name: " ".into(), command: "ls".into(), scope: Scope::All, run: true };
+        assert!(store.upsert_snippet(empty).is_err());
     }
 }

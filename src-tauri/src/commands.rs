@@ -17,7 +17,7 @@ use crate::connector::{
 };
 use crate::registry::Registry;
 use crate::secrets;
-use crate::store::{Session, Store};
+use crate::store::{Session, Snippet, Store};
 
 pub struct AppState {
     registry: Registry,
@@ -391,4 +391,21 @@ pub fn duplicate_session(state: State<'_, AppState>, id: String) -> CmdResult<Se
         }
     }
     store.upsert(copy).map_err(full)
+}
+
+// ---------- Commandes enregistrées ----------
+
+#[tauri::command]
+pub fn list_snippets(state: State<'_, AppState>) -> Vec<Snippet> {
+    state.store.lock().unwrap().snippets()
+}
+
+#[tauri::command]
+pub fn save_snippet(state: State<'_, AppState>, snippet: Snippet) -> CmdResult<Snippet> {
+    state.store.lock().unwrap().upsert_snippet(snippet).map_err(full)
+}
+
+#[tauri::command]
+pub fn delete_snippet(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.store.lock().unwrap().delete_snippet(&id).map_err(full)
 }

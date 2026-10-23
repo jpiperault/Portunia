@@ -46,6 +46,20 @@ export interface RemoteEntry {
 
 export interface TransferProgress { done: number; total: number }
 
+export type SnippetScope =
+  | { kind: 'all' }
+  | { kind: 'folder'; path: string }
+  | { kind: 'session'; id: string };
+
+export interface Snippet {
+  id: string;
+  name: string;
+  command: string;
+  scope: SnippetScope;
+  /** Appuyer sur Entrée après la commande. */
+  run: boolean;
+}
+
 function progressChannel(onProgress: (p: TransferProgress) => void) {
   const channel = new Channel<TransferProgress>();
   channel.onmessage = onProgress;
@@ -94,6 +108,10 @@ export const api = {
   deleteFolder: (path: string) => invoke<void>('delete_folder', { path }),
   moveSessions: (ids: string[], folder: string) => invoke<void>('move_sessions', { ids, folder }),
   duplicateSession: (id: string) => invoke<Session>('duplicate_session', { id }),
+
+  listSnippets: () => invoke<Snippet[]>('list_snippets'),
+  saveSnippet: (snippet: Snippet) => invoke<Snippet>('save_snippet', { snippet }),
+  deleteSnippet: (id: string) => invoke<void>('delete_snippet', { id }),
 
   fsHome: (connectionId: string) => invoke<string>('fs_home', { connectionId }),
   fsList: (connectionId: string, path: string) => invoke<RemoteEntry[]>('fs_list', { connectionId, path }),

@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, errorText, Manifest, Session } from './api';
+import { api, errorText, Manifest, Session, Snippet } from './api';
 import { badge, h, icon } from './dom';
 import { openSessionDialog } from './dialog';
 import { renderExtensions } from './extensions';
@@ -9,6 +9,7 @@ import { FilePanel } from './files';
 import { TerminalView, TermState } from './terminal';
 import { leafOf, parentOf, SessionTree } from './tree';
 import { showMenu } from './menu';
+import { openPalette, openSnippetManager, SnippetContext } from './snippets';
 import { openSettingsDialog } from './settings';
 
 interface Tab {
@@ -39,6 +40,7 @@ const state = {
   split: [] as string[],
   /** Saisie multiple : la frappe part vers toutes les sessions de l'écran partagé. */
   broadcast: false,
+  snippets: [] as Snippet[],
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -158,6 +160,23 @@ function leaveSplit() {
   if (state.active) activate(state.active);
 }
 
+/** Contexte des commandes enregistrées pour l'onglet actif. */
+function snippetContext(): SnippetContext {
+  return {
+    snippets: state.snippets,
+    folders: state.folders,
+    session: sessionOf(activeTab()?.sessionId),
+    send: (text) => {
+      const tab = activeTab();
+      if (!tab?.term?.connection) return toast('La session active n\'est pas connectée', 'error');
+      if (!broadcastFrom(tab, text)) tab.term.send(text);
+      tab.term.focus();
+    },
+    reload: async () => (state.snippets = await api.listSnippets()),
+    toast,
+  };
+}
+
 /** Saisie multiple : envoie la frappe à toutes les sessions visibles qui la reçoivent. */
 function broadcastFrom(source: Tab, data: string): boolean {
   const visible = visibleTabs();
@@ -229,6 +248,7 @@ function renderToolbar() {
     h('div', { class: 'toolbar-actions' },
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
       tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => tab.term?.cancelReconnect() }, icon('close', 14), 'Annuler la reconnexion'),
+      tab.term && h('button', { class: 'btn', title: 'Commandes enregistrées (Ctrl Maj P)', onclick: () => openPalette(snippetContext()) }, icon('commands', 14), 'Commandes'),
       tab.term && h('button', { class: 'icon-btn', 'aria-label': 'Rechercher dans le terminal', title: 'Rechercher (Ctrl Maj F)', onclick: () => tab.term?.openSearch() }, icon('search')),
       h('button', { class: `btn${isSplit() ? ' on' : ''}`, title: 'Afficher plusieurs sessions côte à côte', onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), 'Écran partagé'),
       isSplit() && h('button', {
@@ -262,7 +282,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.6.0'),
+    h('span', {}, 'v0.7.0'),
   );
 }
 
@@ -398,7 +418,7 @@ function reconnect(tab: Tab) {
 
 async function reload() {
   try {
-    [state.protocols, state.sessions, state.folders] = await Promise.all([api.listProtocols(), api.listSessions(), api.listFolders()]);
+    [state.protocols, state.sessions, state.folders, state.snippets] = await Promise.all([api.listProtocols(), api.listSessions(), api.listFolders(), api.listSnippets()]);
   } catch (e) {
     toast(errorText(e), 'error');
   }
@@ -462,6 +482,8 @@ $('open-extensions').append(icon('puzzle'), h('span', { class: 'grow' }, 'Extens
 $('open-extensions').addEventListener('click', openExtensions);
 $('open-settings').append(icon('settings'), h('span', { class: 'grow' }, 'Paramètres'));
 $('open-settings').addEventListener('click', openSettingsDialog);
+$('open-snippets').append(icon('commands'), h('span', { class: 'grow' }, 'Commandes enregistrées'));
+$('open-snippets').addEventListener('click', () => openSnippetManager(snippetContext()));
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });
 
 // Glisser-déposer depuis l'Explorateur Windows sur le panneau Fichiers = envoi au serveur.
@@ -489,6 +511,7 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'w' && state.active) { e.preventDefault(); closeTab(state.active); }
   else if (key === 'f') { e.preventDefault(); activeTab()?.term?.openSearch(); }
   else if (key === 'b') { e.preventDefault(); toggleBroadcast(); }
+  else if (key === 'p') { e.preventDefault(); openPalette(snippetContext()); }
 });
 
 reload();
