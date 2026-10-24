@@ -1,7 +1,16 @@
 // Explorateur de fichiers côté serveur (SFTP) : un panneau par onglet SSH.
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { api, errorText, RemoteEntry } from './api';
+import { api, errorText, remoteFiles, RemoteEntry } from './api';
 import { h, icon } from './dom';
+
+/** Fichier distant ouvert dans un éditeur local. */
+interface Editing {
+  id: string;
+  name: string;
+  path: string;
+  status: string;
+  error?: boolean;
+}
 
 interface Transfer {
   name: string;
@@ -39,6 +48,7 @@ export class FilePanel {
   private transfers: Transfer[] = [];
   private queue: Promise<void> = Promise.resolve();
   private dropping = false;
+  private editing: Editing[] = [];
 
   constructor(private readonly toast: (msg: string, kind?: 'info' | 'error') => void) {
     this.render();
@@ -57,6 +67,7 @@ export class FilePanel {
   }
 
   detach() {
+    for (const e of this.editing) { e.status = 'Session fermée : synchronisation arrêtée'; e.error = true; }
     this.connectionId = null;
     this.render();
   }
@@ -88,21 +99,62 @@ export class FilePanel {
     const clashes = paths.map(baseName).filter((n) => existing.has(n));
     if (clashes.length && !confirm(`Remplacer sur le serveur : ${clashes.join(', ')} ?`)) return;
     const dir = this.cwd;
+    const id = this.connectionId;
+    // Fichiers ou dossiers entiers (le cœur détecte les dossiers).
     for (const local of paths) {
-      this.enqueue({ name: baseName(local), direction: 'up' }, (cb) => api.fsUpload(this.connectionId!, local, join(dir, baseName(local)), cb), dir);
+      this.enqueue({ name: baseName(local), direction: 'up' }, async (cb) => { await remoteFiles.uploadAny(id, local, dir, cb); }, dir);
     }
   }
 
-  private async pickUpload() {
-    const picked = await open({ multiple: true, directory: false, title: 'Envoyer vers le serveur' });
+  private async pickUpload(directory = false) {
+    const picked = await open({ multiple: true, directory, title: directory ? 'Envoyer des dossiers vers le serveur' : 'Envoyer vers le serveur' });
     if (picked) this.uploadPaths(Array.isArray(picked) ? picked : [picked]);
   }
 
   private async download(entry: RemoteEntry) {
-    const local = await save({ defaultPath: entry.name, title: 'Télécharger depuis le serveur' });
-    if (!local || !this.connectionId) return;
+    if (!this.connectionId) return;
     const id = this.connectionId;
+    if (entry.isDir) {
+      const parent = await open({ directory: true, multiple: false, title: `Télécharger le dossier « ${entry.name} » dans…` });
+      if (typeof parent !== 'string') return;
+      const local = `${parent.replace(/[\\/]$/, '')}\\${entry.name.replace(/[<>:"/\\|?*]/g, '_')}`;
+      this.enqueue({ name: `${entry.name}/`, direction: 'down' }, async (cb) => { await remoteFiles.downloadDir(id, entry.path, local, cb); });
+      return;
+    }
+    const local = await save({ defaultPath: entry.name, title: 'Télécharger depuis le serveur' });
+    if (!local) return;
     this.enqueue({ name: entry.name, direction: 'down' }, (cb) => api.fsDownload(id, entry.path, local, cb));
+  }
+
+  /** Ouvre le fichier dans l'éditeur de Windows ; chaque enregistrement repart sur le serveur. */
+  private async edit(entry: RemoteEntry) {
+    if (!this.connectionId || entry.isDir) return;
+    if (entry.size > 20 * 1024 * 1024 && !confirm(`« ${entry.name} » fait ${formatSize(entry.size)}. L'ouvrir quand même dans un éditeur ?`)) return;
+    const edit: Editing = { id: '', name: entry.name, path: entry.path, status: 'Ouverture…' };
+    this.editing.push(edit);
+    this.render();
+    try {
+      edit.id = await remoteFiles.editStart(this.connectionId, entry.path, (e) => {
+        edit.status = e.type === 'uploaded'
+          ? `Envoyé à ${new Date(e.at * 1000).toLocaleTimeString('fr-FR')}`
+          : `Échec de l'envoi : ${e.message}`;
+        edit.error = e.type === 'error';
+        if (e.type === 'error') this.toast(`${entry.name} : ${e.message}`, 'error');
+        this.renderTransfers();
+      });
+      edit.status = 'Ouvert : enregistrez dans l’éditeur pour envoyer';
+    } catch (e) {
+      edit.status = errorText(e);
+      edit.error = true;
+      this.toast(errorText(e), 'error');
+    }
+    this.renderTransfers();
+  }
+
+  private stopEdit(edit: Editing) {
+    if (edit.id) remoteFiles.editStop(edit.id).catch(() => {});
+    this.editing = this.editing.filter((x) => x !== edit);
+    this.renderTransfers();
   }
 
   /** Transferts l'un après l'autre, avec leur avancement. */
@@ -182,7 +234,8 @@ export class FilePanel {
         btn('up', 'Dossier parent', () => this.load(parent(this.cwd))),
         btn('refresh', 'Actualiser', () => this.load(this.cwd)),
         btn('folderPlus', 'Nouveau dossier', () => this.mkdir()),
-        btn('upload', 'Envoyer des fichiers', () => this.pickUpload())),
+        btn('upload', 'Envoyer des fichiers', () => this.pickUpload()),
+        btn('folderUp', 'Envoyer un dossier', () => this.pickUpload(true))),
       pathInput,
       this.renderList(connected),
       h('div', { class: 'transfers' }),
@@ -228,7 +281,8 @@ export class FilePanel {
             h('span', { class: 'file-meta' }, entry.isDir ? '' : formatSize(entry.size)),
             h('span', { class: 'file-meta date' }, formatDate(entry.modified))),
           h('div', { class: 'row-actions' },
-            !entry.isDir && h('button', { class: 'icon-btn sm', 'aria-label': `Télécharger ${entry.name}`, title: 'Télécharger', onclick: () => this.download(entry) }, icon('download', 14)),
+            h('button', { class: 'icon-btn sm', 'aria-label': `Télécharger ${entry.name}`, title: entry.isDir ? 'Télécharger le dossier entier' : 'Télécharger', onclick: () => this.download(entry) }, icon('download', 14)),
+            !entry.isDir && h('button', { class: 'icon-btn sm', 'aria-label': `Éditer ${entry.name}`, title: 'Ouvrir dans mon éditeur (renvoi automatique à chaque enregistrement)', onclick: () => this.edit(entry) }, icon('fileEdit', 14)),
             h('button', { class: 'icon-btn sm', 'aria-label': `Renommer ${entry.name}`, title: 'Renommer (F2)', onclick: () => this.rename(entry) }, icon('edit', 14)),
             h('button', { class: 'icon-btn sm', 'aria-label': `Supprimer ${entry.name}`, title: 'Supprimer (Suppr)', onclick: () => this.remove(entry) }, icon('trash', 14)))),
       );
@@ -240,7 +294,13 @@ export class FilePanel {
     const box = this.el.querySelector('.transfers');
     if (!box) return;
     const visible = this.transfers.filter((t) => t.state !== 'done').concat(this.transfers.filter((t) => t.state === 'done').slice(0, 3));
-    box.replaceChildren(...visible.map((t) => {
+    const edits = this.editing.map((e) => h('div', { class: `transfer editing${e.error ? ' error' : ''}`, title: e.path },
+      h('div', { class: 'transfer-line' },
+        icon('fileEdit', 13),
+        h('span', { class: 'grow ellipsis' }, e.name),
+        h('button', { class: 'icon-btn sm', 'aria-label': `Arrêter l'édition de ${e.name}`, title: 'Arrêter la synchronisation', onclick: () => this.stopEdit(e) }, icon('close', 12))),
+      h('div', { class: 'muted small' }, e.status)));
+    box.replaceChildren(...edits, ...visible.map((t) => {
       const pct = t.total ? Math.min(100, Math.round((t.done / t.total) * 100)) : t.state === 'done' ? 100 : 0;
       const status = t.state === 'waiting' ? 'en attente' : t.state === 'error' ? 'échec' : t.state === 'done' ? 'terminé' : `${pct} %`;
       return h('div', { class: `transfer ${t.state}`, title: t.error ?? '' },

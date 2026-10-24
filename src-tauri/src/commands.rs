@@ -19,6 +19,7 @@ use crate::connector::{
 use crate::importers::{self, Candidate};
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
+use crate::transfer;
 use crate::lock::{self, Lock};
 use crate::registry::Registry;
 use crate::secrets;
@@ -33,6 +34,8 @@ pub struct AppState {
     lock: Mutex<Lock>,
     /// Enregistrements en cours, par connexion.
     recordings: Mutex<HashMap<String, Recorder>>,
+    /// Fichiers distants ouverts dans un éditeur local : (connexion, surveillance).
+    edits: Mutex<HashMap<String, (String, tauri::async_runtime::JoinHandle<()>)>>,
 }
 
 impl AppState {
@@ -44,6 +47,7 @@ impl AppState {
             license: Mutex::new(License::load(&data_dir)),
             lock: Mutex::new(Lock::load(&data_dir)),
             recordings: Mutex::new(HashMap::new()),
+            edits: Mutex::new(HashMap::new()),
             data_dir,
         }
     }
@@ -176,6 +180,10 @@ impl Sink for ChannelSink {
         if let Some(state) = self.app.try_state::<AppState>() {
             state.connections.lock().unwrap().remove(&self.connection_id);
             // Fin de session : l'enregistrement en cours est terminé et sauvegardé.
+            // Les fichiers en cours d'édition ne sont plus synchronisés.
+            state.edits.lock().unwrap().retain(|_, (conn, task)| {
+                if *conn == self.connection_id { task.abort(); false } else { true }
+            });
             let recorder = state.recordings.lock().unwrap().remove(&self.connection_id);
             if let Some(recorder) = recorder {
                 let _ = recorder.finish();
@@ -740,4 +748,114 @@ pub fn folder_colors(state: State<'_, AppState>) -> HashMap<String, String> {
 #[tauri::command]
 pub fn set_folder_color(state: State<'_, AppState>, path: String, color: Option<String>) -> CmdResult<()> {
     state.store.lock().unwrap().set_folder_color(&path, color).map_err(full)
+}
+
+// ---------- Dossiers entiers et édition de fichiers distants ----------
+
+#[tauri::command]
+pub async fn fs_download_dir(
+    state: State<'_, AppState>,
+    connection_id: String,
+    remote: String,
+    local: String,
+    on_progress: Channel<TransferProgress>,
+) -> CmdResult<usize> {
+    state.unlocked()?;
+    let files = files_of(&state, &connection_id)?;
+    let progress: crate::connector::Progress = Arc::new(move |done, total| {
+        let _ = on_progress.send(TransferProgress { done, total });
+    });
+    transfer::download_tree(files.as_ref(), &remote, &PathBuf::from(local), progress).await.map_err(full)
+}
+
+/// Envoie un fichier ou un dossier (avec son contenu) dans `remote_dir`.
+#[tauri::command]
+pub async fn fs_upload_any(
+    state: State<'_, AppState>,
+    connection_id: String,
+    local: String,
+    remote_dir: String,
+    on_progress: Channel<TransferProgress>,
+) -> CmdResult<usize> {
+    state.unlocked()?;
+    let files = files_of(&state, &connection_id)?;
+    let progress: crate::connector::Progress = Arc::new(move |done, total| {
+        let _ = on_progress.send(TransferProgress { done, total });
+    });
+    let local = PathBuf::from(local);
+    if local.is_dir() {
+        return transfer::upload_tree(files.as_ref(), &local, &remote_dir, progress).await.map_err(full);
+    }
+    let name = local.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or("Fichier invalide")?;
+    let remote = if remote_dir.ends_with('/') { format!("{remote_dir}{name}") } else { format!("{remote_dir}/{name}") };
+    files.upload(local, remote, progress).await.map_err(full)?;
+    Ok(1)
+}
+
+#[derive(Serialize, Clone)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum EditEvent {
+    /// Fichier renvoyé sur le serveur (heure Unix, en secondes).
+    Uploaded { at: u64 },
+    Error { message: String },
+}
+
+/// Ouvre un fichier distant dans l'éditeur par défaut de Windows ; chaque
+/// enregistrement est renvoyé automatiquement sur le serveur.
+#[tauri::command]
+pub async fn fs_edit_start(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    connection_id: String,
+    remote: String,
+    on_event: Channel<EditEvent>,
+) -> CmdResult<String> {
+    use tauri_plugin_opener::OpenerExt;
+    state.unlocked()?;
+    let files = files_of(&state, &connection_id)?;
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let local = transfer::edit_copy_path(&id, &remote);
+    if let Some(dir) = local.parent() {
+        std::fs::create_dir_all(dir).map_err(err)?;
+    }
+    files.download(remote.clone(), local.clone(), Arc::new(|_, _| {})).await.map_err(full)?;
+    app.opener().open_path(local.to_string_lossy(), None::<&str>).map_err(|e| format!("Aucun éditeur pour ce fichier : {e}"))?;
+
+    let task = tauri::async_runtime::spawn(async move {
+        let mut last = transfer::modified(&local);
+        loop {
+            tokio::time::sleep(transfer::EDIT_POLL).await;
+            let now = transfer::modified(&local);
+            if now.is_none() {
+                break; // copie supprimée
+            }
+            if now == last {
+                continue;
+            }
+            // Attend que l'éditeur ait fini d'écrire.
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            let settled = transfer::modified(&local);
+            if settled != now {
+                continue;
+            }
+            last = settled;
+            let event = match files.upload(local.clone(), remote.clone(), Arc::new(|_, _| {})).await {
+                Ok(()) => EditEvent::Uploaded {
+                    at: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
+                },
+                Err(e) => EditEvent::Error { message: format!("{e:#}") },
+            };
+            let _ = on_event.send(event);
+        }
+    });
+    state.edits.lock().unwrap().insert(id.clone(), (connection_id, task));
+    Ok(id)
+}
+
+#[tauri::command]
+pub fn fs_edit_stop(state: State<'_, AppState>, id: String) {
+    if let Some((_, task)) = state.edits.lock().unwrap().remove(&id) {
+        task.abort();
+    }
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("termoria-edition").join(&id));
 }

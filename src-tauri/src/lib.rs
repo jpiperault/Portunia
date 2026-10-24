@@ -9,6 +9,7 @@ mod recording;
 mod registry;
 mod secrets;
 mod store;
+mod transfer;
 
 use tauri::Manager;
 
@@ -93,6 +94,10 @@ pub fn run() {
             commands::monitor_alerts_allowed,
             commands::folder_colors,
             commands::set_folder_color,
+            commands::fs_download_dir,
+            commands::fs_upload_any,
+            commands::fs_edit_start,
+            commands::fs_edit_stop,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

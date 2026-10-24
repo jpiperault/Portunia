@@ -430,3 +430,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .color-swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .color-swatch.none { background: transparent; border: 2px dashed var(--dot-ring); }
 .color-swatch:hover, .color-swatch.on { border-color: var(--text); }
+
+/* Fichiers en cours d'édition */
+.transfer.editing { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.transfer.editing.error .muted { color: var(--danger); }

@@ -38,6 +38,8 @@ const ICONS: Record<string, string> = {
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6',
   power: 'M12 3v9M6.3 6.3a8 8 0 1 0 11.4 0',
   folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  fileEdit: 'M6 3h8l4 4v5M14 3v4h4M6 3v18h6M14.5 20.5l5-5 2 2-5 5h-2z',
+  folderUp: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 17v-6M9.5 13.5 12 11l2.5 2.5',
   folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 11v5M9.5 13.5h5',
   file: 'M6 3h8l4 4v14H6zM14 3v4h4',
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',

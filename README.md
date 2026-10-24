@@ -55,7 +55,7 @@ Autres fonctions :
 - commandes enregistrées (Ctrl+Maj+P) : par session, par dossier ou pour toutes, avec variables {{host}}, {{username}}… ;
 - tunnels SSH : port local (ssh -L) et proxy SOCKS5 (ssh -D), ouverts à la connexion ou à la demande, n'écoutant que sur 127.0.0.1 ;
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
-- explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
+- explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi et téléchargement de fichiers ou de dossiers entiers (glisser-déposer compris), édition d'un fichier distant dans votre éditeur avec renvoi automatique à chaque enregistrement, création, renommage, suppression, suivi des transferts ;
 - import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Termoria ;
 - apparence : thème sombre, clair ou comme Windows, 9 palettes de terminal (Dracula, Nord, Solarized…), couleur par dossier (bandeau sur les sessions, onglets et barre d'outils, étiquette « PRODUCTION ») ;
 - supervision : pastille verte ou rouge et latence pour chaque serveur, vue d'ensemble, notifications quand un serveur tombe ou revient (Pro) ;
@@ -84,6 +84,7 @@ tools/license-tool/ outil de l'éditeur : clé de signature et génération des 
   lock.rs          verrouillage (mot de passe maître, Windows Hello)
   recording.rs     enregistrement des sessions (asciicast, texte)
   monitor.rs       supervision (test de connexion TCP)
+  transfer.rs      transferts de dossiers entiers, édition de fichiers distants
   secrets.rs       Gestionnaire d'identifiants Windows
   commands.rs      commandes appelées par l'interface
 src/
@@ -121,5 +122,5 @@ Le cœur ne connaît aucun protocole. Une extension :
 ## Pistes pour la suite
 
 - Extensions externes chargées sans recompiler (modules WASM).
-- Serveur de rebond (bastion), téléchargement de dossiers entiers.
+- Serveur de rebond (bastion).
 

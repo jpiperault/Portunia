@@ -237,3 +237,26 @@ export const folderColors = {
   list: () => invoke<Record<string, string>>('folder_colors'),
   set: (path: string, color: string | null) => invoke<void>('set_folder_color', { path, color }),
 };
+
+// ---------- Dossiers entiers et édition distante ----------
+
+export type EditEvent = { type: 'uploaded'; at: number } | { type: 'error'; message: string };
+
+function transferChannel(onProgress: (p: TransferProgress) => void) {
+  const channel = new Channel<TransferProgress>();
+  channel.onmessage = onProgress;
+  return channel;
+}
+
+export const remoteFiles = {
+  downloadDir: (connectionId: string, remote: string, local: string, onProgress: (p: TransferProgress) => void) =>
+    invoke<number>('fs_download_dir', { connectionId, remote, local, onProgress: transferChannel(onProgress) }),
+  uploadAny: (connectionId: string, local: string, remoteDir: string, onProgress: (p: TransferProgress) => void) =>
+    invoke<number>('fs_upload_any', { connectionId, local, remoteDir, onProgress: transferChannel(onProgress) }),
+  editStart: (connectionId: string, remote: string, onEvent: (e: EditEvent) => void) => {
+    const channel = new Channel<EditEvent>();
+    channel.onmessage = onEvent;
+    return invoke<string>('fs_edit_start', { connectionId, remote, onEvent: channel });
+  },
+  editStop: (id: string) => invoke<void>('fs_edit_stop', { id }),
+};
