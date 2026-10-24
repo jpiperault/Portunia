@@ -859,3 +859,39 @@ pub fn fs_edit_stop(state: State<'_, AppState>, id: String) {
     }
     let _ = std::fs::remove_dir_all(std::env::temp_dir().join("termoria-edition").join(&id));
 }
+
+// ---------- Shells locaux ----------
+
+/// Shells présents sur ce PC (PowerShell, cmd, distributions WSL, Git Bash).
+#[tauri::command]
+pub async fn shells_detect() -> Vec<crate::connectors::local::ShellSpec> {
+    tauri::async_runtime::spawn_blocking(crate::connectors::local::detect).await.unwrap_or_default()
+}
+
+/// Ouvre un shell local dans un onglet.
+#[tauri::command]
+pub async fn connect_local(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    shell: crate::connectors::local::ShellSpec,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<TermEvent>,
+) -> CmdResult<ConnectResponse> {
+    state.unlocked()?;
+    let connection_id = uuid::Uuid::new_v4().to_string();
+    let sink: Arc<dyn Sink> = Arc::new(ChannelSink { channel: on_event, app: app.clone(), connection_id: connection_id.clone() });
+    let connection = tauri::async_runtime::spawn_blocking(move || crate::connectors::local::open(&shell, cols, rows, sink))
+        .await
+        .map_err(err)?
+        .map_err(|e| format!("{e:#}"))?;
+    state.connections.lock().unwrap().insert(connection_id.clone(), connection);
+    Ok(ConnectResponse { connection_id: Some(connection_id), view: ViewKind::Terminal, message: None })
+}
+
+/// Shell en administrateur : ouvert dans sa propre fenêtre Windows.
+#[tauri::command]
+pub fn open_shell_elevated(state: State<'_, AppState>, shell: crate::connectors::local::ShellSpec) -> CmdResult<()> {
+    state.unlocked()?;
+    crate::connectors::local::open_elevated(&shell).map_err(full)
+}

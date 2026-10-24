@@ -261,3 +261,25 @@ export const remoteFiles = {
   },
   editStop: (id: string) => invoke<void>('fs_edit_stop', { id }),
 };
+
+// ---------- Shells locaux ----------
+
+export interface ShellSpec {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  /** pwsh, powershell, cmd, wsl, git, custom */
+  icon: string;
+}
+
+export const shells = {
+  detect: () => invoke<ShellSpec[]>('shells_detect'),
+  connect(shell: ShellSpec, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+    const channel = new Channel<TermEvent>();
+    channel.onmessage = onEvent;
+    return invoke<ConnectResponse>('connect_local', { shell, cols, rows, onEvent: channel });
+  },
+  openElevated: (shell: ShellSpec) => invoke<void>('open_shell_elevated', { shell }),
+};

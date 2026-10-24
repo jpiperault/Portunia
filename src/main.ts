@@ -18,12 +18,15 @@ import { Monitor } from './monitoring';
 import { checkForUpdates } from './updates';
 import { allows, currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
 import { openRecordings, Player, setPlayerHandler, stamp } from './recordings';
-import { folderColors, recordings } from './api';
+import { folderColors, recordings, shells, ShellSpec } from './api';
+import { defaultShell, hideShell, loadShells, setDefaultShell, shellIcon, shellsLoaded, visibleShells } from './localshells';
 import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
 
 interface Tab {
   id: string;
-  kind: 'session' | 'extensions' | 'replay';
+  kind: 'session' | 'local' | 'extensions' | 'replay';
+  /** Shell local (onglet « local »). */
+  shell?: ShellSpec;
   title: string;
   sessionId?: string;
   protocol?: string;
@@ -220,7 +223,7 @@ function broadcastFrom(source: Tab, data: string): boolean {
 }
 
 function splitMenu(e: MouseEvent) {
-  const candidates = state.tabs.filter((t) => t.kind === 'session' && !visibleTabs().includes(t));
+  const candidates = state.tabs.filter((t) => isTerminalTab(t) && !visibleTabs().includes(t));
   showMenu(e.clientX, e.clientY, [
     ...(candidates.length
       ? candidates.map((t) => ({ label: `Afficher à côté : ${t.title}`, icon: 'split', action: () => addToSplit(t.id) }))
@@ -233,7 +236,7 @@ function tabMenu(t: Tab, e: MouseEvent) {
   e.preventDefault();
   const inSplit = isSplit() && visibleTabs().includes(t);
   showMenu(e.clientX, e.clientY, [
-    ...(t.kind === 'session' && !inSplit && t.id !== state.active && activeTab()?.kind === 'session'
+    ...(isTerminalTab(t) && !inSplit && t.id !== state.active && !!activeTab() && isTerminalTab(activeTab()!)
       ? [{ label: 'Afficher à côté de l\'onglet actif', icon: 'split', action: () => addToSplit(t.id) }]
       : []),
     ...(inSplit ? [{ label: 'Retirer de l\'écran partagé', icon: 'split', action: () => removeFromSplit(t.id) }] : []),
@@ -249,7 +252,7 @@ function renderTabs() {
       const shown = isSplit() && visibleTabs().includes(t);
       const tabEl = h('div', { class: `tab${selected ? ' active' : ''}${shown && !selected ? ' shown' : ''}` },
         h('button', { role: 'tab', 'aria-selected': String(selected), class: 'tab-main', onclick: () => activate(t.id) },
-          t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon(t.kind === 'replay' ? 'play' : 'puzzle', 14),
+          t.kind === 'local' && t.shell ? shellIcon(t.shell, 14) : t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon(t.kind === 'replay' ? 'play' : 'puzzle', 14),
           h('span', { class: 'ellipsis' }, t.title),
           t.protocol && badge(t.protocol)),
         h('button', { class: 'icon-btn sm', 'aria-label': `Fermer ${t.title}`, title: 'Fermer (Ctrl Maj W)', onclick: () => closeTab(t.id) }, icon('close', 13)));
@@ -257,13 +260,14 @@ function renderTabs() {
       paint(tabEl, colorOf(sessionOf(t.sessionId)?.folder ?? '', state.folderColors));
       return tabEl;
     }),
-    h('button', { class: 'icon-btn', 'aria-label': 'Nouvelle session', title: 'Nouvelle session', onclick: () => newSession() }, icon('plus')),
+    h('button', { class: 'icon-btn', 'aria-label': 'Ouvrir une session ou un shell local', title: 'Nouvelle session ou shell local (Ctrl Maj T : shell par défaut)', onclick: (e: MouseEvent) => openPlusMenu(e) }, icon('plus')),
   );
 }
 
 function renderToolbar() {
   const tab = activeTab();
   const session = sessionOf(tab?.sessionId);
+  if (tab?.kind === 'local' && tab.shell) return renderLocalToolbar(tab, tab.shell);
   if (!tab || tab.kind !== 'session' || !session) {
     toolbar.replaceChildren();
     toolbar.hidden = true;
@@ -327,15 +331,16 @@ function renderSidePanel() {
 
 function renderStatus() {
   const open = state.tabs.filter((t) => t.kind === 'session' && t.state === 'connected').length;
+  const localCount = state.tabs.filter((t) => t.kind === 'local' && t.state === 'connected').length;
   statusBar.replaceChildren(
-    h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
+    h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)${localCount ? ` · ${localCount} shell(s) local(aux)` : ''}`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
     ...(settings().monitoring && monitor.summary().total ? [h('button', {
       class: `status-btn${monitor.summary().up < monitor.summary().total ? ' warn' : ''}`, title: 'Supervision des serveurs',
       onclick: () => monitor.openOverview((s) => openSession(s)),
     }, h('span', { class: `health ${monitor.summary().up < monitor.summary().total ? 'down' : 'up'}` }), `${monitor.summary().up}/${monitor.summary().total} en ligne`)] : []),
-    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.19.1'),
+    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.20.0'),
   );
 }
 
@@ -385,6 +390,7 @@ function renderPaneHead(t: Tab, split: boolean) {
 }
 
 function renderAll() {
+  renderShells();
   renderTree();
   renderTabs();
   renderToolbar();
@@ -618,6 +624,7 @@ document.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (key === 'k') { e.preventDefault(); search.focus(); search.select(); }
   else if (key === 'n') { e.preventDefault(); newSession(); }
+  else if (key === 't') { e.preventDefault(); const def = defaultShell(); if (def) openLocalShell(def); else toast('Aucun shell local trouvé', 'error'); }
   else if (key === 'w' && state.active) { e.preventDefault(); closeTab(state.active); }
   else if (key === 'f') { e.preventDefault(); activeTab()?.term?.openSearch(); }
   else if (key === 'b') { e.preventDefault(); toggleBroadcast(); }
@@ -630,6 +637,13 @@ reload();
 // Vérification discrète des mises à jour, une fois l'application chargée.
 if (settings().autoUpdate) setTimeout(() => checkForUpdates(toast, true), 4000);
 loadLicense().then(() => renderStatus());
+// Shells locaux : détection, section « Ce PC », ouverture au démarrage si demandé.
+loadShells().then(() => {
+  renderShells();
+  const def = defaultShell();
+  if (settings().localShells.atStartup && def) openLocalShell(def);
+});
+onSettingsChange(() => renderShells());
 monitor.start();
 // Première vérification une fois les sessions chargées.
 setTimeout(() => monitor.check(), 2000);
@@ -651,3 +665,101 @@ function envFolder(folder: string): string {
   }
   return '';
 }
+
+// ---------- Shells locaux ----------
+
+/** Onglet avec un terminal (session ou shell local) : écran partagé, saisie multiple… */
+function isTerminalTab(t: Tab): boolean {
+  return t.kind === 'session' || t.kind === 'local';
+}
+
+/** Ouvre un shell de ce PC dans un nouvel onglet. */
+async function openLocalShell(shell: ShellSpec) {
+  const termEl = h('div', { class: 'term-view' });
+  const paneHead = h('div', { class: 'pane-head', hidden: true });
+  const view = h('div', { class: 'pane' }, paneHead, termEl);
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'local', title: shell.name, protocol: 'local', shell, view, paneHead, state: 'connecting', receive: true };
+  view.addEventListener('pointerdown', (e) => {
+    if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
+  }, true);
+  tab.term = new TerminalView(termEl, (s, reason) => {
+    tab.state = s;
+    if (s === 'closed') tab.recording = undefined;
+    if (s === 'closed' && reason && tab.id !== state.active) toast(`${shell.name} : ${reason}`, 'error');
+    renderAll();
+  });
+  // Un shell qui se termine ne se relance pas tout seul (Entrée le relance).
+  tab.term.autoReconnect = false;
+  state.tabs.push(tab);
+  activate(tab.id);
+  tab.term.inputHook = (data) => broadcastFrom(tab, data);
+  await tab.term.connectWith((cols, rows, onEvent) => shells.connect(shell, cols, rows, onEvent), shell.name, 'Ouverture de');
+}
+
+function shellMenu(shell: ShellSpec, e: MouseEvent) {
+  e.preventDefault();
+  showMenu(e.clientX, e.clientY, [
+    { label: 'Ouvrir', icon: 'prompt', action: () => openLocalShell(shell) },
+    { label: 'Ouvrir en administrateur (fenêtre séparée)', icon: 'lock', action: () => shells.openElevated(shell).catch((err) => toast(errorText(err), 'error')) },
+    { label: 'Shell par défaut (Ctrl+Maj+T)', icon: 'check', action: () => setDefaultShell(shell.id) },
+    'separator',
+    { label: 'Masquer', icon: 'close', action: () => hideShell(shell.id) },
+  ]);
+}
+
+/** Section « Ce PC » de la barre latérale. */
+function renderShells() {
+  const box = $('local-shells');
+  const def = defaultShell();
+  const list = visibleShells();
+  box.replaceChildren(...(list.length ? list.map((s) => {
+    const running = state.tabs.some((t) => t.kind === 'local' && t.shell?.id === s.id && t.state === 'connected');
+    const btn = h('button', {
+      class: 'tree-item shell-item', title: `${s.command} ${s.args.join(' ')}${def?.id === s.id ? '\nShell par défaut (Ctrl+Maj+T)' : ''}`,
+      onclick: () => openLocalShell(s),
+    }, shellIcon(s), h('span', { class: 'grow ellipsis' }, s.name), running && h('span', { class: 'dot on' }));
+    btn.addEventListener('contextmenu', (e) => shellMenu(s, e));
+    return btn;
+  }) : shellsLoaded() ? [h('p', { class: 'muted small', style: 'margin: 0; padding: 4px 10px' }, 'Aucun shell trouvé.')] : []));
+}
+
+/** Bouton « + » des onglets : nouvelle session ou shell local. */
+function openPlusMenu(e: MouseEvent) {
+  const def = defaultShell();
+  showMenu(e.clientX, e.clientY, [
+    { label: 'Nouvelle session…', icon: 'plus', action: () => newSession() },
+    'separator',
+    ...visibleShells().map((s) => ({ label: s.id === def?.id ? `${s.name}  (Ctrl+Maj+T)` : s.name, icon: s.icon === 'wsl' ? 'wsl' : s.icon === 'git' ? 'git' : 'prompt', action: () => openLocalShell(s) })),
+    ...(def ? [{ label: `${def.name} en administrateur`, icon: 'lock', action: () => shells.openElevated(def).catch((err) => toast(errorText(err), 'error')) }] : []),
+    'separator',
+    { label: 'Gérer les shells locaux…', icon: 'settings', action: () => openSettingsDialog(toast) },
+  ]);
+}
+
+/** Barre d'outils d'un shell local. */
+function renderLocalToolbar(tab: Tab, shell: ShellSpec) {
+  toolbar.hidden = false;
+  paint(toolbar, undefined);
+  const label = { connecting: 'ouverture…', connected: 'en cours', reconnecting: 'ouverture…', closed: 'terminé' }[tab.state];
+  toolbar.replaceChildren(
+    h('div', { class: 'toolbar-info' },
+      h('span', { class: 'env-label local' }, 'CE PC'),
+      h('strong', {}, shell.name),
+      h('span', { class: 'muted ellipsis' }, `· ${shell.cwd || 'dossier personnel'}`),
+      h('span', { class: 'muted' }, `· ${label}`)),
+    h('div', { class: 'toolbar-actions' },
+      tab.state === 'closed' && h('button', { class: 'btn', onclick: () => tab.term?.reconnectNow() }, icon('refresh', 14), 'Relancer'),
+      tab.state === 'connected' && h('button', {
+        class: `btn${tab.recording ? ' rec' : ''}`, onclick: () => (tab.recording ? stopRecording(tab) : startRecording(tab)),
+      }, h('span', { class: 'rec-dot' }), tab.recording ? 'Arrêter l’enregistrement' : 'Enregistrer'),
+      h('button', { class: 'btn', title: 'Commandes enregistrées (Ctrl Maj P)', onclick: () => openPalette(snippetContext()) }, icon('commands', 14), 'Commandes'),
+      h('button', { class: 'icon-btn', 'aria-label': 'Rechercher dans le terminal', title: 'Rechercher (Ctrl Maj F)', onclick: () => tab.term?.openSearch() }, icon('search')),
+      h('button', { class: `btn${isSplit() ? ' on' : ''}`, onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), 'Écran partagé'),
+      isSplit() && h('button', { class: `btn${state.broadcast ? ' warn' : ''}`, onclick: () => toggleBroadcast() }, icon('broadcast', 14), state.broadcast ? 'Saisie multiple : ACTIVE' : 'Saisie multiple'),
+      h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('close', 14), 'Fermer')),
+  );
+}
+
+$('manage-shells').append(icon('settings', 14));
+$('manage-shells').addEventListener('click', () => openSettingsDialog(toast));

@@ -434,3 +434,23 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 /* Fichiers en cours d'édition */
 .transfer.editing { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
 .transfer.editing.error .muted { color: var(--danger); }
+
+/* Shells locaux */
+.local-shells { display: flex; flex-direction: column; gap: 1px; flex: none; }
+.shell-item { gap: 10px; }
+.shell-ico.shell-pwsh { color: #6cb6ff; }
+.shell-ico.shell-powershell { color: #8ab6ff; }
+.shell-ico.shell-wsl { color: #f08c2e; }
+.shell-ico.shell-git { color: #e5484d; }
+.shell-ico.shell-cmd, .shell-ico.shell-custom { color: var(--text-2); }
+.badge-local { background: #2b3540; color: #a9c7e0; }
+.toolbar .env-label.local { background: #2b3540; color: #a9c7e0; }
+.shell-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.shell-row.off { opacity: .55; }
+.shell-row input { accent-color: var(--accent); margin: 0; }
+.mono { font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px; }
+.btn.sm { height: 28px; font-size: 12px; padding: 0 10px; }
+.shell-add { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 10px; }
+.shell-add[open] { padding-bottom: 12px; }
+.shell-add summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
+.shell-add > *:not(summary) { margin-top: 10px; }

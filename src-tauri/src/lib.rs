@@ -98,6 +98,9 @@ pub fn run() {
             commands::fs_upload_any,
             commands::fs_edit_start,
             commands::fs_edit_stop,
+            commands::shells_detect,
+            commands::connect_local,
+            commands::open_shell_elevated,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

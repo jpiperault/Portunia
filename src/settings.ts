@@ -1,9 +1,11 @@
 // Préférences de l'interface, enregistrées sur ce PC.
 import { h, icon } from './dom';
+import type { ShellSpec } from './api';
 import { checkForUpdates } from './updates';
 import { licenseSection, proChip, securitySection } from './security';
 import { recordingSettings } from './recordings';
 import { TERMINAL_THEMES } from './theme';
+import { shellSettings } from './localshells';
 
 export interface Settings {
   fontFamily: string;
@@ -32,6 +34,8 @@ export interface Settings {
   uiTheme: 'dark' | 'light' | 'system';
   /** Palette du terminal (« auto » : suit le thème). */
   termTheme: string;
+  /** Shells locaux : masqués, par défaut, personnalisés, ouverture au démarrage. */
+  localShells: { hidden: string[]; defaultId: string; custom: ShellSpec[]; atStartup: boolean };
 }
 
 export const DEFAULTS: Settings = {
@@ -51,6 +55,7 @@ export const DEFAULTS: Settings = {
   monitorExcluded: [],
   uiTheme: 'dark',
   termTheme: 'auto',
+  localShells: { hidden: [], defaultId: '', custom: [], atStartup: false },
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
@@ -134,6 +139,8 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         securitySection(toastFn, () => {}),
         h('h3', { class: 'label' }, 'Licence'),
         licenseSection(toastFn),
+        h('h3', { class: 'label' }, 'Shells locaux'),
+        shellSettings(toastFn),
         h('h3', { class: 'label' }, 'Enregistrement des sessions'),
         recordingSettings(toastFn),
         h('h3', { class: 'label' }, 'Supervision'),

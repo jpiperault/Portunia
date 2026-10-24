@@ -45,6 +45,7 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 | Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
+| Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console Windows (ConPTY). Section « Ce PC », menu « + », Ctrl+Maj+T. |
 | Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
 
 Autres fonctions :
@@ -73,7 +74,7 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 src-tauri/src/       cœur (Rust)
   connector.rs       contrat d'une extension (trait Connector, manifeste, champs, vues)
   registry.rs        liste des extensions disponibles
-  connectors/        une extension par fichier : ssh, rdp, vnc, web, telnet, serial
+  connectors/        une extension par fichier : ssh, rdp, vnc, web, telnet, serial, local
                      (+ sftp.rs : fichiers, forward.rs : tunnels)
   commands.rs        commandes appelées par l'interface
   store.rs           sessions, dossiers, couleurs et commandes enregistrés (JSON)
@@ -101,6 +102,7 @@ src/                 interface (TypeScript, sans framework)
   recordings.ts      liste et lecteur des enregistrements
   monitoring.ts      supervision : pastilles, vue d'ensemble, alertes
   theme.ts           thèmes, palettes du terminal, couleurs de dossier
+  localshells.ts     shells locaux : section « Ce PC » et réglages
   extensions.ts      page Extensions
 rdp-helper/          moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
 scripts/             compilation du moteur RDP
