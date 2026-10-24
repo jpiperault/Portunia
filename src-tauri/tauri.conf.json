@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Termoria",
-  "version": "0.19.0",
+  "version": "0.19.1",
   "identifier": "fr.termoria.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,7 +31,7 @@
     "publisher": "Termoria",
     "shortDescription": "Gestionnaire de sessions distantes",
     "longDescription": "SSH, Bureau à distance, VNC, Telnet, port série et consoles web dans une seule fenêtre.",
-    "homepage": "https://github.com/jpiperault/Termonia",
+    "homepage": "https://github.com/jpiperault/termoria-releases",
     "category": "Utility",
     "externalBin": ["binaries/termoria-rdp"],
     "createUpdaterArtifacts": true,
@@ -46,7 +46,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERCRkMxMURBNTVEMTEyQzIKUldUQ0V0RlYyaEg4MjliQ3B6TnZzRGZIaDFLcGdJczNGclJIeS9tbkd4ZFVSMGppbHhBaHdNTEgK",
-      "endpoints": ["https://github.com/jpiperault/Termonia/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/jpiperault/termoria-releases/releases/latest/download/latest.json"],
       "windows": { "installMode": "passive" }
     }
   }

@@ -4,7 +4,7 @@ Gestionnaire de sessions distantes pour Windows : toutes vos connexions (SSH, Bu
 
 ## Installer Termoria
 
-Téléchargez `Termoria_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Termonia/releases) et lancez-le (installation pour l'utilisateur courant, sans droits administrateur). Termoria se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
+Téléchargez `Termoria_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/termoria-releases/releases) et lancez-le (installation pour l'utilisateur courant, sans droits administrateur). Termoria se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
 
 ## Installer les outils de développement (une seule fois)
 
@@ -30,7 +30,7 @@ La première compilation Rust prend quelques minutes, les suivantes sont rapides
    git tag v0.13.0
    git push origin main --tags
    ```
-3. GitHub Actions (`.github/workflows/release.yml`) compile l'installateur, le signe et publie la release avec `latest.json`, que Termoria consulte pour se mettre à jour.
+3. GitHub Actions (`.github/workflows/release.yml`) compile l'installateur, le signe et publie la release dans le dépôt **public** `jpiperault/termoria-releases` (le code reste privé), avec `latest.json` que Termoria consulte pour se mettre à jour. Secret supplémentaire : `RELEASES_TOKEN`, jeton d'accès avec le droit « Contents : Read and write » sur ce dépôt.
 
 La signature utilise la clé `~/.tauri/termoria.key` (secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` du dépôt). La clé publique est dans `tauri.conf.json`. **Ne perdez pas la clé privée** : sans elle, les versions installées ne peuvent plus être mises à jour.
 

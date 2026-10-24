@@ -1,10 +1,13 @@
 # Publie une version de Termoria : à chaque tag vX.Y.Z poussé sur GitHub,
 # compile l'installateur Windows, le signe pour les mises à jour automatiques
-# et crée la release (avec latest.json, lu par Termoria pour se mettre à jour).
+# et crée la release dans le dépôt PUBLIC jpiperault/termoria-releases
+# (le code reste privé ici ; Termoria y lit latest.json pour se mettre à jour).
 #
-# Secrets à définir dans le dépôt (Settings > Secrets and variables > Actions) :
+# Secrets à définir dans ce dépôt (Settings > Secrets and variables > Actions) :
 #   TAURI_SIGNING_PRIVATE_KEY           contenu du fichier termoria.key
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  mot de passe choisi à sa création
+#   RELEASES_TOKEN                      jeton d'accès (fine-grained) avec le droit
+#                                       « Contents : Read and write » sur termoria-releases
 name: Publier une version
 
 on:
@@ -13,7 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   windows:
@@ -38,13 +41,18 @@ jobs:
 
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Jeton autorisé à publier dans le dépôt public des versions.
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          owner: jpiperault
+          repo: termoria-releases
+          # Le dépôt public ne contient pas ce code : le tag y est créé sur sa branche main.
+          commitish: main
           tagName: ${{ github.ref_name }}
           releaseName: Termoria ${{ github.ref_name }}
-          releaseBody: Voir les nouveautés dans le README et l'historique des commits.
+          releaseBody: Installez Termoria avec le fichier « setup.exe » ci-dessous. Les versions suivantes s'installent ensuite automatiquement depuis l'application.
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
