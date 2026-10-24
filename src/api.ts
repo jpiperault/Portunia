@@ -216,3 +216,17 @@ export const security = {
   unlock: (password: string) => invoke<void>('unlock', { password }),
   unlockHello: () => invoke<boolean>('unlock_hello'),
 };
+
+// ---------- Enregistrement des sessions ----------
+
+export interface RecordingInfo { path: string; name: string; size: number; modified: number }
+
+export const recordings = {
+  defaultDir: () => invoke<string>('recording_default_dir'),
+  start: (connectionId: string, stamp: string, title: string, cols: number, rows: number, dir: string | null) =>
+    invoke<string>('recording_start', { connectionId, stamp, title, cols, rows, dir }),
+  stop: (connectionId: string) => invoke<string | null>('recording_stop', { connectionId }),
+  list: (dir: string | null) => invoke<RecordingInfo[]>('recordings_list', { dir }),
+  read: (dir: string | null, path: string) => invoke<string>('recording_read', { dir, path }),
+  remove: (dir: string | null, path: string) => invoke<void>('recording_delete', { dir, path }),
+};

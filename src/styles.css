@@ -340,3 +340,15 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .lic-activate { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .chip.pro { background: #23314a; color: #8ab6ff; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
 .chip.pro.locked { background: #2b2d33; color: var(--muted); }
+
+/* Enregistrement et lecteur */
+.rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #d65b5b; display: inline-block; }
+.btn.rec { border-color: #d65b5b; color: #ffc9c9; }
+.btn.rec .rec-dot { animation: rec-blink 1.2s infinite; }
+@keyframes rec-blink { 50% { opacity: .25; } }
+.player { display: flex; flex-direction: column; }
+.player-screen { flex: 1; min-height: 0; padding: 10px 0 4px 12px; background: var(--term); overflow: auto; }
+.player-controls { flex: none; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--work); }
+.player-controls select { height: 32px; padding: 0 6px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); }
+.player-bar { flex: 1; accent-color: var(--accent); }
+.player-clock { min-width: 90px; text-align: right; font-variant-numeric: tabular-nums; }

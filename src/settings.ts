@@ -2,6 +2,7 @@
 import { h, icon } from './dom';
 import { checkForUpdates } from './updates';
 import { licenseSection, securitySection } from './security';
+import { recordingSettings } from './recordings';
 
 export interface Settings {
   fontFamily: string;
@@ -14,6 +15,10 @@ export interface Settings {
   autoReconnect: boolean;
   /** Vérifier les mises à jour au démarrage. */
   autoUpdate: boolean;
+  /** Enregistrer automatiquement chaque session terminal (Pro). */
+  autoRecord: boolean;
+  /** Dossier des enregistrements (vide = DocumentsTermorianregistrements). */
+  recordingDir: string;
 }
 
 export const DEFAULTS: Settings = {
@@ -25,6 +30,8 @@ export const DEFAULTS: Settings = {
   rightClickPaste: true,
   autoReconnect: true,
   autoUpdate: true,
+  autoRecord: false,
+  recordingDir: '',
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
@@ -98,6 +105,8 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         securitySection(toastFn, () => {}),
         h('h3', { class: 'label' }, 'Licence'),
         licenseSection(toastFn),
+        h('h3', { class: 'label' }, 'Enregistrement des sessions'),
+        recordingSettings(toastFn),
         h('h3', { class: 'label' }, 'Mises à jour'),
         check('autoUpdate', 'Vérifier les mises à jour au démarrage', 'Une bannière propose la nouvelle version ; rien ne s’installe sans votre accord.'),
         h('button', { type: 'button', class: 'btn', style: 'align-self: flex-start', onclick: () => checkForUpdates(toastFn) }, icon('refresh', 14), 'Rechercher maintenant'),

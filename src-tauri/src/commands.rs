@@ -17,7 +17,8 @@ use crate::connector::{
     ViewKind,
 };
 use crate::importers::{self, Candidate};
-use crate::license::License;
+use crate::license::{Feature, License};
+use crate::recording::{self, Recorder};
 use crate::lock::{self, Lock};
 use crate::registry::Registry;
 use crate::secrets;
@@ -30,6 +31,8 @@ pub struct AppState {
     data_dir: PathBuf,
     pub license: Mutex<License>,
     lock: Mutex<Lock>,
+    /// Enregistrements en cours, par connexion.
+    recordings: Mutex<HashMap<String, Recorder>>,
 }
 
 impl AppState {
@@ -40,6 +43,7 @@ impl AppState {
             connections: Mutex::new(HashMap::new()),
             license: Mutex::new(License::load(&data_dir)),
             lock: Mutex::new(Lock::load(&data_dir)),
+            recordings: Mutex::new(HashMap::new()),
             data_dir,
         }
     }
@@ -156,6 +160,11 @@ struct ChannelSink {
 impl Sink for ChannelSink {
     fn data(&self, bytes: &[u8]) {
         let _ = self.channel.send(TermEvent::Data(B64.encode(bytes)));
+        if let Some(state) = self.app.try_state::<AppState>() {
+            if let Some(recorder) = state.recordings.lock().unwrap().get_mut(&self.connection_id) {
+                recorder.output(bytes);
+            }
+        }
     }
 
     fn screen(&self, event: ScreenEvent) {
@@ -166,6 +175,11 @@ impl Sink for ChannelSink {
         let _ = self.channel.send(TermEvent::Closed(reason));
         if let Some(state) = self.app.try_state::<AppState>() {
             state.connections.lock().unwrap().remove(&self.connection_id);
+            // Fin de session : l'enregistrement en cours est terminé et sauvegardé.
+            let recorder = state.recordings.lock().unwrap().remove(&self.connection_id);
+            if let Some(recorder) = recorder {
+                let _ = recorder.finish();
+            }
         }
     }
 }
@@ -262,6 +276,9 @@ pub fn term_resize(
     cols: u16,
     rows: u16,
 ) -> CmdResult<()> {
+    if let Some(recorder) = state.recordings.lock().unwrap().get_mut(&connection_id) {
+        recorder.resize(cols.max(2), rows.max(2));
+    }
     let connections = state.connections.lock().unwrap();
     match connections.get(&connection_id) {
         Some(connection) => connection.resize(cols.max(2), rows.max(2)).map_err(err),
@@ -632,4 +649,69 @@ pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResu
         state.lock.lock().unwrap().unlock_with_hello().map_err(full)?;
     }
     Ok(verified)
+}
+
+// ---------- Enregistrement des sessions (Pro) ----------
+
+/// Dossier des enregistrements : choisi dans les Paramètres, sinon Documents\Termoria\Enregistrements.
+fn recording_dir(app: &AppHandle, custom: Option<String>) -> CmdResult<PathBuf> {
+    match custom.filter(|d| !d.trim().is_empty()) {
+        Some(dir) => Ok(PathBuf::from(dir)),
+        None => Ok(app.path().document_dir().map_err(err)?.join("Termoria").join("Enregistrements")),
+    }
+}
+
+#[tauri::command]
+pub fn recording_default_dir(app: AppHandle) -> CmdResult<String> {
+    Ok(recording_dir(&app, None)?.display().to_string())
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn recording_start(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    connection_id: String,
+    stamp: String,
+    title: String,
+    cols: u16,
+    rows: u16,
+    dir: Option<String>,
+) -> CmdResult<String> {
+    state.license.lock().unwrap().require(Feature::SessionRecording).map_err(full)?;
+    if !state.connections.lock().unwrap().contains_key(&connection_id) {
+        return Err("Session fermée".into());
+    }
+    let mut recordings = state.recordings.lock().unwrap();
+    if let Some(existing) = recordings.get(&connection_id) {
+        return Ok(existing.path().display().to_string());
+    }
+    let recorder = Recorder::start(&recording_dir(&app, dir)?, &stamp, &title, cols, rows).map_err(full)?;
+    let path = recorder.path().display().to_string();
+    recordings.insert(connection_id, recorder);
+    Ok(path)
+}
+
+#[tauri::command]
+pub fn recording_stop(state: State<'_, AppState>, connection_id: String) -> CmdResult<Option<String>> {
+    let recorder = state.recordings.lock().unwrap().remove(&connection_id);
+    match recorder {
+        Some(r) => Ok(Some(r.finish().map_err(full)?.display().to_string())),
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
+pub fn recordings_list(app: AppHandle, dir: Option<String>) -> CmdResult<Vec<recording::RecordingInfo>> {
+    Ok(recording::list(&recording_dir(&app, dir)?))
+}
+
+#[tauri::command]
+pub fn recording_read(app: AppHandle, dir: Option<String>, path: String) -> CmdResult<String> {
+    recording::read(&recording_dir(&app, dir)?, &path).map_err(full)
+}
+
+#[tauri::command]
+pub fn recording_delete(app: AppHandle, dir: Option<String>, path: String) -> CmdResult<()> {
+    recording::delete(&recording_dir(&app, dir)?, &path).map_err(full)
 }

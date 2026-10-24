@@ -15,11 +15,13 @@ import { openTunnels } from './tunnels';
 import { openImportExport } from './importexport';
 import { openSettingsDialog, settings } from './settings';
 import { checkForUpdates } from './updates';
-import { currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
+import { allows, currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
+import { openRecordings, Player, setPlayerHandler, stamp } from './recordings';
+import { recordings } from './api';
 
 interface Tab {
   id: string;
-  kind: 'session' | 'extensions';
+  kind: 'session' | 'extensions' | 'replay';
   title: string;
   sessionId?: string;
   protocol?: string;
@@ -33,6 +35,10 @@ interface Tab {
   paneHead?: HTMLElement;
   /** Reçoit la saisie multiple. */
   receive: boolean;
+  /** Fichier en cours d'enregistrement. */
+  recording?: string;
+  /** Lecteur d'enregistrement (onglet « replay »). */
+  player?: Player;
 }
 
 const state = {
@@ -227,7 +233,7 @@ function renderTabs() {
       const shown = isSplit() && visibleTabs().includes(t);
       const tabEl = h('div', { class: `tab${selected ? ' active' : ''}${shown && !selected ? ' shown' : ''}` },
         h('button', { role: 'tab', 'aria-selected': String(selected), class: 'tab-main', onclick: () => activate(t.id) },
-          t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon('puzzle', 14),
+          t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon(t.kind === 'replay' ? 'play' : 'puzzle', 14),
           h('span', { class: 'ellipsis' }, t.title),
           t.protocol && badge(t.protocol)),
         h('button', { class: 'icon-btn sm', 'aria-label': `Fermer ${t.title}`, title: 'Fermer (Ctrl Maj W)', onclick: () => closeTab(t.id) }, icon('close', 13)));
@@ -265,6 +271,10 @@ function renderToolbar() {
       tab.screen && h('button', { class: 'btn', title: 'Envoyer Ctrl+Alt+Suppr à l’écran distant', onclick: () => tab.screen?.sendCtrlAltDel() }, 'Ctrl+Alt+Suppr'),
       tab.screen && h('button', { class: 'btn', title: 'Copier le presse-papiers de Windows vers l’écran distant', onclick: () => tab.screen?.sendClipboard() }, icon('copy', 14), 'Presse-papiers'),
       tab.screen && h('button', { class: 'btn', title: 'Adapter l’image à l’onglet ou afficher en taille réelle', onclick: () => { tab.screen?.toggleFit(); renderToolbar(); } }, tab.screen.fit ? 'Taille réelle' : 'Ajuster à la fenêtre'),
+      tab.term && tab.state === 'connected' && h('button', {
+        class: `btn${tab.recording ? ' rec' : ''}`, title: tab.recording ? `Enregistrement en cours : ${tab.recording}` : 'Enregistrer cette session (asciicast + texte)',
+        onclick: () => (tab.recording ? stopRecording(tab) : startRecording(tab)),
+      }, h('span', { class: 'rec-dot' }), tab.recording ? 'Arrêter l’enregistrement' : 'Enregistrer'),
       tab.term && h('button', { class: 'btn', title: 'Commandes enregistrées (Ctrl Maj P)', onclick: () => openPalette(snippetContext()) }, icon('commands', 14), 'Commandes'),
       tab.term && h('button', { class: 'icon-btn', 'aria-label': 'Rechercher dans le terminal', title: 'Rechercher (Ctrl Maj F)', onclick: () => tab.term?.openSearch() }, icon('search')),
       h('button', { class: `btn${isSplit() ? ' on' : ''}`, title: 'Afficher plusieurs sessions côte à côte', onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), 'Écran partagé'),
@@ -299,7 +309,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.14.0'),
+    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.15.0'),
   );
 }
 
@@ -372,6 +382,7 @@ function closeTab(id: string) {
   if (index < 0) return;
   const [tab] = state.tabs.splice(index, 1);
   viewOf(tab)?.dispose();
+  tab.player?.dispose();
   tab.view.remove();
   const wasSplit = state.split.includes(id);
   state.split = state.split.filter((s) => s !== id);
@@ -421,7 +432,8 @@ async function openSession(session: Session) {
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
     const id = viewOf(tab)?.connection;
     if (s === 'connected' && id) tab.files?.attach(id);
-    if (s === 'closed') tab.files?.detach();
+    if (s === 'closed') { tab.files?.detach(); tab.recording = undefined; }
+    if (s === 'connected' && tab.term && settings().autoRecord && allows('sessionRecording')) startRecording(tab);
     renderAll();
   };
   state.tabs.push(tab);
@@ -436,6 +448,47 @@ async function openSession(session: Session) {
   activate(tab.id);
   tab.term.inputHook = (data) => broadcastFrom(tab, data);
   await tab.term.connect(session.id, session.name);
+}
+
+// ---------- Enregistrement des sessions ----------
+
+async function startRecording(tab: Tab) {
+  const id = tab.term?.connection;
+  if (!id || !tab.term) return;
+  try {
+    tab.recording = await recordings.start(id, stamp(), tab.title, tab.term.term.cols, tab.term.term.rows, settings().recordingDir || null);
+    renderToolbar();
+  } catch (e) {
+    toast(errorText(e), 'error');
+  }
+}
+
+async function stopRecording(tab: Tab) {
+  const id = tab.term?.connection;
+  if (!id) return;
+  try {
+    const path = await recordings.stop(id);
+    tab.recording = undefined;
+    renderToolbar();
+    if (path) toast(`Enregistrement sauvegardé : ${path}`);
+  } catch (e) {
+    toast(errorText(e), 'error');
+  }
+}
+
+/** Ouvre un enregistrement dans un onglet de lecture. */
+function openReplay(title: string, cast: string) {
+  const view = h('div', { class: 'pane' });
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'replay', title: `▶ ${title}`, view, state: 'connected', receive: false };
+  try {
+    tab.player = new Player(view, cast);
+  } catch (e) {
+    view.remove();
+    return toast(`Enregistrement illisible : ${errorText(e)}`, 'error');
+  }
+  state.tabs.push(tab);
+  activate(tab.id);
 }
 
 function reconnect(tab: Tab) {
@@ -510,6 +563,9 @@ $('open-settings').append(icon('settings'), h('span', { class: 'grow' }, 'Param�
 $('open-settings').addEventListener('click', () => openSettingsDialog(toast));
 $('open-snippets').append(icon('commands'), h('span', { class: 'grow' }, 'Commandes enregistrées'));
 $('open-snippets').addEventListener('click', () => openSnippetManager(snippetContext()));
+$('open-recordings').append(icon('play'), h('span', { class: 'grow' }, 'Enregistrements'));
+$('open-recordings').addEventListener('click', () => openRecordings(toast));
+setPlayerHandler(openReplay);
 $('open-import').append(icon('upload'), h('span', { class: 'grow' }, 'Importer / exporter'));
 $('open-import').addEventListener('click', () => openImportExport((msg) => { toast(msg); reload(); }, toast));
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });

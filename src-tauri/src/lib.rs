@@ -4,6 +4,7 @@ mod connectors;
 mod importers;
 mod license;
 mod lock;
+mod recording;
 mod registry;
 mod secrets;
 mod store;
@@ -80,6 +81,12 @@ pub fn run() {
             commands::lock_now,
             commands::unlock,
             commands::unlock_hello,
+            commands::recording_default_dir,
+            commands::recording_start,
+            commands::recording_stop,
+            commands::recordings_list,
+            commands::recording_read,
+            commands::recording_delete,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");
