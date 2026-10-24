@@ -77,7 +77,8 @@ src-tauri/src/
 rdp-helper/        moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
 scripts/           compilation du moteur RDP
 .github/workflows/ publication automatique des versions
-tools/license-tool/ outil de l'éditeur : clé de signature et génération des licences (ne pas distribuer) (+ sftp.rs : fichiers, forward.rs : tunnels)
+tools/license-tool/ outil de l'éditeur : clé de signature et génération des licences (ne pas distribuer)
+screenshot.html    démonstration avec données fictives pour les captures d'écran (npx vite, puis ouvrir /screenshot.html?scene=main ou ?scene=split&theme=light) (+ sftp.rs : fichiers, forward.rs : tunnels)
   store.rs         sessions, dossiers et commandes enregistrés (JSON)
   importers.rs     import ssh config / PuTTY / mRemoteNG, sauvegarde
   license.rs       éditions et vérification des licences (point de contrôle unique)

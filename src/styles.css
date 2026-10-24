@@ -376,7 +376,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .health.off { background: transparent; border: 1.5px dashed var(--dot-ring); box-sizing: border-box; }
 .status-btn { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; background: transparent; border: 0; border-radius: 4px; color: var(--muted); font-size: 12px; }
 .status-btn:hover { background: var(--hover); color: var(--text); }
-.status-btn.warn { color: #ffb4b4; }
+.status-btn.warn { color: var(--danger); }
 
 /* Thème clair (Paramètres › Apparence) */
 :root[data-theme='light'] {

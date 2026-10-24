@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Termoria</title>
+  <script>
+    // Démonstration pour les captures d'écran : simule le cœur Rust avec des données fictives.
+    (function () {
+      const params = new URLSearchParams(location.search);
+      const scene = params.get('scene') || 'main';
+      if (params.get('theme')) localStorage.setItem('termoria.settings', JSON.stringify({ uiTheme: params.get('theme'), autoUpdate: false }));
+      else localStorage.setItem('termoria.settings', JSON.stringify({ autoUpdate: false }));
+      localStorage.setItem('termoria.collapsed', '[]');
+
+      let next = 1;
+      const callbacks = {};
+      const channels = {};
+      const send = (channelId, message) => {
+        const ch = channels[channelId];
+        if (!ch) return;
+        callbacks[channelId]({ message, index: ch.index++ });
+      };
+      const b64 = (text) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+      const chId = (v) => (typeof v === 'string' && v.startsWith('__CHANNEL__:') ? Number(v.slice(12)) : v && v.id);
+
+      const field = (key, label, type, extra) => Object.assign({ key, label, kind: { type }, required: false }, extra || {});
+      const protocols = [
+        { id: 'ssh', name: 'SSH', version: '0.3.0', description: 'Terminal sécurisé : clé privée, mot de passe ou agent.', view: 'terminal', builtin: true, fileBrowser: true, portForwarding: true, fields: [field('host', 'Hôte', 'text', { required: true }), field('port', 'Port', 'number'), field('username', 'Utilisateur', 'text')] },
+        { id: 'rdp', name: 'Bureau à distance (RDP)', version: '0.2.0', description: 'Bureau Windows dans un onglet (IronRDP), ou dans le client Windows.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
+        { id: 'vnc', name: 'VNC', version: '0.1.0', description: 'Écran distant affiché dans un onglet.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
+        { id: 'web', name: 'Interface web', version: '0.1.0', description: 'Console d\'administration dans une fenêtre dédiée.', view: 'web', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('url', 'Adresse', 'text')] },
+        { id: 'telnet', name: 'Telnet', version: '0.1.0', description: 'Équipements réseau anciens.', view: 'terminal', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
+        { id: 'serial', name: 'Port série', version: '0.1.0', description: 'Ports COM.', view: 'terminal', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('port', 'Port', 'text')] },
+      ];
+      const S = (id, name, folder, protocol, values) => ({ id, name, folder, protocol, values, tags: [], secretKeys: [] });
+      const sessions = [
+        S('s1', 'srv-web-01', 'Production/Web', 'ssh', { host: '10.0.1.12', port: 22, username: 'deploy' }),
+        S('s2', 'srv-web-02', 'Production/Web', 'ssh', { host: '10.0.1.13', port: 22, username: 'deploy' }),
+        S('s3', 'srv-db-01', 'Production', 'ssh', { host: '10.0.1.20', port: 22, username: 'admin' }),
+        S('s4', 'dc-01', 'Production', 'rdp', { host: '10.0.0.5', port: 3389 }),
+        S('s5', 'switch-coeur', 'Production', 'telnet', { host: '10.0.0.2', port: 23 }),
+        S('s6', 'nas-backup', 'Lab maison', 'web', { url: 'https://192.168.1.10:5001' }),
+        S('s7', 'raspberry-pi', 'Lab maison', 'vnc', { host: '192.168.1.42', port: 5900 }),
+        S('s8', 'proxmox', 'Lab maison', 'web', { url: 'https://192.168.1.5:8006' }),
+        S('s9', 'arduino', 'Lab maison', 'serial', { port: 'COM4' }),
+        S('s10', 'recette-app', 'Clients/Dupont', 'ssh', { host: 'recette.dupont.example', port: 22, username: 'ops' }),
+      ];
+
+      const prompt = (h) => `\x1b[1;32mdeploy@${h}\x1b[0m:\x1b[1;34m~\x1b[0m$ `;
+      const terminalText = (h) => [
+        `\x1b[90m[Termoria] Connecté à ${h} (10.0.1.12:22)\x1b[0m\r\n`,
+        `Welcome to Debian GNU/Linux 13 (trixie)\r\n\r\n`,
+        prompt(h) + 'systemctl status nginx --no-pager\r\n',
+        `\x1b[1;32m●\x1b[0m nginx.service - A high performance web server\r\n`,
+        `     Loaded: loaded (/lib/systemd/system/nginx.service; \x1b[1;32menabled\x1b[0m)\r\n`,
+        `     Active: \x1b[1;32mactive (running)\x1b[0m since Fri 2026-10-23 21:03:11 CEST; 14h ago\r\n`,
+        `   Main PID: 1184 (nginx)\r\n      Tasks: 5 (limit: 4583)\r\n     Memory: 9.8M\r\n\r\n`,
+        prompt(h) + 'df -h /var\r\n',
+        'Filesystem      Size  Used Avail Use% Mounted on\r\n/dev/sda2        40G   18G   20G  48% /var\r\n\r\n',
+        prompt(h) + 'ls -l /var/www/site\r\n',
+        'total 24\r\n',
+        'drwxr-xr-x 2 www-data www-data 4096 oct.  23 18:02 \x1b[1;34massets\x1b[0m\r\n',
+        '-rw-r--r-- 1 www-data www-data 5120 oct.  23 18:02 index.html\r\n',
+        '-rw-r--r-- 1 www-data www-data  812 oct.  23 18:02 robots.txt\r\n\r\n',
+        prompt(h) + 'tail -n 3 /var/log/nginx/access.log\r\n',
+        '10.0.0.5 - - [24/Oct/2026:10:02:41] "GET /api/health HTTP/1.1" \x1b[32m200\x1b[0m 17\r\n',
+        '10.0.0.5 - - [24/Oct/2026:10:02:44] "GET / HTTP/1.1" \x1b[32m200\x1b[0m 5120\r\n',
+        '10.0.0.8 - - [24/Oct/2026:10:02:51] "POST /api/login HTTP/1.1" \x1b[33m302\x1b[0m 0\r\n\r\n',
+        prompt(h),
+      ].join('');
+      const now = Math.floor(Date.now() / 1000);
+      const E = (name, isDir, size, ago) => ({ name, path: '/home/deploy/' + name, isDir, isLink: false, size, modified: now - ago, permissions: null });
+
+      async function invoke(cmd, args) {
+        args = args || {};
+        switch (cmd) {
+          case 'list_protocols': return protocols;
+          case 'list_sessions': return sessions;
+          case 'list_folders': return ['Clients', 'Clients/Dupont', 'Lab maison', 'Production', 'Production/Web'];
+          case 'list_snippets': return [];
+          case 'folder_colors': return { Production: 'red', 'Lab maison': 'green', Clients: 'blue' };
+          case 'license_status': return { edition: 'free', preview: true, license: null, expired: false, features: [] };
+          case 'lock_status': return { enabled: false, locked: false, hello: false, helloAvailable: true, timeoutMinutes: 15 };
+          case 'monitor_check': return args.targets.map((t, i) => t.id === 's5'
+            ? { id: t.id, up: false, latencyMs: null, error: 'pas de réponse en 3 s' }
+            : { id: t.id, up: true, latencyMs: 8 + (i * 7) % 30, error: null });
+          case 'monitor_alerts_allowed': return true;
+          case 'connect': {
+            const s = sessions.find((x) => x.id === args.sessionId);
+            const id = chId(args.onEvent);
+            setTimeout(() => send(id, { event: 'data', data: b64(terminalText(s.name)) }), 200);
+            return { connectionId: 'c-' + args.sessionId, view: 'terminal', message: null };
+          }
+          case 'fs_home': return '/home/deploy';
+          case 'fs_list': return [E('releases', true, 0, 3600), E('scripts', true, 0, 86400), E('site', true, 0, 7200), E('.bashrc', false, 3771, 864000), E('backup-2026-10-23.tar.gz', false, 48234112, 50000), E('deploy.sh', false, 2048, 3600), E('notes.md', false, 1210, 600)];
+          case 'tunnel_list': return [];
+          case 'plugin:event|listen': return next++;
+          case 'plugin:notification|is_permission_granted': return true;
+          case 'plugin:updater|check': return null;
+          default: return null;
+        }
+      }
+
+      window.__TAURI_INTERNALS__ = {
+        metadata: { currentWindow: { label: 'main' }, currentWebview: { label: 'main', windowLabel: 'main' } },
+        transformCallback(cb) { const id = next++; callbacks[id] = cb; channels[id] = { index: 0 }; return id; },
+        unregisterCallback(id) { delete callbacks[id]; },
+        convertFileSrc: (p) => p,
+        invoke: (cmd, args) => invoke(cmd, args),
+      };
+      window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
+
+      // Mise en scène : ouvrir des sessions automatiquement.
+      window.addEventListener('load', () => {
+        const openByName = (name) => [...document.querySelectorAll('.tree-item.session')].find((b) => b.textContent.includes(name))?.click();
+        setTimeout(() => {
+          openByName('srv-web-01');
+          if (scene === 'split') {
+            setTimeout(() => {
+              openByName('srv-web-02');
+              setTimeout(() => {
+                const tab = [...document.querySelectorAll('.tab')].find((t) => t.textContent.includes('srv-web-01'));
+                tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 60 }));
+                setTimeout(() => [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Afficher à côté'))?.click(), 150);
+              }, 400);
+            }, 400);
+          }
+        }, 700);
+      });
+    })();
+  </script>
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar" aria-label="Sessions">
+      <label class="search">
+        <span class="sr-only">Rechercher une session</span>
+        <input id="search" type="search" placeholder="Rechercher…  (Ctrl Maj K)" autocomplete="off">
+      </label>
+      <div class="sidebar-head">
+        <span class="label">Sessions</span>
+        <div class="head-actions">
+          <button id="new-folder" class="icon-btn" aria-label="Nouveau dossier"></button>
+          <button id="new-session" class="icon-btn" aria-label="Nouvelle session"></button>
+        </div>
+      </div>
+      <div id="tree" class="tree"></div>
+      <div class="sidebar-foot">
+        <button id="open-snippets" class="tree-item"></button>
+        <button id="open-recordings" class="tree-item"></button>
+        <button id="open-import" class="tree-item"></button>
+        <button id="open-extensions" class="tree-item"></button>
+        <button id="open-settings" class="tree-item"></button>
+      </div>
+    </nav>
+    <main class="work">
+      <div id="tabs" class="tabs" role="tablist" aria-label="Sessions ouvertes"></div>
+      <div id="toolbar" class="toolbar"></div>
+      <div class="content">
+        <div id="views" class="views"></div>
+        <aside id="details" class="details" aria-label="Fichiers"></aside>
+      </div>
+    </main>
+  </div>
+  <footer id="status" class="statusbar"></footer>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
