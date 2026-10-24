@@ -17,6 +17,8 @@ use crate::connector::{
     ViewKind,
 };
 use crate::importers::{self, Candidate};
+use crate::license::License;
+use crate::lock::{self, Lock};
 use crate::registry::Registry;
 use crate::secrets;
 use crate::store::{Session, Snippet, Store};
@@ -26,6 +28,8 @@ pub struct AppState {
     store: Mutex<Store>,
     connections: Mutex<HashMap<String, Box<dyn TerminalConnection>>>,
     data_dir: PathBuf,
+    pub license: Mutex<License>,
+    lock: Mutex<Lock>,
 }
 
 impl AppState {
@@ -34,8 +38,15 @@ impl AppState {
             registry,
             store: Mutex::new(store),
             connections: Mutex::new(HashMap::new()),
+            license: Mutex::new(License::load(&data_dir)),
+            lock: Mutex::new(Lock::load(&data_dir)),
             data_dir,
         }
+    }
+
+    /// Refuse les actions sensibles tant que Termoria est verrouillé.
+    fn unlocked(&self) -> CmdResult<()> {
+        self.lock.lock().unwrap().ensure_unlocked().map_err(err)
     }
 }
 
@@ -74,6 +85,7 @@ pub struct SaveSessionInput {
 
 #[tauri::command]
 pub fn save_session(state: State<'_, AppState>, input: SaveSessionInput) -> CmdResult<Session> {
+    state.unlocked()?;
     let mut session = input.session;
     let manifest = state
         .registry
@@ -175,6 +187,7 @@ pub async fn connect(
     rows: u16,
     on_event: Channel<TermEvent>,
 ) -> CmdResult<ConnectResponse> {
+    state.unlocked()?;
     let session = state
         .store
         .lock()
@@ -308,6 +321,7 @@ pub async fn fs_download(
     local: String,
     on_progress: Channel<TransferProgress>,
 ) -> CmdResult<()> {
+    state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     let progress = Arc::new(move |done, total| {
         let _ = on_progress.send(TransferProgress { done, total });
@@ -323,6 +337,7 @@ pub async fn fs_upload(
     remote: String,
     on_progress: Channel<TransferProgress>,
 ) -> CmdResult<()> {
+    state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     let progress = Arc::new(move |done, total| {
         let _ = on_progress.send(TransferProgress { done, total });
@@ -343,6 +358,7 @@ pub async fn fs_remove(
     path: String,
     is_dir: bool,
 ) -> CmdResult<()> {
+    state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     files.remove(path, is_dir).await.map_err(full)
 }
@@ -388,6 +404,7 @@ pub fn move_sessions(state: State<'_, AppState>, ids: Vec<String>, folder: Strin
 /// Copie d'une session, mots de passe enregistrés compris.
 #[tauri::command]
 pub fn duplicate_session(state: State<'_, AppState>, id: String) -> CmdResult<Session> {
+    state.unlocked()?;
     let mut store = state.store.lock().unwrap();
     let original = store.get(&id).ok_or("Session introuvable")?;
     let mut copy = original.clone();
@@ -435,6 +452,7 @@ pub fn tunnel_list(state: State<'_, AppState>, connection_id: String) -> CmdResu
 
 #[tauri::command]
 pub async fn tunnel_start(state: State<'_, AppState>, connection_id: String, spec: TunnelSpec) -> CmdResult<()> {
+    state.unlocked()?;
     let forwarder = forwarder_of(&state, &connection_id)?;
     forwarder.start(spec).await.map_err(full)
 }
@@ -530,4 +548,88 @@ pub fn screen_input(state: State<'_, AppState>, connection_id: String, event: In
     let connections = state.connections.lock().unwrap();
     let connection = connections.get(&connection_id).ok_or("Session fermée")?;
     connection.input(event).map_err(err)
+}
+
+// ---------- Licence ----------
+
+#[tauri::command]
+pub fn license_status(state: State<'_, AppState>) -> crate::license::LicenseStatus {
+    state.license.lock().unwrap().status()
+}
+
+#[tauri::command]
+pub fn license_activate(state: State<'_, AppState>, text: String) -> CmdResult<crate::license::LicenseStatus> {
+    let mut license = state.license.lock().unwrap();
+    license.activate(&text).map_err(full)?;
+    Ok(license.status())
+}
+
+#[tauri::command]
+pub fn license_remove(state: State<'_, AppState>) -> CmdResult<crate::license::LicenseStatus> {
+    let mut license = state.license.lock().unwrap();
+    license.remove().map_err(full)?;
+    Ok(license.status())
+}
+
+// ---------- Verrouillage ----------
+
+#[tauri::command]
+pub fn lock_status(state: State<'_, AppState>) -> lock::LockStatus {
+    state.lock.lock().unwrap().status()
+}
+
+#[tauri::command]
+pub fn lock_set_password(state: State<'_, AppState>, current: String, new: String) -> CmdResult<lock::LockStatus> {
+    let mut lock = state.lock.lock().unwrap();
+    lock.ensure_unlocked().map_err(err)?;
+    lock.set_password(&current, &new).map_err(full)?;
+    Ok(lock.status())
+}
+
+#[tauri::command]
+pub fn lock_disable(state: State<'_, AppState>, password: String) -> CmdResult<lock::LockStatus> {
+    let mut lock = state.lock.lock().unwrap();
+    lock.disable(&password).map_err(full)?;
+    Ok(lock.status())
+}
+
+#[tauri::command]
+pub fn lock_set_options(state: State<'_, AppState>, hello: bool, timeout_minutes: u32) -> CmdResult<lock::LockStatus> {
+    let mut lock = state.lock.lock().unwrap();
+    lock.ensure_unlocked().map_err(err)?;
+    lock.set_options(hello, timeout_minutes).map_err(full)?;
+    Ok(lock.status())
+}
+
+#[tauri::command]
+pub fn lock_now(state: State<'_, AppState>) -> CmdResult<()> {
+    state.lock.lock().unwrap().lock().map_err(full)
+}
+
+#[tauri::command]
+pub fn unlock(state: State<'_, AppState>, password: String) -> CmdResult<()> {
+    state.lock.lock().unwrap().unlock_with_password(&password).map_err(full)
+}
+
+/// Déverrouillage par Windows Hello (visage, empreinte, PIN).
+#[tauri::command]
+pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResult<bool> {
+    if !state.lock.lock().unwrap().hello_enabled() {
+        return Err("Windows Hello n'est pas activé pour Termoria".into());
+    }
+    let window = app.get_webview_window("main").ok_or("Fenêtre introuvable")?;
+    #[cfg(windows)]
+    let hwnd = window.hwnd().map_err(err)?.0 as usize;
+    #[cfg(not(windows))]
+    let hwnd = { let _ = window; 0usize };
+    let verified = tauri::async_runtime::spawn_blocking(move || {
+        lock::hello::verify(hwnd as *mut core::ffi::c_void, "Déverrouiller Termoria")
+    })
+    .await
+    .map_err(err)?
+    .map_err(full)?;
+    if verified {
+        state.lock.lock().unwrap().unlock_with_hello().map_err(full)?;
+    }
+    Ok(verified)
 }

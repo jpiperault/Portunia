@@ -316,3 +316,27 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
   display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #1f2a3d; border: 1px solid var(--accent);
   border-radius: 10px; box-shadow: 0 10px 28px rgb(0 0 0 / .45); font-size: 13px;
 }
+
+/* Verrouillage */
+.lock-screen { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgb(12 13 16 / .97); backdrop-filter: blur(8px); }
+.lock-card { width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column; align-items: stretch; gap: 12px; text-align: center; }
+.lock-card h2 { margin: 0; font-size: 18px; }
+.lock-card p { margin: 0; }
+.lock-card input { height: 40px; padding: 0 12px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 8px; color: var(--text); font-size: 14px; }
+.lock-card .btn { justify-content: center; height: 40px; }
+.lock-icon { align-self: center; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); }
+
+/* Paramètres : sécurité et licence */
+.settings-block { display: flex; flex-direction: column; gap: 10px; }
+.pw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pw-grid input { height: 34px; padding: 0 10px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); }
+.check.disabled { opacity: .55; }
+.lic-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.edition { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #2b2d33; }
+.edition-pro { background: #23314a; color: #8ab6ff; }
+.edition-team { background: #33284d; color: #c7b2ff; }
+.lic-features { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
+.lic-features li { display: flex; align-items: center; gap: 8px; }
+.lic-activate { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.chip.pro { background: #23314a; color: #8ab6ff; font-size: 10px; font-weight: 700; letter-spacing: .04em; }
+.chip.pro.locked { background: #2b2d33; color: var(--muted); }

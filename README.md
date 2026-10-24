@@ -57,6 +57,8 @@ Autres fonctions :
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
 - import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Termoria ;
+- verrouillage par mot de passe maître et Windows Hello, au démarrage et après inactivité (Ctrl+Maj+L) ;
+- éditions Gratuit / Pro / Équipes, licences signées vérifiées hors ligne (Paramètres › Licence) ;
 - mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
 - sessions enregistrées dans `%APPDATA%\fr.termoria.app\sessions.json`.
 
@@ -71,9 +73,12 @@ src-tauri/src/
   connectors/      une extension par fichier : ssh, rdp, web, telnet, serial, vnc
 rdp-helper/        moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
 scripts/           compilation du moteur RDP
-.github/workflows/ publication automatique des versions (+ sftp.rs : fichiers, forward.rs : tunnels)
+.github/workflows/ publication automatique des versions
+tools/license-tool/ outil de l'éditeur : clé de signature et génération des licences (ne pas distribuer) (+ sftp.rs : fichiers, forward.rs : tunnels)
   store.rs         sessions, dossiers et commandes enregistrés (JSON)
   importers.rs     import ssh config / PuTTY / mRemoteNG, sauvegarde
+  license.rs       éditions et vérification des licences (point de contrôle unique)
+  lock.rs          verrouillage (mot de passe maître, Windows Hello)
   secrets.rs       Gestionnaire d'identifiants Windows
   commands.rs      commandes appelées par l'interface
 src/
@@ -90,6 +95,7 @@ src/
   tunnels.ts       tunnels SSH (éditeur et suivi)
   importexport.ts  import / export
   updates.ts       mises à jour automatiques
+  security.ts      écran de verrouillage, licence
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :

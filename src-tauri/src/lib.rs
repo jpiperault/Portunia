@@ -2,6 +2,8 @@ mod commands;
 mod connector;
 mod connectors;
 mod importers;
+mod license;
+mod lock;
 mod registry;
 mod secrets;
 mod store;
@@ -68,6 +70,16 @@ pub fn run() {
             commands::import_backup,
             commands::field_suggestions,
             commands::screen_input,
+            commands::license_status,
+            commands::license_activate,
+            commands::license_remove,
+            commands::lock_status,
+            commands::lock_set_password,
+            commands::lock_disable,
+            commands::lock_set_options,
+            commands::lock_now,
+            commands::unlock,
+            commands::unlock_hello,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

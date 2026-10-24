@@ -1,6 +1,7 @@
 // Préférences de l'interface, enregistrées sur ce PC.
 import { h, icon } from './dom';
 import { checkForUpdates } from './updates';
+import { licenseSection, securitySection } from './security';
 
 export interface Settings {
   fontFamily: string;
@@ -93,6 +94,10 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         check('rightClickPaste', 'Clic droit : copier ou coller', 'Avec une sélection, le clic droit copie ; sinon il colle (comme PuTTY).'),
         h('h3', { class: 'label' }, 'Connexion'),
         check('autoReconnect', 'Reconnexion automatique', 'Après une coupure réseau ou une mise en veille, Termoria se reconnecte tout seul.'),
+        h('h3', { class: 'label' }, 'Sécurité'),
+        securitySection(toastFn, () => {}),
+        h('h3', { class: 'label' }, 'Licence'),
+        licenseSection(toastFn),
         h('h3', { class: 'label' }, 'Mises à jour'),
         check('autoUpdate', 'Vérifier les mises à jour au démarrage', 'Une bannière propose la nouvelle version ; rien ne s’installe sans votre accord.'),
         h('button', { type: 'button', class: 'btn', style: 'align-self: flex-start', onclick: () => checkForUpdates(toastFn) }, icon('refresh', 14), 'Rechercher maintenant'),

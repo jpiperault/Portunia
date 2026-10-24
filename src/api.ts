@@ -183,3 +183,36 @@ export const api = {
 export function errorText(e: unknown): string {
   return typeof e === 'string' ? e : e instanceof Error ? e.message : String(e);
 }
+
+// ---------- Licence et verrouillage ----------
+
+export type Edition = 'free' | 'pro' | 'team';
+
+export interface LicenseStatus {
+  edition: Edition;
+  preview: boolean;
+  license: { id: string; name: string; email: string; edition: Edition; seats: number; issued: string; expires: string | null } | null;
+  expired: boolean;
+  features: { feature: string; label: string; edition: Edition; allowed: boolean }[];
+}
+
+export interface LockStatus {
+  enabled: boolean;
+  locked: boolean;
+  hello: boolean;
+  helloAvailable: boolean;
+  timeoutMinutes: number;
+}
+
+export const security = {
+  licenseStatus: () => invoke<LicenseStatus>('license_status'),
+  licenseActivate: (text: string) => invoke<LicenseStatus>('license_activate', { text }),
+  licenseRemove: () => invoke<LicenseStatus>('license_remove'),
+  lockStatus: () => invoke<LockStatus>('lock_status'),
+  lockSetPassword: (current: string, next: string) => invoke<LockStatus>('lock_set_password', { current, new: next }),
+  lockDisable: (password: string) => invoke<LockStatus>('lock_disable', { password }),
+  lockSetOptions: (hello: boolean, timeoutMinutes: number) => invoke<LockStatus>('lock_set_options', { hello, timeoutMinutes }),
+  lockNow: () => invoke<void>('lock_now'),
+  unlock: (password: string) => invoke<void>('unlock', { password }),
+  unlockHello: () => invoke<boolean>('unlock_hello'),
+};

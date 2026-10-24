@@ -4,3 +4,5 @@ src-tauri/target/
 src-tauri/gen/
 rdp-helper/target/
 src-tauri/binaries/
+tools/license-tool/target/
+*.pk8

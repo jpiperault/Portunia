@@ -15,6 +15,7 @@ import { openTunnels } from './tunnels';
 import { openImportExport } from './importexport';
 import { openSettingsDialog, settings } from './settings';
 import { checkForUpdates } from './updates';
+import { currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
 
 interface Tab {
   id: string;
@@ -298,7 +299,7 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', {}, 'v0.13.0'),
+    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.14.0'),
   );
 }
 
@@ -539,8 +540,11 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'f') { e.preventDefault(); activeTab()?.term?.openSearch(); }
   else if (key === 'b') { e.preventDefault(); toggleBroadcast(); }
   else if (key === 'p') { e.preventDefault(); openPalette(snippetContext()); }
+  else if (key === 'l') { e.preventDefault(); lockNow(toast, () => reload()); }
 });
 
 reload();
 // Vérification discrète des mises à jour, une fois l'application chargée.
 if (settings().autoUpdate) setTimeout(() => checkForUpdates(toast, true), 4000);
+loadLicense().then(() => renderStatus());
+initLock(() => reload());

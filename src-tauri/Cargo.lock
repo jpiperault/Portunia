@@ -5308,12 +5308,13 @@ dependencies = [
 
 [[package]]
 name = "termoria"
-version = "0.11.0"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
  "keyring",
  "quick-xml",
+ "ring",
  "russh",
  "russh-sftp",
  "serde",
@@ -5329,6 +5330,8 @@ dependencies = [
  "tokio",
  "uuid",
  "vnc-rs",
+ "windows",
+ "windows-future",
  "winreg",
 ]
 
