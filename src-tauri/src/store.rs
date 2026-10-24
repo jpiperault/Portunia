@@ -64,6 +64,8 @@ struct FileFormat {
     folders: Vec<String>,
     #[serde(default)]
     snippets: Vec<Snippet>,
+    #[serde(default)]
+    folder_colors: HashMap<String, String>,
 }
 
 pub struct Store {
@@ -71,6 +73,7 @@ pub struct Store {
     sessions: Vec<Session>,
     folders: Vec<String>,
     snippets: Vec<Snippet>,
+    folder_colors: HashMap<String, String>,
 }
 
 /// « /Prod//Web/ » → « Prod/Web ». Chaîne vide = racine.
@@ -113,15 +116,17 @@ impl Store {
             sessions: file.sessions,
             folders: file.folders,
             snippets: file.snippets,
+            folder_colors: file.folder_colors,
         }
     }
 
     fn persist(&self) -> Result<()> {
         let file = FileFormat {
-            version: 3,
+            version: 4,
             sessions: self.sessions.clone(),
             folders: self.folders.clone(),
             snippets: self.snippets.clone(),
+            folder_colors: self.folder_colors.clone(),
         };
         let tmp = self.path.with_extension("json.tmp");
         fs::write(&tmp, serde_json::to_string_pretty(&file)?)
@@ -199,6 +204,7 @@ impl Store {
             }
         }
         self.move_snippet_scopes(&from, &to);
+        self.move_folder_colors(&from, &to);
         self.persist()
     }
 
@@ -232,6 +238,8 @@ impl Store {
             }
         }
         self.move_snippet_scopes(&path, &parent);
+        self.folder_colors.remove(&path);
+        self.move_folder_colors(&path, &parent);
         self.persist()
     }
 
@@ -299,6 +307,37 @@ impl Store {
         }
         self.persist()?;
         Ok((added, skipped, snips))
+    }
+
+    /// Couleur des dossiers (héritée par les sous-dossiers et les sessions).
+    pub fn folder_colors(&self) -> HashMap<String, String> {
+        self.folder_colors.clone()
+    }
+
+    pub fn set_folder_color(&mut self, path: &str, color: Option<String>) -> Result<()> {
+        let path = normalize_folder(path);
+        if path.is_empty() {
+            bail!("Dossier invalide");
+        }
+        match color.filter(|c| !c.is_empty()) {
+            Some(c) => self.folder_colors.insert(path, c),
+            None => self.folder_colors.remove(&path),
+        };
+        self.persist()
+    }
+
+    fn move_folder_colors(&mut self, from: &str, to: &str) {
+        let moved: Vec<(String, String, String)> = self
+            .folder_colors
+            .iter()
+            .filter_map(|(k, v)| reparent(k, from, to).map(|new| (k.clone(), new, v.clone())))
+            .collect();
+        for (old, _, _) in &moved {
+            self.folder_colors.remove(old);
+        }
+        for (_, new, color) in moved.into_iter().filter(|(_, p, _)| !p.is_empty()) {
+            self.folder_colors.entry(new).or_insert(color);
+        }
     }
 
     pub fn snippets(&self) -> Vec<Snippet> {
@@ -477,5 +516,20 @@ mod tests {
         let (mut store, _) = store_with(&[], &[]);
         let empty = Snippet { id: String::new(), name: " ".into(), command: "ls".into(), scope: Scope::All, run: true };
         assert!(store.upsert_snippet(empty).is_err());
+    }
+
+    #[test]
+    fn les_couleurs_suivent_les_dossiers() {
+        let (mut store, _) = store_with(&["Prod/Web"], &[]);
+        store.set_folder_color("Prod", Some("red".into())).unwrap();
+        store.set_folder_color("Prod/Web", Some("orange".into())).unwrap();
+        store.rename_folder("Prod", "Clients/Prod").unwrap();
+        assert_eq!(store.folder_colors().get("Clients/Prod").map(String::as_str), Some("red"));
+        assert_eq!(store.folder_colors().get("Clients/Prod/Web").map(String::as_str), Some("orange"));
+        store.delete_folder("Clients/Prod").unwrap();
+        assert!(!store.folder_colors().contains_key("Clients/Prod"));
+        assert_eq!(store.folder_colors().get("Clients/Web").map(String::as_str), Some("orange"));
+        store.set_folder_color("Clients/Web", None).unwrap();
+        assert!(store.folder_colors().is_empty());
     }
 }

@@ -729,3 +729,15 @@ pub async fn monitor_check(targets: Vec<crate::monitor::Target>) -> Vec<crate::m
 pub fn monitor_alerts_allowed(state: State<'_, AppState>) -> bool {
     state.license.lock().unwrap().allows(Feature::MonitoringAlerts)
 }
+
+// ---------- Couleurs des dossiers ----------
+
+#[tauri::command]
+pub fn folder_colors(state: State<'_, AppState>) -> HashMap<String, String> {
+    state.store.lock().unwrap().folder_colors()
+}
+
+#[tauri::command]
+pub fn set_folder_color(state: State<'_, AppState>, path: String, color: Option<String>) -> CmdResult<()> {
+    state.store.lock().unwrap().set_folder_color(&path, color).map_err(full)
+}

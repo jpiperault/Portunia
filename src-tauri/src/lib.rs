@@ -91,6 +91,8 @@ pub fn run() {
             commands::recording_delete,
             commands::monitor_check,
             commands::monitor_alerts_allowed,
+            commands::folder_colors,
+            commands::set_folder_color,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

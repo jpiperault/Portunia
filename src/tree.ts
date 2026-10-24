@@ -1,13 +1,19 @@
 // Arbre des sessions : dossiers imbriqués, menu contextuel, glisser-déposer.
 import { Session } from './api';
 import { badge, h, icon } from './dom';
-import { MenuItem, showMenu } from './menu';
+import { MenuItem, showColorPicker, showMenu } from './menu';
+import { FOLDER_COLORS, paint } from './theme';
 
 export interface TreeActions {
   isConnected(sessionId: string): boolean;
   /** État de supervision : classe CSS (up, down, unknown, off) et infobulle. */
   health(sessionId: string): { cls: string; title: string };
   toggleMonitor(s: Session): void;
+  /** Couleur résolue d'un dossier (la sienne ou celle d'un parent). */
+  folderColor(path: string): string | undefined;
+  /** Couleur propre au dossier (clé de FOLDER_COLORS). */
+  colorKey(path: string): string | undefined;
+  setFolderColor(path: string, color: string | null): void;
   activeSessionId(): string | undefined;
   openSession(s: Session): void;
   editSession(s: Session): void;
@@ -79,12 +85,13 @@ export class SessionTree {
   private renderFolder(folder: FolderNode, depth: number, searching: boolean): HTMLElement[] {
     const open = searching || !this.collapsed.has(folder.path);
     const a = this.actions;
-    const menu = (): (MenuItem | 'separator')[] => [
+    const menu = (x = 0, y = 0): (MenuItem | 'separator')[] => [
       { label: 'Nouvelle session ici', icon: 'plus', action: () => a.newSession(folder.path) },
       { label: 'Nouveau sous-dossier', icon: 'folderPlus', action: () => a.newFolder(folder.path) },
       ...(folder.total ? [{ label: `Ouvrir les ${folder.total} session(s)`, icon: 'play', action: () => a.openAll(folder.path) }] : []),
       'separator',
       { label: 'Renommer', icon: 'edit', action: () => a.renameFolder(folder.path) },
+      { label: 'Couleur…', icon: 'palette', action: () => showColorPicker(x, y, a.colorKey(folder.path), FOLDER_COLORS, (c) => a.setFolderColor(folder.path, c)) },
       { label: 'Supprimer le dossier', icon: 'trash', danger: true, action: () => a.deleteFolder(folder.path) },
     ];
     const row = h('div', { class: 'tree-row folder-row', 'data-drop': folder.path },
@@ -105,8 +112,9 @@ export class SessionTree {
         h('span', { class: 'count' }, String(folder.total))),
       h('div', { class: 'row-actions' },
         h('button', { class: 'icon-btn sm', 'aria-label': `Nouvelle session dans ${folder.name}`, title: 'Nouvelle session ici', onclick: () => a.newSession(folder.path) }, icon('plus', 14)),
-        h('button', { class: 'icon-btn sm', 'aria-label': `Actions du dossier ${folder.name}`, title: 'Plus d\'actions', onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu()) }, icon('more', 14))));
-    row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu()); });
+        h('button', { class: 'icon-btn sm', 'aria-label': `Actions du dossier ${folder.name}`, title: 'Plus d\'actions', onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu(e.clientX, e.clientY)) }, icon('more', 14))));
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu(e.clientX, e.clientY)); });
+    paint(row, a.folderColor(folder.path));
     this.enableDrag(row, { kind: 'folder', path: folder.path, label: folder.name });
     return open ? [row, ...this.renderChildren(folder, depth + 1, searching)] : [row];
   }
@@ -140,6 +148,7 @@ export class SessionTree {
         h('button', { class: 'icon-btn sm', 'aria-label': `Modifier ${s.name}`, title: 'Modifier', onclick: () => a.editSession(s) }, icon('edit', 14)),
         h('button', { class: 'icon-btn sm', 'aria-label': `Actions de ${s.name}`, title: 'Plus d\'actions', onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu()) }, icon('more', 14))));
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu()); });
+    paint(row, a.folderColor(s.folder));
     this.enableDrag(row, { kind: 'session', id: s.id, folder: s.folder, label: s.name });
     return row;
   }

@@ -9,6 +9,7 @@ export interface MenuItem {
 }
 
 let current: HTMLElement | null = null;
+const currentMenu = (el: HTMLElement) => { current = el; };
 
 export function closeMenu() {
   current?.remove();
@@ -49,3 +50,24 @@ document.addEventListener('keydown', (e) => {
 });
 window.addEventListener('blur', closeMenu);
 window.addEventListener('resize', closeMenu);
+
+/** Petite palette de couleurs (couleur d'un dossier). */
+export function showColorPicker(x: number, y: number, selected: string | undefined, colors: Record<string, { label: string; value: string }>, pick: (color: string | null) => void) {
+  closeMenu();
+  const swatch = (key: string | null, label: string, value?: string) =>
+    h('button', {
+      class: `color-swatch${key === null ? ' none' : ''}${(selected ?? null) === key ? ' on' : ''}`,
+      title: label, 'aria-label': label, style: value ? `background: ${value}` : '',
+      onclick: () => { closeMenu(); pick(key); },
+    });
+  const menu = h('div', { class: 'menu', role: 'dialog', 'aria-label': 'Couleur du dossier' },
+    h('div', { class: 'muted small', style: 'padding: 6px 10px 2px' }, 'Couleur du dossier'),
+    h('div', { class: 'color-swatches' },
+      swatch(null, 'Aucune'),
+      ...Object.entries(colors).map(([key, c]) => swatch(key, c.label, c.value))));
+  document.body.append(menu);
+  const r = menu.getBoundingClientRect();
+  menu.style.left = `${Math.min(x, innerWidth - r.width - 8)}px`;
+  menu.style.top = `${Math.min(y, innerHeight - r.height - 8)}px`;
+  currentMenu(menu);
+}

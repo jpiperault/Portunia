@@ -3,6 +3,7 @@ import { h, icon } from './dom';
 import { checkForUpdates } from './updates';
 import { licenseSection, proChip, securitySection } from './security';
 import { recordingSettings } from './recordings';
+import { TERMINAL_THEMES } from './theme';
 
 export interface Settings {
   fontFamily: string;
@@ -27,6 +28,10 @@ export interface Settings {
   monitorAlerts: boolean;
   /** Sessions à ne pas superviser. */
   monitorExcluded: string[];
+  /** Thème de l'interface. */
+  uiTheme: 'dark' | 'light' | 'system';
+  /** Palette du terminal (« auto » : suit le thème). */
+  termTheme: string;
 }
 
 export const DEFAULTS: Settings = {
@@ -44,6 +49,8 @@ export const DEFAULTS: Settings = {
   monitorInterval: 60,
   monitorAlerts: true,
   monitorExcluded: [],
+  uiTheme: 'dark',
+  termTheme: 'auto',
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
@@ -90,6 +97,16 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         h('h2', { id: 'settings-title' }, 'Paramètres'),
         h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: () => dialog.close() }, icon('close'))),
       h('div', { class: 'dlg-body' },
+        h('h3', { class: 'label' }, 'Apparence'),
+        h('div', { class: 'row2' },
+          h('label', { class: 'fld' }, 'Thème',
+            h('select', { onchange: (e: Event) => updateSettings({ uiTheme: (e.target as HTMLSelectElement).value as Settings['uiTheme'] }) },
+              ...([['dark', 'Sombre'], ['light', 'Clair'], ['system', 'Comme Windows']] as const).map(([v, l]) => h('option', { value: v, selected: v === s.uiTheme }, l)))),
+          h('label', { class: 'fld' }, 'Couleurs du terminal',
+            h('select', { onchange: (e: Event) => updateSettings({ termTheme: (e.target as HTMLSelectElement).value }) },
+              h('option', { value: 'auto', selected: s.termTheme === 'auto' }, 'Automatique (selon le thème)'),
+              ...Object.entries(TERMINAL_THEMES).map(([k, t]) => h('option', { value: k, selected: k === s.termTheme }, t.label))))),
+        h('p', { class: 'muted small', style: 'margin: 0' }, 'Couleur d’un dossier (par exemple rouge pour la production) : clic droit sur le dossier › Couleur. Elle s’affiche sur ses sessions, leurs onglets et la barre d’outils.'),
         h('h3', { class: 'label' }, 'Terminal'),
         h('div', { class: 'row2' },
           h('label', { class: 'fld' }, 'Police',

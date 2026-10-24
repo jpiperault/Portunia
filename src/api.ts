@@ -230,3 +230,10 @@ export const recordings = {
   read: (dir: string | null, path: string) => invoke<string>('recording_read', { dir, path }),
   remove: (dir: string | null, path: string) => invoke<void>('recording_delete', { dir, path }),
 };
+
+// ---------- Couleurs de dossier ----------
+
+export const folderColors = {
+  list: () => invoke<Record<string, string>>('folder_colors'),
+  set: (path: string, color: string | null) => invoke<void>('set_folder_color', { path, color }),
+};

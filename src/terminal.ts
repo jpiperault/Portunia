@@ -7,6 +7,7 @@ import { api, errorText, TermEvent } from './api';
 import { h, icon } from './dom';
 import { showMenu } from './menu';
 import { fontStack, onSettingsChange, settings, updateSettings } from './settings';
+import { terminalTheme } from './theme';
 
 export type TermState = 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
@@ -67,12 +68,7 @@ export class TerminalView {
       scrollback: s.scrollback,
       cursorBlink: true,
       allowProposedApi: true, // requis par la recherche (surlignage des résultats)
-      theme: {
-        background: '#111215',
-        foreground: '#D6D8DD',
-        cursor: '#5B9BFF',
-        selectionBackground: '#2F4A75',
-      },
+      theme: terminalTheme(),
     });
     this.term.loadAddon(this.fit);
     this.term.loadAddon(this.search);
@@ -144,12 +140,17 @@ export class TerminalView {
       this.term.options.fontSize = next.fontSize;
       this.term.options.cursorStyle = next.cursorStyle;
       this.term.options.scrollback = next.scrollback;
+      this.term.options.theme = terminalTheme();
       this.refit();
     });
+
+    window.addEventListener('termoria-theme', this.onTheme);
 
     this.observer = new ResizeObserver(() => this.refit());
     this.observer.observe(container);
   }
+
+  private readonly onTheme = () => { this.term.options.theme = terminalTheme(); };
 
   /** Identifiant de la connexion en cours côté Rust, ou null. */
   get connection(): string | null {
@@ -313,6 +314,7 @@ export class TerminalView {
     if (this.connectionId) api.disconnect(this.connectionId).catch(() => {});
     this.connectionId = null;
     this.unsubscribe();
+    window.removeEventListener('termoria-theme', this.onTheme);
     this.observer.disconnect();
     this.term.dispose();
   }

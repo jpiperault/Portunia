@@ -18,7 +18,8 @@ import { Monitor } from './monitoring';
 import { checkForUpdates } from './updates';
 import { allows, currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
 import { openRecordings, Player, setPlayerHandler, stamp } from './recordings';
-import { recordings } from './api';
+import { folderColors, recordings } from './api';
+import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
 
 interface Tab {
   id: string;
@@ -55,6 +56,7 @@ const state = {
   /** Saisie multiple : la frappe part vers toutes les sessions de l'écran partagé. */
   broadcast: false,
   snippets: [] as Snippet[],
+  folderColors: {} as Record<string, string>,
 };
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -92,6 +94,9 @@ const sessionTree = new SessionTree(tree, {
     return hl.up ? { cls: 'up', title: `En ligne · ${hl.latencyMs} ms` } : { cls: 'down', title: `Injoignable : ${hl.error ?? ''}` };
   },
   toggleMonitor: (s) => monitor.toggleExcluded(s.id),
+  folderColor: (path) => colorOf(path, state.folderColors),
+  colorKey: (path) => state.folderColors[path],
+  setFolderColor: (path, color) => act(() => folderColors.set(path, color)),
   activeSessionId: () => activeTab()?.sessionId,
   openSession: (s) => openSession(s),
   editSession: (s) => editSession(s),
@@ -249,6 +254,7 @@ function renderTabs() {
           t.protocol && badge(t.protocol)),
         h('button', { class: 'icon-btn sm', 'aria-label': `Fermer ${t.title}`, title: 'Fermer (Ctrl Maj W)', onclick: () => closeTab(t.id) }, icon('close', 13)));
       tabEl.addEventListener('contextmenu', (e) => tabMenu(t, e));
+      paint(tabEl, colorOf(sessionOf(t.sessionId)?.folder ?? '', state.folderColors));
       return tabEl;
     }),
     h('button', { class: 'icon-btn', 'aria-label': 'Nouvelle session', title: 'Nouvelle session', onclick: () => newSession() }, icon('plus')),
@@ -264,11 +270,16 @@ function renderToolbar() {
     return;
   }
   toolbar.hidden = false;
+  // Couleur du dossier (ex. rouge pour la production) et nom du dossier coloré.
+  const color = colorOf(session.folder, state.folderColors);
+  paint(toolbar, color);
+  const coloredFolder = color ? envFolder(session.folder) : '';
   const v = session.values;
   const target = [v.username && `${v.username}@`, v.host ?? v.url, v.port && `:${v.port}`].filter(Boolean).join('');
   const label = { connecting: 'connexion…', connected: 'connecté', reconnecting: 'reconnexion…', closed: 'déconnecté' }[tab.state];
   toolbar.replaceChildren(
     h('div', { class: 'toolbar-info' },
+      coloredFolder && h('span', { class: 'env-label', title: 'Couleur du dossier' }, coloredFolder.toUpperCase()),
       icon('terminal'), h('strong', {}, target || session.name),
       session.folder && h('span', { class: 'muted' }, `· ${session.folder}`),
       h('span', { class: 'muted' }, `· ${label}`)),
@@ -324,7 +335,7 @@ function renderStatus() {
       class: `status-btn${monitor.summary().up < monitor.summary().total ? ' warn' : ''}`, title: 'Supervision des serveurs',
       onclick: () => monitor.openOverview((s) => openSession(s)),
     }, h('span', { class: `health ${monitor.summary().up < monitor.summary().total ? 'down' : 'up'}` }), `${monitor.summary().up}/${monitor.summary().total} en ligne`)] : []),
-    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.16.0'),
+    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.17.0'),
   );
 }
 
@@ -512,7 +523,7 @@ function reconnect(tab: Tab) {
 
 async function reload() {
   try {
-    [state.protocols, state.sessions, state.folders, state.snippets] = await Promise.all([api.listProtocols(), api.listSessions(), api.listFolders(), api.listSnippets()]);
+    [state.protocols, state.sessions, state.folders, state.snippets, state.folderColors] = await Promise.all([api.listProtocols(), api.listSessions(), api.listFolders(), api.listSnippets(), folderColors.list()]);
   } catch (e) {
     toast(errorText(e), 'error');
   }
@@ -614,6 +625,7 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'l') { e.preventDefault(); lockNow(toast, () => reload()); }
 });
 
+initTheme();
 reload();
 // Vérification discrète des mises à jour, une fois l'application chargée.
 if (settings().autoUpdate) setTimeout(() => checkForUpdates(toast, true), 4000);
@@ -629,3 +641,13 @@ onSettingsChange((s) => {
 });
 monitorKey = `${settings().monitoring}|${settings().monitorInterval}`;
 initLock(() => reload());
+
+/** Nom du dossier coloré le plus proche (affiché en étiquette dans la barre d'outils). */
+function envFolder(folder: string): string {
+  let path = folder;
+  while (path) {
+    if (state.folderColors[path] && FOLDER_COLORS[state.folderColors[path]]) return path.slice(path.lastIndexOf('/') + 1);
+    path = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+  }
+  return '';
+}

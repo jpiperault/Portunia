@@ -57,6 +57,7 @@ Autres fonctions :
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
 - import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Termoria ;
+- apparence : thème sombre, clair ou comme Windows, 9 palettes de terminal (Dracula, Nord, Solarized…), couleur par dossier (bandeau sur les sessions, onglets et barre d'outils, étiquette « PRODUCTION ») ;
 - supervision : pastille verte ou rouge et latence pour chaque serveur, vue d'ensemble, notifications quand un serveur tombe ou revient (Pro) ;
 - enregistrement des sessions terminal (Pro) : fichiers asciicast + texte, lecteur intégré avec vitesse et navigation ;
 - verrouillage par mot de passe maître et Windows Hello, au démarrage et après inactivité (Ctrl+Maj+L) ;
@@ -102,6 +103,7 @@ src/
   security.ts      écran de verrouillage, licence
   recordings.ts    liste et lecteur des enregistrements
   monitoring.ts    supervision : pastilles, vue d'ensemble, alertes
+  theme.ts         thèmes, palettes du terminal, couleurs de dossier
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :

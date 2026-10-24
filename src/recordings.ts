@@ -7,6 +7,7 @@ import { errorText, recordings } from './api';
 import { h, icon } from './dom';
 import { formatSize } from './files';
 import { fontStack, settings, updateSettings } from './settings';
+import { terminalTheme } from './theme';
 import { proChip } from './security';
 
 type Toast = (message: string, kind?: 'info' | 'error') => void;
@@ -141,7 +142,7 @@ export class Player {
     el.append(screen, h('div', { class: 'player-controls' }, this.playBtn, speedSel, this.bar, this.clock));
 
     const s = settings();
-    this.term = new Terminal({ fontFamily: fontStack(s), fontSize: s.fontSize, cols: parsed.cols, rows: parsed.rows, disableStdin: true, cursorBlink: false, theme: { background: '#111215', foreground: '#D6D8DD' } });
+    this.term = new Terminal({ fontFamily: fontStack(s), fontSize: s.fontSize, cols: parsed.cols, rows: parsed.rows, disableStdin: true, cursorBlink: false, theme: terminalTheme() });
     this.term.loadAddon(this.fit);
     this.term.open(screen);
     this.renderControls();

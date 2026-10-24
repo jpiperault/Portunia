@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissions de la fenêtre principale uniquement. Les fenêtres web ouvertes par l'extension Web n'ont aucun accès à l'application.",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save", "opener:default", "updater:default", "process:allow-restart", "notification:default"]
+  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save", "opener:default", "updater:default", "process:allow-restart", "notification:default", "core:window:allow-set-theme"]
 }
