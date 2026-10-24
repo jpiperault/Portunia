@@ -70,48 +70,50 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 ## Architecture
 
 ```
-src-tauri/src/
-  connector.rs     contrat d'une extension (trait Connector, manifeste, champs)
-  registry.rs      liste des extensions disponibles
-  connectors/      une extension par fichier : ssh, rdp, web, telnet, serial, vnc
-rdp-helper/        moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
-scripts/           compilation du moteur RDP
-.github/workflows/ publication automatique des versions
-tools/license-tool/ outil de l'éditeur : clé de signature et génération des licences (ne pas distribuer)
-screenshot.html    démonstration avec données fictives pour les captures d'écran (npx vite, puis ouvrir /screenshot.html?scene=main ou ?scene=split&theme=light) (+ sftp.rs : fichiers, forward.rs : tunnels)
-  store.rs         sessions, dossiers et commandes enregistrés (JSON)
-  importers.rs     import ssh config / PuTTY / mRemoteNG, sauvegarde
-  license.rs       éditions et vérification des licences (point de contrôle unique)
-  lock.rs          verrouillage (mot de passe maître, Windows Hello)
-  recording.rs     enregistrement des sessions (asciicast, texte)
-  monitor.rs       supervision (test de connexion TCP)
-  transfer.rs      transferts de dossiers entiers, édition de fichiers distants
-  secrets.rs       Gestionnaire d'identifiants Windows
-  commands.rs      commandes appelées par l'interface
-src/
-  main.ts          arbre, onglets, panneau de détails
-  dialog.ts        formulaire généré à partir du manifeste de l'extension
-  terminal.ts      vue terminal (xterm.js)
-  screen.ts        vue écran distant (canvas, clavier, souris)
-  extensions.ts    page Extensions
-  files.ts         explorateur de fichiers du serveur
-  tree.ts          arbre des sessions (dossiers, glisser-déposer)
-  menu.ts          menu contextuel
-  settings.ts      paramètres de l'interface
-  snippets.ts      commandes enregistrées (palette et gestion)
-  tunnels.ts       tunnels SSH (éditeur et suivi)
-  importexport.ts  import / export
-  updates.ts       mises à jour automatiques
-  security.ts      écran de verrouillage, licence
-  recordings.ts    liste et lecteur des enregistrements
-  monitoring.ts    supervision : pastilles, vue d'ensemble, alertes
-  theme.ts         thèmes, palettes du terminal, couleurs de dossier
+src-tauri/src/       cœur (Rust)
+  connector.rs       contrat d'une extension (trait Connector, manifeste, champs, vues)
+  registry.rs        liste des extensions disponibles
+  connectors/        une extension par fichier : ssh, rdp, vnc, web, telnet, serial
+                     (+ sftp.rs : fichiers, forward.rs : tunnels)
+  commands.rs        commandes appelées par l'interface
+  store.rs           sessions, dossiers, couleurs et commandes enregistrés (JSON)
+  secrets.rs         Gestionnaire d'identifiants Windows
+  importers.rs       import ssh config / PuTTY / mRemoteNG, sauvegarde
+  license.rs         éditions et vérification des licences (point de contrôle unique)
+  lock.rs            verrouillage (mot de passe maître, Windows Hello)
+  recording.rs       enregistrement des sessions (asciicast, texte)
+  monitor.rs         supervision (test de connexion TCP)
+  transfer.rs        transferts de dossiers entiers, édition de fichiers distants
+src/                 interface (TypeScript, sans framework)
+  main.ts            arbre, onglets, écran partagé, barre d'outils
+  dialog.ts          formulaire généré à partir du manifeste de l'extension
+  terminal.ts        vue terminal (xterm.js)
+  screen.ts          vue écran distant (canvas, clavier, souris)
+  files.ts           explorateur de fichiers du serveur
+  tree.ts            arbre des sessions (dossiers, glisser-déposer)
+  menu.ts            menu contextuel
+  settings.ts        paramètres de l'interface
+  snippets.ts        commandes enregistrées (palette et gestion)
+  tunnels.ts         tunnels SSH (éditeur et suivi)
+  importexport.ts    import / export
+  updates.ts         mises à jour automatiques
+  security.ts        écran de verrouillage, licence
+  recordings.ts      liste et lecteur des enregistrements
+  monitoring.ts      supervision : pastilles, vue d'ensemble, alertes
+  theme.ts           thèmes, palettes du terminal, couleurs de dossier
+  extensions.ts      page Extensions
+rdp-helper/          moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
+scripts/             compilation du moteur RDP
+tools/license-tool/  outil de l'éditeur : clé de signature et génération des licences (ne pas distribuer)
+screenshot.html      démonstration avec données fictives pour les captures d'écran
+                     (npx vite, puis /screenshot.html?scene=main ou ?scene=split&theme=light)
+.github/workflows/   publication automatique des versions
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :
 
 1. décrit ses champs (`Manifest.fields`) : l'interface génère le formulaire toute seule ;
-2. indique sa vue : `terminal`, `desktop` ou `web` ;
+2. indique sa vue : `terminal`, `screen` (écran distant dans un onglet), `desktop` (application externe) ou `web` ;
 3. implémente `connect()`, qui renvoie soit une connexion terminal, soit « ouvert ailleurs ».
 
 ### Ajouter un protocole
