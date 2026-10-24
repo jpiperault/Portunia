@@ -291,7 +291,7 @@ function renderToolbar() {
         onclick: () => { const id = tab.term?.connection; if (id) openTunnels(session, id, toast, () => reload()); },
       }, icon('tunnel', 14), 'Tunnels'),
       tab.screen && h('button', { class: 'btn', title: 'Envoyer Ctrl+Alt+Suppr à l’écran distant', onclick: () => tab.screen?.sendCtrlAltDel() }, 'Ctrl+Alt+Suppr'),
-      tab.screen && h('button', { class: 'btn', title: 'Copier le presse-papiers de Windows vers l’écran distant', onclick: () => tab.screen?.sendClipboard() }, icon('copy', 14), 'Presse-papiers'),
+      tab.screen && session.protocol !== 'rdp' && h('button', { class: 'btn', title: 'Copier le presse-papiers de Windows vers l’écran distant', onclick: () => tab.screen?.sendClipboard() }, icon('copy', 14), 'Presse-papiers'),
       tab.screen && h('button', { class: 'btn', title: 'Adapter l’image à l’onglet ou afficher en taille réelle', onclick: () => { tab.screen?.toggleFit(); renderToolbar(); } }, tab.screen.fit ? 'Taille réelle' : 'Ajuster à la fenêtre'),
       tab.term && tab.state === 'connected' && h('button', {
         class: `btn${tab.recording ? ' rec' : ''}`, title: tab.recording ? `Enregistrement en cours : ${tab.recording}` : 'Enregistrer cette session (asciicast + texte)',
@@ -335,7 +335,7 @@ function renderStatus() {
       class: `status-btn${monitor.summary().up < monitor.summary().total ? ' warn' : ''}`, title: 'Supervision des serveurs',
       onclick: () => monitor.openOverview((s) => openSession(s)),
     }, h('span', { class: `health ${monitor.summary().up < monitor.summary().total ? 'down' : 'up'}` }), `${monitor.summary().up}/${monitor.summary().total} en ligne`)] : []),
-    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.18.0'),
+    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.19.0'),
   );
 }
 

@@ -104,6 +104,10 @@ impl TerminalConnection for VncSession {
         if self.view_only && !matches!(event, InputEvent::Clipboard { .. }) {
             return Ok(());
         }
+        // Le serveur VNC garde sa propre résolution.
+        if matches!(event, InputEvent::Resize { .. }) {
+            return Ok(());
+        }
         self.tx.send(Msg::Input(event)).map_err(|_| anyhow!("Session fermée"))
     }
 }
@@ -162,6 +166,7 @@ fn to_x11(input: InputEvent) -> X11Event {
         InputEvent::Key { keysym, down, .. } => X11Event::KeyEvent((keysym, down).into()),
         InputEvent::Pointer { x, y, buttons } => X11Event::PointerEvent((x, y, buttons).into()),
         InputEvent::Clipboard { text } => X11Event::CopyText(text),
+        InputEvent::Resize { .. } => X11Event::Refresh,
     }
 }
 

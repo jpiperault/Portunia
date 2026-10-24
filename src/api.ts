@@ -119,7 +119,8 @@ export type ScreenEvent =
 export type InputEvent =
   | { type: 'key'; keysym: number; down: boolean; code?: string }
   | { type: 'pointer'; x: number; y: number; buttons: number }
-  | { type: 'clipboard'; text: string };
+  | { type: 'clipboard'; text: string }
+  | { type: 'resize'; width: number; height: number };
 
 export interface ConnectResponse {
   connectionId: string | null;

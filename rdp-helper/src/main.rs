@@ -49,6 +49,7 @@ struct Settings {
 enum Input {
     Key { code: String, down: bool },
     Pointer { x: u16, y: u16, buttons: u8 },
+    Resize { width: u16, height: u16 },
     Close,
     #[serde(other)]
     Other,
@@ -109,7 +110,14 @@ async fn run() -> Result<()> {
     // La boucle d'IronRDP n'est pas « Send » : elle tourne sur son propre fil.
     std::thread::spawn(move || {
         match tokio::runtime::Builder::new_current_thread().enable_all().build() {
-            Ok(runtime) => runtime.block_on(client.run()),
+            // Le presse-papiers partagé passe par une fenêtre Windows invisible créée
+            // sur ce fil : il faut traiter ses messages pendant que la session tourne.
+            Ok(runtime) => runtime.block_on(async {
+                tokio::select! {
+                    _ = client.run() => {}
+                    _ = pump_windows_messages() => {}
+                }
+            }),
             Err(e) => emit(&Output::Closed { reason: Some(format!("{e}")) }),
         }
     });
@@ -121,6 +129,11 @@ async fn run() -> Result<()> {
         while let Ok(Some(line)) = lines.next_line().await {
             let Ok(event) = serde_json::from_str::<Input>(&line) else { continue };
             let events: smallvec::SmallVec<[FastPathInputEvent; 2]> = match event {
+                Input::Resize { width, height } => {
+                    // L'onglet a changé de taille : le bureau distant s'adapte (ou la session se reconnecte à la nouvelle taille).
+                    let _ = keys.send(RdpInputEvent::Resize { width: width.max(640), height: height.max(480), scale_factor: 100, physical_size: None });
+                    continue;
+                }
                 Input::Key { code, down } => match scancodes::lookup(&code) {
                     Some((scancode, extended)) => {
                         let mut flags = KeyboardFlags::empty();
@@ -296,4 +309,26 @@ fn send_changes(previous: &[u32], current: &[u32], width: u16, height: u16) {
         }
         emit(&Output::Image { x: x as u16, y: y as u16, width: tw as u16, height: th as u16, rgba: B64.encode(&rgba) });
     }
+}
+
+/// Traite les messages Windows du fil courant (presse-papiers), sans bloquer.
+#[cfg(windows)]
+async fn pump_windows_messages() {
+    use windows::Win32::UI::WindowsAndMessaging::{DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE};
+    loop {
+        let mut msg = MSG::default();
+        // SAFETY : appels Win32 classiques sur le fil qui possède la fenêtre.
+        unsafe {
+            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(30)).await;
+    }
+}
+
+#[cfg(not(windows))]
+async fn pump_windows_messages() {
+    std::future::pending::<()>().await
 }

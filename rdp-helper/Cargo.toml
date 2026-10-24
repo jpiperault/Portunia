@@ -1,14 +1,14 @@
 [package]
 name = "termoria-rdp"
 version = "0.1.0"
-description = "Moteur RDP de Termoria (IronRDP), lancé par l'application pour chaque session"
+description = "Moteur RDP de Termoria (IronRDP), lanc?? par l'application pour chaque session"
 edition = "2021"
 
-# Programme séparé : les dépendances d'IronRDP (versions préliminaires de
-# bibliothèques cryptographiques) sont incompatibles avec celles de russh.
+# Programme s??par?? : les d??pendances d'IronRDP (versions pr??liminaires de
+# biblioth??ques cryptographiques) sont incompatibles avec celles de russh.
 
 [dependencies]
-ironrdp-client = { version = "0.1", features = ["native-tls"] }
+ironrdp-client = { version = "0.1", features = ["native-tls", "clipboard"] }
 ironrdp-pdu = "0.9"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std", "io-util", "sync", "time", "net"] }
 serde = { version = "1", features = ["derive"] }
@@ -16,6 +16,10 @@ serde_json = "1"
 base64 = "0.22"
 anyhow = "1"
 smallvec = "1"
+
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 opt-level = "s"

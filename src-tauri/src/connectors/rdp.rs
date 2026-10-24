@@ -209,7 +209,10 @@ impl TerminalConnection for RdpSession {
             InputEvent::Pointer { x, y, buttons } => {
                 self.send(json!({ "type": "pointer", "x": x, "y": y, "buttons": buttons }))
             }
-            // Le presse-papiers RDP n'est pas encore pris en charge.
+            InputEvent::Resize { width, height } => {
+                self.send(json!({ "type": "resize", "width": width, "height": height }))
+            }
+            // Le presse-papiers RDP est synchronisé directement par le moteur (presse-papiers Windows).
             InputEvent::Clipboard { .. } => Ok(()),
         }
     }

@@ -189,6 +189,8 @@ pub enum InputEvent {
     },
     /// Position en pixels de l'écran distant ; boutons : 1 gauche, 2 milieu, 4 droit, 8/16 molette.
     Pointer { x: u16, y: u16, buttons: u8 },
+    /// L'onglet a changé de taille (pixels) : le bureau distant peut s'adapter.
+    Resize { width: u16, height: u16 },
     Clipboard { text: String },
 }
 

@@ -50,12 +50,22 @@ export class ScreenView {
   fit = true;
   /** La session s'est ouverte hors de Termoria (message à afficher). */
   onDetached?: (message: string) => void;
+  private observer: ResizeObserver;
+  private resizeTimer = 0;
+  private lastSize = { width: 0, height: 0 };
 
   constructor(readonly container: HTMLElement, private readonly onState: (s: TermState, reason?: string) => void) {
     container.classList.add('screen-view');
     container.append(this.canvas, this.status);
     this.applyFit();
     this.bindInput();
+    // L'onglet change de taille : on demande au bureau distant de s'adapter
+    // (RDP ; un serveur VNC garde sa résolution). Attente de la fin du redimensionnement.
+    this.observer = new ResizeObserver(() => {
+      window.clearTimeout(this.resizeTimer);
+      this.resizeTimer = window.setTimeout(() => this.sendSize(), 600);
+    });
+    this.observer.observe(container);
   }
 
   get connection(): string | null {
@@ -80,6 +90,7 @@ export class ScreenView {
         return;
       }
       this.connectionId = res.connectionId;
+      this.lastSize = { width: this.container.clientWidth, height: this.container.clientHeight };
       this.setStatus('');
       this.onState('connected');
       this.focus();
@@ -253,7 +264,18 @@ export class ScreenView {
     this.canvas.focus();
   }
 
+  private sendSize() {
+    const width = Math.round(this.container.clientWidth);
+    const height = Math.round(this.container.clientHeight);
+    if (!this.connectionId || !this.fit || width < 200 || height < 150) return;
+    if (Math.abs(width - this.lastSize.width) < 8 && Math.abs(height - this.lastSize.height) < 8) return;
+    this.lastSize = { width, height };
+    this.send({ type: 'resize', width, height });
+  }
+
   dispose() {
+    window.clearTimeout(this.resizeTimer);
+    this.observer.disconnect();
     this.disposed = true;
     if (this.connectionId) api.disconnect(this.connectionId).catch(() => {});
     this.connectionId = null;
