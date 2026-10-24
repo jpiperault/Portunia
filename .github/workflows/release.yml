@@ -1,6 +1,6 @@
 # Publie une version de Termoria : à chaque tag vX.Y.Z poussé sur GitHub,
 # compile l'installateur Windows, le signe pour les mises à jour automatiques
-# et crée la release dans le dépôt PUBLIC jpiperault/termoria-releases
+# et crée la release dans le dépôt PUBLIC jpiperault/Termoria-releases
 # (le code reste privé ici ; Termoria y lit latest.json pour se mettre à jour).
 #
 # Secrets à définir dans ce dépôt (Settings > Secrets and variables > Actions) :
@@ -47,7 +47,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           owner: jpiperault
-          repo: termoria-releases
+          repo: Termoria-releases
           # Le dépôt public ne contient pas ce code : le tag y est créé sur sa branche main.
           commitish: main
           tagName: ${{ github.ref_name }}
