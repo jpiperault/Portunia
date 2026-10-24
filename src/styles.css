@@ -352,3 +352,15 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .player-controls select { height: 32px; padding: 0 6px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); }
 .player-bar { flex: 1; accent-color: var(--accent); }
 .player-clock { min-width: 90px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Supervision */
+.dot.up { border-color: var(--ok); }
+.dot.down { border-color: #e06c6c; background: transparent; box-shadow: 0 0 0 2px rgb(224 108 108 / .25); }
+.dot.on.down { background: #e06c6c; }
+.health { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; background: #6b6f78; }
+.health.up { background: var(--ok); }
+.health.down { background: #e06c6c; }
+.health.off { background: transparent; border: 1.5px dashed #6b6f78; box-sizing: border-box; }
+.status-btn { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; background: transparent; border: 0; border-radius: 4px; color: var(--muted); font-size: 12px; }
+.status-btn:hover { background: var(--hover); color: var(--text); }
+.status-btn.warn { color: #ffb4b4; }

@@ -715,3 +715,17 @@ pub fn recording_read(app: AppHandle, dir: Option<String>, path: String) -> CmdR
 pub fn recording_delete(app: AppHandle, dir: Option<String>, path: String) -> CmdResult<()> {
     recording::delete(&recording_dir(&app, dir)?, &path).map_err(full)
 }
+
+// ---------- Supervision ----------
+
+/// Le serveur de chaque session répond-il ? (ouverture TCP sur son port)
+#[tauri::command]
+pub async fn monitor_check(targets: Vec<crate::monitor::Target>) -> Vec<crate::monitor::Probe> {
+    crate::monitor::probe_all(targets).await
+}
+
+/// Les alertes (notifications) sont une fonction Pro.
+#[tauri::command]
+pub fn monitor_alerts_allowed(state: State<'_, AppState>) -> bool {
+    state.license.lock().unwrap().allows(Feature::MonitoringAlerts)
+}

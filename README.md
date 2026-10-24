@@ -57,6 +57,7 @@ Autres fonctions :
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi par glisser-déposer, téléchargement, création, renommage et suppression, avec suivi des transferts ;
 - import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Termoria ;
+- supervision : pastille verte ou rouge et latence pour chaque serveur, vue d'ensemble, notifications quand un serveur tombe ou revient (Pro) ;
 - enregistrement des sessions terminal (Pro) : fichiers asciicast + texte, lecteur intégré avec vitesse et navigation ;
 - verrouillage par mot de passe maître et Windows Hello, au démarrage et après inactivité (Ctrl+Maj+L) ;
 - éditions Gratuit / Pro / Équipes, licences signées vérifiées hors ligne (Paramètres › Licence) ;
@@ -81,6 +82,7 @@ tools/license-tool/ outil de l'éditeur : clé de signature et génération des 
   license.rs       éditions et vérification des licences (point de contrôle unique)
   lock.rs          verrouillage (mot de passe maître, Windows Hello)
   recording.rs     enregistrement des sessions (asciicast, texte)
+  monitor.rs       supervision (test de connexion TCP)
   secrets.rs       Gestionnaire d'identifiants Windows
   commands.rs      commandes appelées par l'interface
 src/
@@ -99,6 +101,7 @@ src/
   updates.ts       mises à jour automatiques
   security.ts      écran de verrouillage, licence
   recordings.ts    liste et lecteur des enregistrements
+  monitoring.ts    supervision : pastilles, vue d'ensemble, alertes
 ```
 
 Le cœur ne connaît aucun protocole. Une extension :

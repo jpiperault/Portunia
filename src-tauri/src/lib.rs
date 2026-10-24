@@ -4,6 +4,7 @@ mod connectors;
 mod importers;
 mod license;
 mod lock;
+mod monitor;
 mod recording;
 mod registry;
 mod secrets;
@@ -25,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -87,6 +89,8 @@ pub fn run() {
             commands::recordings_list,
             commands::recording_read,
             commands::recording_delete,
+            commands::monitor_check,
+            commands::monitor_alerts_allowed,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

@@ -13,7 +13,8 @@ import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
 import { openTunnels } from './tunnels';
 import { openImportExport } from './importexport';
-import { openSettingsDialog, settings } from './settings';
+import { onSettingsChange, openSettingsDialog, settings } from './settings';
+import { Monitor } from './monitoring';
 import { checkForUpdates } from './updates';
 import { allows, currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
 import { openRecordings, Player, setPlayerHandler, stamp } from './recordings';
@@ -79,8 +80,18 @@ function toast(message: string, kind: 'info' | 'error' = 'info') {
 
 // ---------- Arbre des sessions ----------
 
+const monitor = new Monitor(() => state.sessions, () => { renderTree(); renderStatus(); });
+
 const sessionTree = new SessionTree(tree, {
   isConnected,
+  health: (id) => {
+    if (!settings().monitoring) return { cls: '', title: '' };
+    if (monitor.isExcluded(id)) return { cls: 'off', title: 'Non surveillé' };
+    const hl = monitor.get(id);
+    if (!hl) return { cls: 'unknown', title: '' };
+    return hl.up ? { cls: 'up', title: `En ligne · ${hl.latencyMs} ms` } : { cls: 'down', title: `Injoignable : ${hl.error ?? ''}` };
+  },
+  toggleMonitor: (s) => monitor.toggleExcluded(s.id),
   activeSessionId: () => activeTab()?.sessionId,
   openSession: (s) => openSession(s),
   editSession: (s) => editSession(s),
@@ -309,7 +320,11 @@ function renderStatus() {
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
     h('span', { class: 'push' }, `${state.protocols.length} extensions`),
-    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.15.0'),
+    ...(settings().monitoring && monitor.summary().total ? [h('button', {
+      class: `status-btn${monitor.summary().up < monitor.summary().total ? ' warn' : ''}`, title: 'Supervision des serveurs',
+      onclick: () => monitor.openOverview((s) => openSession(s)),
+    }, h('span', { class: `health ${monitor.summary().up < monitor.summary().total ? 'down' : 'up'}` }), `${monitor.summary().up}/${monitor.summary().total} en ligne`)] : []),
+    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.16.0'),
   );
 }
 
@@ -603,4 +618,14 @@ reload();
 // Vérification discrète des mises à jour, une fois l'application chargée.
 if (settings().autoUpdate) setTimeout(() => checkForUpdates(toast, true), 4000);
 loadLicense().then(() => renderStatus());
+monitor.start();
+// Première vérification une fois les sessions chargées.
+setTimeout(() => monitor.check(), 2000);
+// Supervision relancée quand ses réglages changent.
+let monitorKey = '';
+onSettingsChange((s) => {
+  const key = `${s.monitoring}|${s.monitorInterval}`;
+  if (key !== monitorKey) { monitorKey = key; monitor.start(); renderAll(); }
+});
+monitorKey = `${settings().monitoring}|${settings().monitorInterval}`;
 initLock(() => reload());

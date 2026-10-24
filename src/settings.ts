@@ -1,7 +1,7 @@
 // Préférences de l'interface, enregistrées sur ce PC.
 import { h, icon } from './dom';
 import { checkForUpdates } from './updates';
-import { licenseSection, securitySection } from './security';
+import { licenseSection, proChip, securitySection } from './security';
 import { recordingSettings } from './recordings';
 
 export interface Settings {
@@ -19,6 +19,14 @@ export interface Settings {
   autoRecord: boolean;
   /** Dossier des enregistrements (vide = DocumentsTermorianregistrements). */
   recordingDir: string;
+  /** Supervision : vérifier régulièrement que les serveurs répondent. */
+  monitoring: boolean;
+  /** Intervalle de vérification, en secondes. */
+  monitorInterval: number;
+  /** Notifications quand un serveur tombe ou revient (Pro). */
+  monitorAlerts: boolean;
+  /** Sessions à ne pas superviser. */
+  monitorExcluded: string[];
 }
 
 export const DEFAULTS: Settings = {
@@ -32,6 +40,10 @@ export const DEFAULTS: Settings = {
   autoUpdate: true,
   autoRecord: false,
   recordingDir: '',
+  monitoring: true,
+  monitorInterval: 60,
+  monitorAlerts: true,
+  monitorExcluded: [],
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
@@ -107,6 +119,16 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         licenseSection(toastFn),
         h('h3', { class: 'label' }, 'Enregistrement des sessions'),
         recordingSettings(toastFn),
+        h('h3', { class: 'label' }, 'Supervision'),
+        h('label', { class: 'check setting' },
+          h('input', { type: 'checkbox', checked: s.monitoring, onchange: (e: Event) => updateSettings({ monitoring: (e.target as HTMLInputElement).checked }) }),
+          h('span', {}, 'Vérifier que les serveurs répondent', h('span', { class: 'muted small block' }, 'Une pastille verte ou rouge dans l’arbre ; simple ouverture de connexion, sans s’identifier.'))),
+        h('label', { class: 'fld' }, 'Fréquence',
+          h('select', { onchange: (e: Event) => updateSettings({ monitorInterval: Number((e.target as HTMLSelectElement).value) }) },
+            ...[[30, 'Toutes les 30 secondes'], [60, 'Toutes les minutes'], [300, 'Toutes les 5 minutes']].map(([v, l]) => h('option', { value: String(v), selected: v === s.monitorInterval }, String(l))))),
+        h('label', { class: 'check setting' },
+          h('input', { type: 'checkbox', checked: s.monitorAlerts, onchange: (e: Event) => updateSettings({ monitorAlerts: (e.target as HTMLInputElement).checked }) }),
+          h('span', {}, 'Me prévenir quand un serveur tombe ou revient ', proChip('monitoringAlerts'), h('span', { class: 'muted small block' }, 'Notification Windows, même quand Termoria est en arrière-plan.'))),
         h('h3', { class: 'label' }, 'Mises à jour'),
         check('autoUpdate', 'Vérifier les mises à jour au démarrage', 'Une bannière propose la nouvelle version ; rien ne s’installe sans votre accord.'),
         h('button', { type: 'button', class: 'btn', style: 'align-self: flex-start', onclick: () => checkForUpdates(toastFn) }, icon('refresh', 14), 'Rechercher maintenant'),

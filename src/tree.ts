@@ -5,6 +5,9 @@ import { MenuItem, showMenu } from './menu';
 
 export interface TreeActions {
   isConnected(sessionId: string): boolean;
+  /** État de supervision : classe CSS (up, down, unknown, off) et infobulle. */
+  health(sessionId: string): { cls: string; title: string };
+  toggleMonitor(s: Session): void;
   activeSessionId(): string | undefined;
   openSession(s: Session): void;
   editSession(s: Session): void;
@@ -114,6 +117,7 @@ export class SessionTree {
       { label: 'Ouvrir', icon: 'play', action: () => a.openSession(s) },
       { label: 'Modifier', icon: 'edit', action: () => a.editSession(s) },
       { label: 'Dupliquer', icon: 'copy', action: () => a.duplicateSession(s) },
+      { label: a.health(s.id).cls === 'off' ? 'Surveiller ce serveur' : 'Ne pas surveiller ce serveur', icon: 'broadcast', action: () => a.toggleMonitor(s) },
       ...(s.folder ? [{ label: 'Sortir du dossier', icon: 'up', action: () => a.moveSessions([s.id], '') }] : []),
       'separator',
       { label: 'Supprimer', icon: 'trash', danger: true, action: () => a.removeSession(s) },
@@ -129,7 +133,7 @@ export class SessionTree {
           else if (e.key === 'Delete') a.removeSession(s);
         },
       },
-        h('span', { class: `dot${a.isConnected(s.id) ? ' on' : ''}` }),
+        h('span', { class: `dot${a.isConnected(s.id) ? ' on' : ''} ${a.health(s.id).cls}`, title: a.health(s.id).title }),
         h('span', { class: 'grow ellipsis' }, s.name),
         badge(s.protocol)),
       h('div', { class: 'row-actions' },
