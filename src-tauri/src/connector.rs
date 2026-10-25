@@ -160,6 +160,11 @@ pub struct Manifest {
 /// Où un connecteur terminal envoie ce qu'il reçoit.
 pub trait Sink: Send + Sync {
     fn data(&self, bytes: &[u8]);
+    /// Question posée à l'utilisateur (ex. empreinte d'un nouveau serveur). `None` : pas
+    /// d'interface pour répondre (commande sans terminal) ; l'appelant doit alors refuser.
+    fn confirm(&self, _question: Confirm) -> Option<tokio::sync::oneshot::Receiver<bool>> {
+        None
+    }
     /// Image d'un écran distant (vue `Screen`).
     fn screen(&self, _event: ScreenEvent) {}
     /// Fin de la connexion ; `reason` est renseigné en cas d'erreur.
@@ -434,4 +439,16 @@ pub struct ExecOutput {
 /// Exécution de commandes sur le serveur, hors du terminal (canal séparé).
 pub trait RemoteExec: Send + Sync {
     fn run(&self, command: String) -> BoxFuture<'_, ExecOutput>;
+}
+
+/// Question oui / non posée à l'utilisateur pendant une connexion.
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Confirm {
+    pub title: String,
+    pub message: String,
+    /// Détail en police fixe (empreinte…).
+    pub detail: String,
+    pub accept: String,
+    pub reject: String,
 }

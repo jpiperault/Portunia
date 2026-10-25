@@ -33,6 +33,8 @@ pub struct Lock {
     path: PathBuf,
     config: Option<LockConfig>,
     locked: AtomicBool,
+    /// Essais manqués et attente imposée avant le prochain (contre les essais en série).
+    throttle: std::sync::Mutex<(u32, Option<std::time::Instant>)>,
 }
 
 #[derive(Serialize)]
@@ -63,7 +65,7 @@ impl Lock {
         let config: Option<LockConfig> = fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok());
         // Protégé par mot de passe : verrouillé au démarrage.
         let locked = AtomicBool::new(config.is_some());
-        Self { path, config, locked }
+        Self { path, config, locked, throttle: Default::default() }
     }
 
     fn save(&self) -> Result<()> {
@@ -103,8 +105,8 @@ impl Lock {
 
     /// Définit ou change le mot de passe maître (l'ancien est demandé s'il existe).
     pub fn set_password(&mut self, current: &str, new: &str) -> Result<()> {
-        if self.config.is_some() && !self.check(current) {
-            bail!("Mot de passe actuel incorrect");
+        if self.config.is_some() {
+            self.check_throttled(current).map_err(|e| anyhow!("Mot de passe actuel incorrect : {e}"))?;
         }
         if new.chars().count() < 8 {
             bail!("Le mot de passe maître doit contenir au moins 8 caractères");
@@ -123,9 +125,7 @@ impl Lock {
     }
 
     pub fn disable(&mut self, password: &str) -> Result<()> {
-        if !self.check(password) {
-            bail!("Mot de passe incorrect");
-        }
+        self.check_throttled(password)?;
         self.config = None;
         self.locked.store(false, Ordering::SeqCst);
         self.save()
@@ -146,10 +146,30 @@ impl Lock {
         Ok(())
     }
 
-    pub fn unlock_with_password(&self, password: &str) -> Result<()> {
-        if !self.check(password) {
-            bail!("Mot de passe incorrect");
+    /// Vérifie le mot de passe ; après 5 échecs, attente croissante (5 s, 10 s, 20 s… jusqu'à 5 min).
+    fn check_throttled(&self, password: &str) -> Result<()> {
+        let mut t = self.throttle.lock().unwrap();
+        if let Some(until) = t.1 {
+            let now = std::time::Instant::now();
+            if until > now {
+                bail!("Trop d'essais : réessayez dans {} s", (until - now).as_secs() + 1);
+            }
         }
+        if self.check(password) {
+            *t = (0, None);
+            return Ok(());
+        }
+        t.0 += 1;
+        if t.0 >= 5 {
+            let wait = (5u64 << (t.0 - 5).min(6)).min(300);
+            t.1 = Some(std::time::Instant::now() + std::time::Duration::from_secs(wait));
+            bail!("Mot de passe incorrect. Trop d'essais : attendez {wait} s");
+        }
+        bail!("Mot de passe incorrect")
+    }
+
+    pub fn unlock_with_password(&self, password: &str) -> Result<()> {
+        self.check_throttled(password)?;
         self.locked.store(false, Ordering::SeqCst);
         Ok(())
     }
@@ -223,6 +243,24 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         Lock::load(&dir)
+    }
+
+    #[test]
+    fn essais_limites() {
+        let mut lock = temp_lock();
+        lock.set_password("", "un bon mot de passe").unwrap();
+        lock.lock().unwrap();
+        for _ in 0..4 {
+            assert_eq!(lock.unlock_with_password("faux").unwrap_err().to_string(), "Mot de passe incorrect");
+        }
+        assert!(lock.unlock_with_password("faux").unwrap_err().to_string().contains("attendez 5 s"));
+        // Même le bon mot de passe est refusé pendant l'attente.
+        assert!(lock.unlock_with_password("un bon mot de passe").unwrap_err().to_string().contains("réessayez"));
+        assert!(lock.is_locked());
+        // Attente écoulée : le bon mot de passe passe et remet le compteur à zéro.
+        lock.throttle.lock().unwrap().1 = None;
+        lock.unlock_with_password("un bon mot de passe").unwrap();
+        assert_eq!(lock.throttle.lock().unwrap().0, 0);
     }
 
     #[test]

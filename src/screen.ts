@@ -1,4 +1,5 @@
 // Écran distant (VNC…) affiché dans un onglet : image dans un canvas, clavier et souris renvoyés.
+import { handleConfirm } from './confirm';
 import { api, ConnectResponse, errorText, InputEvent, ScreenEvent, TermEvent } from './api';
 import { h } from './dom';
 import type { TermState } from './terminal';
@@ -122,7 +123,7 @@ export class ScreenView {
   }
 
   private onEvent(e: TermEvent) {
-    if (e instanceof ArrayBuffer) return;
+    if (handleConfirm(e) || e instanceof ArrayBuffer) return;
     if (e.event === 'screen') this.draw(e.data);
     else if (e.event === 'closed') {
       this.connectionId = null;

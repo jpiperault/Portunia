@@ -1,4 +1,5 @@
 // Onglet « fichiers seulement » (FTP, S3…) : l'explorateur en pleine largeur, sans terminal.
+import { handleConfirm } from './confirm';
 import { api, errorText, TermEvent } from './api';
 import { h } from './dom';
 import type { FilePanel } from './files';
@@ -52,7 +53,7 @@ export class FilesView {
   }
 
   private onEvent(e: TermEvent) {
-    if (e instanceof ArrayBuffer || e.event !== 'closed') return;
+    if (handleConfirm(e) || e instanceof ArrayBuffer || e.event !== 'closed') return;
     this.connectionId = null;
     this.panel.detach();
     if (this.disposed) return;

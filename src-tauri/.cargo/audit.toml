@@ -1,0 +1,9 @@
+# Configuration de « cargo audit » (base RustSec).
+[advisories]
+ignore = [
+  # rsa — attaque « Marvin » : fuite par le temps de calcul, exploitable face à un service
+  # qui déchiffre du RSA à la demande. Termoria ne fait que signer, localement, avec une clé
+  # RSA de l'utilisateur (authentification SSH) : pas d'oracle observable à distance.
+  # Aucune version corrigée publiée ; l'assistant de clés recommande Ed25519.
+  "RUSTSEC-2023-0071",
+]

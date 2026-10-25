@@ -29,6 +29,8 @@ export function proChip(feature: string): HTMLElement | null {
 // ---------- Écran de verrouillage ----------
 
 let overlay: HTMLElement | null = null;
+/** Écran de verrouillage affiché. */
+export const isLocked = () => overlay !== null;
 let lastActivity = Date.now();
 let timeoutMinutes = 0;
 
@@ -61,7 +63,13 @@ async function showLockScreen(onUnlocked: () => void, known?: LockStatus) {
   const status = known ?? await security.lockStatus();
   const input = h('input', { type: 'password', placeholder: 'Mot de passe maître', 'aria-label': 'Mot de passe maître', autocomplete: 'current-password' });
   const error = h('p', { class: 'form-error', role: 'alert' });
+  // Tout le reste devient inerte : ni focus, ni clic, ni frappe sous l'écran de verrouillage
+  // (sinon Tab ramènerait le curseur dans un terminal ouvert).
+  const behind = [...document.body.children].filter((el) => !el.hasAttribute('inert'));
+  (document.activeElement as HTMLElement | null)?.blur();
+  for (const el of behind) el.setAttribute('inert', '');
   const done = () => {
+    for (const el of behind) el.removeAttribute('inert');
     overlay?.remove();
     overlay = null;
     lastActivity = Date.now();

@@ -14,7 +14,7 @@ use tauri::{
 };
 
 use crate::connector::{
-    ChoiceOption, ConnectContext, FieldKind, InputEvent, Manifest, Outcome, PortForwarder, ScreenEvent, RemoteEntry, RemoteFiles, Sink,
+    ChoiceOption, Confirm, ConnectContext, FieldKind, InputEvent, Manifest, Outcome, PortForwarder, ScreenEvent, RemoteEntry, RemoteFiles, Sink,
     TerminalConnection, TunnelSpec, TunnelStatus,
     ViewKind,
 };
@@ -77,6 +77,21 @@ fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
+
+/// Ne garde que les valeurs prévues par le formulaire du protocole, hors secrets.
+/// Un fichier importé (sauvegarde partagée, configuration) ne peut ainsi glisser ni valeur
+/// cachée (« remoteCommand »…) ni mot de passe en clair dans sessions.json.
+fn clean_imported(state: &AppState, mut sessions: Vec<Session>) -> Vec<Session> {
+    sessions.retain_mut(|s| {
+        let Some(connector) = state.registry.get(&s.protocol) else { return false };
+        let manifest = connector.manifest();
+        let secrets = secret_fields(&manifest);
+        s.values.retain(|k, _| manifest.fields.iter().any(|f| f.key == *k) && !secrets.contains(k));
+        s.secret_keys.clear();
+        true
+    });
+    sessions
+}
 fn secret_fields(manifest: &Manifest) -> Vec<String> {
     manifest
         .fields
@@ -93,6 +108,10 @@ pub fn list_protocols(state: State<'_, AppState>) -> Vec<Manifest> {
 
 #[tauri::command]
 pub fn list_sessions(state: State<'_, AppState>) -> Vec<Session> {
+    // Verrouillé : rien n'est montré (rechargé au déverrouillage).
+    if state.unlocked().is_err() {
+        return Vec::new();
+    }
     state.store.lock().unwrap().list()
 }
 
@@ -149,6 +168,7 @@ pub fn save_session(state: State<'_, AppState>, input: SaveSessionInput) -> CmdR
 
 #[tauri::command]
 pub fn delete_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.unlocked()?;
     let removed = state.store.lock().unwrap().remove(&id).map_err(err)?;
     state.notes.lock().unwrap().remove(&id).map_err(err)?;
     if let Some(session) = removed {
@@ -165,6 +185,20 @@ pub enum TermEvent {
     Closed(Option<String>),
     /// Image d'un écran distant (vue Screen).
     Screen(ScreenEvent),
+    /// Question à l'utilisateur ; réponse par la commande confirm_answer.
+    Confirm { id: String, question: Confirm },
+}
+
+/// Questions en attente de réponse, par identifiant.
+static CONFIRMS: std::sync::LazyLock<Mutex<HashMap<String, tokio::sync::oneshot::Sender<bool>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Réponse de l'utilisateur à une question posée pendant une connexion.
+#[tauri::command]
+pub fn confirm_answer(id: String, accept: bool) {
+    if let Some(sender) = CONFIRMS.lock().unwrap().remove(&id) {
+        let _ = sender.send(accept);
+    }
 }
 
 /// Délai de regroupement : court pour l'écho de la frappe (aucun retard perceptible),
@@ -228,6 +262,14 @@ impl ChannelSink {
 }
 
 impl Sink for ChannelSink {
+    fn confirm(&self, question: Confirm) -> Option<tokio::sync::oneshot::Receiver<bool>> {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        CONFIRMS.lock().unwrap().insert(id.clone(), tx);
+        self.send_event(TermEvent::Confirm { id, question });
+        Some(rx)
+    }
+
     fn data(&self, bytes: &[u8]) {
         {
             let mut pending = self.pending.lock().unwrap();
@@ -379,6 +421,7 @@ async fn start_connection(
 
 #[tauri::command]
 pub fn term_write(state: State<'_, AppState>, connection_id: String, data: String) -> CmdResult<()> {
+    state.unlocked()?;
     let connections = state.connections.lock().unwrap();
     let connection = connections.get(&connection_id).ok_or("Session fermée")?;
     connection.write(data.as_bytes()).map_err(err)
@@ -431,6 +474,7 @@ pub struct TransferProgress {
 
 #[tauri::command]
 pub async fn fs_home(state: State<'_, AppState>, connection_id: String) -> CmdResult<String> {
+    state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     files.home().await.map_err(full)
 }
@@ -441,6 +485,7 @@ pub async fn fs_list(
     connection_id: String,
     path: String,
 ) -> CmdResult<Vec<RemoteEntry>> {
+    state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     files.list(path).await.map_err(full)
 }
@@ -479,6 +524,7 @@ pub async fn fs_upload(
 
 #[tauri::command]
 pub async fn fs_mkdir(state: State<'_, AppState>, connection_id: String, path: String) -> CmdResult<()> {
+    state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     files.mkdir(path).await.map_err(full)
 }
@@ -502,6 +548,7 @@ pub async fn fs_rename(
     from: String,
     to: String,
 ) -> CmdResult<()> {
+    state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     files.rename(from, to).await.map_err(full)
 }
@@ -510,26 +557,34 @@ pub async fn fs_rename(
 
 #[tauri::command]
 pub fn list_folders(state: State<'_, AppState>) -> Vec<String> {
+    // Verrouillé : rien n'est montré (rechargé au déverrouillage).
+    if state.unlocked().is_err() {
+        return Vec::new();
+    }
     state.store.lock().unwrap().folders()
 }
 
 #[tauri::command]
 pub fn create_folder(state: State<'_, AppState>, path: String) -> CmdResult<String> {
+    state.unlocked()?;
     state.store.lock().unwrap().create_folder(&path).map_err(full)
 }
 
 #[tauri::command]
 pub fn rename_folder(state: State<'_, AppState>, from: String, to: String) -> CmdResult<()> {
+    state.unlocked()?;
     state.store.lock().unwrap().rename_folder(&from, &to).map_err(full)
 }
 
 #[tauri::command]
 pub fn delete_folder(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    state.unlocked()?;
     state.store.lock().unwrap().delete_folder(&path).map_err(full)
 }
 
 #[tauri::command]
 pub fn move_sessions(state: State<'_, AppState>, ids: Vec<String>, folder: String) -> CmdResult<()> {
+    state.unlocked()?;
     state.store.lock().unwrap().move_sessions(&ids, &folder).map_err(full)
 }
 
@@ -554,16 +609,22 @@ pub fn duplicate_session(state: State<'_, AppState>, id: String) -> CmdResult<Se
 
 #[tauri::command]
 pub fn list_snippets(state: State<'_, AppState>) -> Vec<Snippet> {
+    // Verrouillé : rien n'est montré (rechargé au déverrouillage).
+    if state.unlocked().is_err() {
+        return Vec::new();
+    }
     state.store.lock().unwrap().snippets()
 }
 
 #[tauri::command]
 pub fn save_snippet(state: State<'_, AppState>, snippet: Snippet) -> CmdResult<Snippet> {
+    state.unlocked()?;
     state.store.lock().unwrap().upsert_snippet(snippet).map_err(full)
 }
 
 #[tauri::command]
 pub fn delete_snippet(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.unlocked()?;
     state.store.lock().unwrap().delete_snippet(&id).map_err(full)
 }
 
@@ -579,6 +640,7 @@ fn forwarder_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn Port
 
 #[tauri::command]
 pub fn tunnel_list(state: State<'_, AppState>, connection_id: String) -> CmdResult<Vec<TunnelStatus>> {
+    state.unlocked()?;
     Ok(forwarder_of(&state, &connection_id)?.list())
 }
 
@@ -591,6 +653,7 @@ pub async fn tunnel_start(state: State<'_, AppState>, connection_id: String, spe
 
 #[tauri::command]
 pub fn tunnel_stop(state: State<'_, AppState>, connection_id: String, id: String) -> CmdResult<()> {
+    state.unlocked()?;
     forwarder_of(&state, &connection_id)?.stop(&id);
     Ok(())
 }
@@ -619,6 +682,7 @@ pub fn import_preview(
     path: Option<String>,
     folder: String,
 ) -> CmdResult<Vec<Candidate>> {
+    state.unlocked()?;
     let mut candidates = match source.as_str() {
         "ssh-config" => importers::ssh_config(&import_path(&source, path), &folder),
         "putty" => importers::putty(&folder),
@@ -635,11 +699,14 @@ pub fn import_preview(
 
 #[tauri::command]
 pub fn import_apply(state: State<'_, AppState>, sessions: Vec<Session>) -> CmdResult<usize> {
+    state.unlocked()?;
+    let sessions = clean_imported(&state, sessions);
     state.store.lock().unwrap().add_sessions(sessions).map_err(full)
 }
 
 #[tauri::command]
 pub fn export_backup(state: State<'_, AppState>, path: String) -> CmdResult<usize> {
+    state.unlocked()?;
     let (sessions, folders, snippets) = state.store.lock().unwrap().export_parts();
     let count = sessions.len();
     let notes = {
@@ -663,12 +730,13 @@ pub struct BackupReport {
 
 #[tauri::command]
 pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<BackupReport> {
+    state.unlocked()?;
     let backup = importers::read_backup(&PathBuf::from(path)).map_err(full)?;
     let (added, skipped, snippets) = state
         .store
         .lock()
         .unwrap()
-        .merge_backup(backup.sessions, backup.folders, backup.snippets)
+        .merge_backup(clean_imported(&state, backup.sessions), backup.folders, backup.snippets)
         .map_err(full)?;
     // Identifiants partagés absents : recréés sans mot de passe (à ressaisir).
     {
@@ -692,6 +760,10 @@ pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<Back
 /// Suggestions d'un champ (ex. ports COM présents), fournies par l'extension.
 #[tauri::command]
 pub fn field_suggestions(state: State<'_, AppState>, protocol: String, source: String) -> Vec<ChoiceOption> {
+    // Verrouillé : rien n'est montré (rechargé au déverrouillage).
+    if state.unlocked().is_err() {
+        return Vec::new();
+    }
     // Identifiants partagés : proposés par leur nom.
     if source == "credentials" {
         return state
@@ -727,6 +799,7 @@ pub fn field_suggestions(state: State<'_, AppState>, protocol: String, source: S
 /// Clavier / souris / presse-papiers vers un écran distant.
 #[tauri::command]
 pub fn screen_input(state: State<'_, AppState>, connection_id: String, event: InputEvent) -> CmdResult<()> {
+    state.unlocked()?;
     let connections = state.connections.lock().unwrap();
     let connection = connections.get(&connection_id).ok_or("Session fermée")?;
     connection.input(event).map_err(err)
@@ -843,6 +916,7 @@ pub fn recording_start(
     rows: u16,
     dir: Option<String>,
 ) -> CmdResult<String> {
+    state.unlocked()?;
     state.license.lock().unwrap().require(Feature::SessionRecording).map_err(full)?;
     if !state.connections.lock().unwrap().contains_key(&connection_id) {
         return Err("Session fermée".into());
@@ -859,6 +933,7 @@ pub fn recording_start(
 
 #[tauri::command]
 pub fn recording_stop(state: State<'_, AppState>, connection_id: String) -> CmdResult<Option<String>> {
+    state.unlocked()?;
     let recorder = state.recordings.lock().unwrap().remove(&connection_id);
     match recorder {
         Some(r) => Ok(Some(r.finish().map_err(full)?.display().to_string())),
@@ -867,17 +942,20 @@ pub fn recording_stop(state: State<'_, AppState>, connection_id: String) -> CmdR
 }
 
 #[tauri::command]
-pub fn recordings_list(app: AppHandle, dir: Option<String>) -> CmdResult<Vec<recording::RecordingInfo>> {
+pub fn recordings_list(app: AppHandle, state: State<'_, AppState>, dir: Option<String>) -> CmdResult<Vec<recording::RecordingInfo>> {
+    state.unlocked()?;
     Ok(recording::list(&recording_dir(&app, dir)?))
 }
 
 #[tauri::command]
-pub fn recording_read(app: AppHandle, dir: Option<String>, path: String) -> CmdResult<String> {
+pub fn recording_read(app: AppHandle, state: State<'_, AppState>, dir: Option<String>, path: String) -> CmdResult<String> {
+    state.unlocked()?;
     recording::read(&recording_dir(&app, dir)?, &path).map_err(full)
 }
 
 #[tauri::command]
-pub fn recording_delete(app: AppHandle, dir: Option<String>, path: String) -> CmdResult<()> {
+pub fn recording_delete(app: AppHandle, state: State<'_, AppState>, dir: Option<String>, path: String) -> CmdResult<()> {
+    state.unlocked()?;
     recording::delete(&recording_dir(&app, dir)?, &path).map_err(full)
 }
 
@@ -904,6 +982,7 @@ pub fn folder_colors(state: State<'_, AppState>) -> HashMap<String, String> {
 
 #[tauri::command]
 pub fn set_folder_color(state: State<'_, AppState>, path: String, color: Option<String>) -> CmdResult<()> {
+    state.unlocked()?;
     state.store.lock().unwrap().set_folder_color(&path, color).map_err(full)
 }
 
@@ -969,6 +1048,12 @@ pub async fn fs_edit_start(
 ) -> CmdResult<String> {
     use tauri_plugin_opener::OpenerExt;
     state.unlocked()?;
+    let name = remote.rsplit('/').next().unwrap_or_default();
+    if transfer::runs_when_opened(name) {
+        return Err(format!(
+            "« {name} » serait exécuté par Windows au lieu de s'ouvrir dans un éditeur : modification refusée par sécurité. Téléchargez-le si vous voulez l'examiner."
+        ));
+    }
     let files = files_of(&state, &connection_id)?;
     let id = uuid::Uuid::new_v4().simple().to_string();
     let local = transfer::edit_copy_path(&id, &remote);
@@ -1061,6 +1146,12 @@ const MAX_JUMPS: usize = 3;
 /// Valeurs d'une session, mots de passe compris.
 fn session_values(state: &AppState, session: &Session) -> CmdResult<HashMap<String, Value>> {
     let mut values = session.values.clone();
+    // Seuls les champs du formulaire comptent : une valeur cachée (fichier modifié à la main,
+    // ancienne importation) ne doit rien déclencher à la connexion.
+    if let Some(connector) = state.registry.get(&session.protocol) {
+        let manifest = connector.manifest();
+        values.retain(|k, _| manifest.fields.iter().any(|f| f.key == *k));
+    }
     for key in &session.secret_keys {
         if let Some(secret) = secrets::get(&session.id, key).map_err(err)? {
             values.insert(key.clone(), Value::String(secret));
@@ -1192,6 +1283,10 @@ pub fn note_set(state: State<'_, AppState>, session_id: String, text: String) ->
 /// Sessions qui ont une note.
 #[tauri::command]
 pub fn notes_list(state: State<'_, AppState>) -> Vec<String> {
+    // Verrouillé : rien n'est montré (rechargé au déverrouillage).
+    if state.unlocked().is_err() {
+        return Vec::new();
+    }
     state.notes.lock().unwrap().ids()
 }
 

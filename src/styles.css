@@ -575,3 +575,4 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .ct-filter { width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); }
 .ct-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: 13px; }
 .files-view { display: flex; flex-direction: column; position: relative; } .files-view > .files { flex: 1; min-height: 0; max-width: 1100px; width: 100%; margin: 0 auto; }
+.confirm-detail { display: block; padding: 10px 12px; background: var(--pop); border: 1px solid var(--line); border-radius: 6px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; word-break: break-all; user-select: all; }

@@ -134,6 +134,7 @@ pub fn run() {
             commands::container_action,
             commands::container_command,
             commands::connect_with,
+            commands::confirm_answer,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

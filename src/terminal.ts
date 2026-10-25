@@ -1,3 +1,4 @@
+import { handleConfirm } from './confirm';
 import { Highlighter } from './highlight';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -85,6 +86,13 @@ export class TerminalView {
       if (event.ctrlKey) openUrl(uri).catch(() => {});
     }));
     this.term.open(container);
+    // Collage natif (Ctrl+V, menu du navigateur) : même vérification que les autres collages.
+    container.addEventListener('paste', (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const text = e.clipboardData?.getData('text/plain');
+      if (text) this.pasteChecked(text);
+    }, true);
     this.useGpu();
     this.highlighter = new Highlighter(this.term);
     // Mesures de performance (page de démonstration, développement seulement).
@@ -242,6 +250,7 @@ export class TerminalView {
   }
 
   private onEvent(e: TermEvent) {
+    if (handleConfirm(e)) return;
     if (e instanceof ArrayBuffer) {
       this.term.write(new Uint8Array(e));
       return;
@@ -305,7 +314,20 @@ export class TerminalView {
   }
 
   private pasteClipboard() {
-    navigator.clipboard.readText().then((t) => { if (t) this.term.paste(t); }).catch(() => {});
+    navigator.clipboard.readText().then((t) => { if (t) this.pasteChecked(t); }).catch(() => {});
+  }
+
+  /**
+   * Collage de plusieurs lignes : confirmation, car chaque ligne partirait aussitôt comme une
+   * commande (texte copié d'une page web avec des lignes cachées…). Inutile si le shell a
+   * activé le collage encadré (bracketed paste) : rien ne s'exécute avant Entrée.
+   */
+  private async pasteChecked(text: string) {
+    const lines = text.replace(/\r\n?/g, '\n').replace(/\n$/, '').split('\n');
+    if (lines.length > 1 && !this.term.modes.bracketedPasteMode && settings().confirmMultilinePaste) {
+      if (!(await confirmPaste(lines))) return;
+    }
+    this.term.paste(text);
   }
 
   // ---------- Recherche (Ctrl+Maj+F) ----------
@@ -387,4 +409,24 @@ export function hasRealGpu(): boolean {
     gpuChecked = false;
   }
   return gpuChecked;
+}
+
+/** Demande confirmation avant de coller plusieurs lignes ; montre ce qui partira. */
+function confirmPaste(lines: string[]): Promise<boolean> {
+  return new Promise((resolve) => {
+    let ok = false;
+    const preview = lines.slice(0, 12).map((l) => (l.length > 160 ? `${l.slice(0, 160)}…` : l)).join('\n')
+      + (lines.length > 12 ? `\n… et ${lines.length - 12} ligne(s) de plus` : '');
+    const dialog = h('dialog', { class: 'dialog', 'aria-labelledby': 'paste-title', style: 'width: min(640px, calc(100vw - 32px))' },
+      h('header', { class: 'dlg-head' }, h('h2', { id: 'paste-title' }, `Coller ${lines.length} lignes ?`)),
+      h('div', { class: 'dlg-body' },
+        h('p', { style: 'margin: 0' }, 'Chaque ligne sera envoyée comme une commande, aussitôt. Vérifiez qu’il n’y a rien d’inattendu (un texte copié depuis une page web peut contenir des lignes invisibles).'),
+        h('pre', { class: 'confirm-detail', style: 'white-space: pre-wrap; max-height: 260px; overflow: auto; margin: 0' }, preview)),
+      h('footer', { class: 'dlg-foot' },
+        h('button', { type: 'button', class: 'btn', autofocus: true, onclick: () => dialog.close() }, 'Annuler'),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => { ok = true; dialog.close(); } }, 'Coller')));
+    dialog.addEventListener('close', () => { dialog.remove(); resolve(ok); });
+    document.body.append(dialog);
+    dialog.showModal();
+  });
 }

@@ -25,7 +25,7 @@ import { openImportExport } from './importexport';
 import { onSettingsChange, openSettingsDialog, settings } from './settings';
 import { Monitor } from './monitoring';
 import { checkForUpdates } from './updates';
-import { allows, currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
+import { allows, currentEdition, EDITION_LABEL, initLock, isLocked, loadLicense, lockNow } from './security';
 import { openRecordings, setPlayerHandler, stamp } from './recordings';
 import type { Player } from './player';
 import { folderColors, recordings, shells, ShellSpec } from './api';
@@ -790,7 +790,7 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (!e.ctrlKey || !e.shiftKey || document.querySelector('dialog[open]')) return;
+  if (!e.ctrlKey || !e.shiftKey || document.querySelector('dialog[open]') || isLocked()) return;
   const key = e.key.toLowerCase();
   if (key === 'k') { e.preventDefault(); search.focus(); search.select(); }
   else if (key === 'n') { e.preventDefault(); newSession(); }

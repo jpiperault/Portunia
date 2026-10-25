@@ -18,7 +18,28 @@ pub fn windows_name(name: &str) -> String {
         .map(|c| if "<>:\"/\\|?*".contains(c) || c.is_control() { '_' } else { c })
         .collect();
     let trimmed = cleaned.trim_end_matches(['.', ' ']).to_string();
-    if trimmed.is_empty() { "_".into() } else { trimmed }
+    if trimmed.is_empty() {
+        return "_".into();
+    }
+    // Noms réservés de Windows (CON, NUL, COM1, LPT1…), même suivis d'une extension.
+    let stem = trimmed.split('.').next().unwrap_or("").trim_end().to_uppercase();
+    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || ((stem.starts_with("COM") || stem.starts_with("LPT")) && stem.len() == 4 && stem.as_bytes()[3].is_ascii_digit());
+    if reserved { format!("_{trimmed}") } else { trimmed }
+}
+
+/// Extensions que Windows exécute (ou installe, ou monte) au lieu de les ouvrir dans un éditeur :
+/// « Modifier » ne doit jamais lancer un programme venu d'un serveur.
+const RUNS_WHEN_OPENED: &[&str] = &[
+    "exe", "com", "scr", "pif", "cpl", "msi", "msp", "msc", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf",
+    "wsh", "hta", "lnk", "url", "reg", "jar", "appref-ms", "application", "gadget", "inf", "scf", "settingcontent-ms",
+    "library-ms", "search-ms", "diagcab", "chm", "iso", "img", "vhd", "vhdx", "msix", "appx", "appinstaller", "xll",
+];
+
+/// Le fichier s'exécuterait si on l'ouvrait avec son application par défaut.
+pub fn runs_when_opened(name: &str) -> bool {
+    let lower = name.trim_end_matches(['.', ' ']).to_lowercase();
+    lower.rsplit_once('.').is_some_and(|(_, ext)| RUNS_WHEN_OPENED.contains(&ext))
 }
 
 fn remote_join(dir: &str, name: &str) -> String {
@@ -115,6 +136,28 @@ pub const EDIT_POLL: Duration = Duration::from_millis(800);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn noms_venus_du_serveur() {
+        assert_eq!(windows_name(r"..\..\Démarrage\x.exe"), ".._.._Démarrage_x.exe");
+        assert_eq!(windows_name(".."), "_");
+        assert_eq!(windows_name("a:flux"), "a_flux");
+        assert_eq!(windows_name("CON"), "_CON");
+        assert_eq!(windows_name("nul.txt"), "_nul.txt");
+        assert_eq!(windows_name("com1.log"), "_com1.log");
+        assert_eq!(windows_name("console.log"), "console.log");
+        assert_eq!(windows_name("COM10"), "COM10");
+    }
+
+    #[test]
+    fn fichiers_executables() {
+        for name in ["setup.exe", "run.BAT", "a.js", "lien.lnk", "x.hta", "piege.exe. ", "page.url"] {
+            assert!(runs_when_opened(name), "{name}");
+        }
+        for name in ["nginx.conf", "index.html", "script.sh", "notes.md", "exe", ".bashrc", "app.json"] {
+            assert!(!runs_when_opened(name), "{name}");
+        }
+    }
     use crate::connector::{BoxFuture, RemoteEntry};
     use std::{collections::BTreeMap, sync::Mutex};
 

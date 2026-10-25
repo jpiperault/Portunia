@@ -109,7 +109,8 @@ export interface Session {
 export type TermEvent =
   | ArrayBuffer
   | { event: 'closed'; data: string | null }
-  | { event: 'screen'; data: ScreenEvent };
+  | { event: 'screen'; data: ScreenEvent }
+  | { event: 'confirm'; data: { id: string; question: ConnectionQuestion } };
 
 export type ScreenEvent =
   | { type: 'resize'; width: number; height: number }
@@ -430,3 +431,8 @@ export function connectWith(sessionId: string, extra: Record<string, unknown>, l
   channel.onmessage = onEvent;
   return invoke<ConnectResponse>('connect_with', { sessionId, extra, label, cols, rows, onEvent: channel });
 }
+
+/** Question posée pendant une connexion (empreinte d'un nouveau serveur…). */
+export interface ConnectionQuestion { title: string; message: string; detail: string; accept: string; reject: string }
+
+export const answerConfirm = (id: string, accept: boolean) => invoke<void>('confirm_answer', { id, accept });

@@ -83,6 +83,17 @@ Performances : la sortie des terminaux est regroupée côté cœur et envoyée e
 
 Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F rechercher, Ctrl+Maj+C / Ctrl+Maj+V copier / coller dans le terminal, F2 renommer, Suppr supprimer.
 
+## Sécurité
+
+- **Mots de passe** dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ; les sauvegardes et imports n'en contiennent pas.
+- **Verrouillage** par mot de passe maître (PBKDF2, 600 000 itérations) ou Windows Hello : verrouillé, le cœur refuse toute action sensible (frappe dans un terminal, fichiers, export…) et l'interface est inerte ; essais limités (attente croissante après 5 échecs).
+- **Serveurs SSH** : empreinte affichée et confirmée à la première connexion (ou reprise de `~/.ssh/known_hosts`), connexion bloquée si la clé change ; algorithmes anciens seulement sur demande.
+- **Fichiers venus d'un serveur** : noms nettoyés (pas de `..\`, de flux NTFS ni de noms réservés) ; « Modifier » refuse les types que Windows exécuterait (.exe, .bat, .js, .lnk…).
+- **Imports** : seules les valeurs prévues par le formulaire sont gardées (pas de commande cachée).
+- **Terminal** : confirmation avant de coller plusieurs lignes ; liens ouverts seulement en http(s).
+- **Interface** : politique de contenu stricte, fenêtres web sans accès à l'application, mises à jour signées.
+- **Dépendances** : `cargo audit` et `npm audit` chaque semaine sur GitHub (`.github/workflows/securite.yml`) ; exception documentée dans `src-tauri/.cargo/audit.toml`.
+
 ## Architecture
 
 ```

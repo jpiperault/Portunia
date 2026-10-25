@@ -1,0 +1,28 @@
+# Vérifie chaque semaine (et à chaque envoi sur main) que les dépendances n'ont pas de
+# faille connue : base RustSec pour Rust, npm audit pour l'interface.
+name: Sécurité des dépendances
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - run: npm audit --omit=dev
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit
+        working-directory: src-tauri

@@ -292,6 +292,9 @@ fn x11_display(ctx: &ConnectContext) -> Result<Option<String>> {
     let host = if host.is_empty() || host == "localhost" { "127.0.0.1" } else { host };
     Ok(Some(format!("{host}:{}", 6000 + number)))
 }
+/// Établissement de la connexion SSH (empreinte d'un nouveau serveur à confirmer comprise).
+const HANDSHAKE: Duration = Duration::from_secs(330);
+
 /// Rebonds enchaînés au plus (bastion → bastion → serveur).
 const MAX_HOPS: usize = 3;
 
@@ -340,12 +343,20 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
                     .with_context(|| format!("{via} n'a pas pu joindre {host}:{port}"))?;
                 hops = earlier;
                 hops.push(bastion);
-                tokio::time::timeout(Duration::from_secs(15), client::connect_stream(config, tunnel.into_stream(), handler)).await
+                tokio::time::timeout(HANDSHAKE, client::connect_stream(config, tunnel.into_stream(), handler)).await
             }
-            _ => tokio::time::timeout(Duration::from_secs(15), client::connect(config, (host.as_str(), port), handler)).await,
+            // TCP : 15 s au plus. Poignée de main : plus longue, l'utilisateur peut avoir une empreinte à vérifier.
+            _ => match tokio::time::timeout(Duration::from_secs(15), tokio::net::TcpStream::connect((host.as_str(), port))).await {
+                Err(_) => bail!("Pas de réponse de {host}:{port} (délai dépassé)"),
+                Ok(Err(e)) => return Err(anyhow!(e).context(format!("Connexion impossible à {host}:{port}"))),
+                Ok(Ok(tcp)) => {
+                    let _ = tcp.set_nodelay(true);
+                    tokio::time::timeout(HANDSHAKE, client::connect_stream(config, tcp, handler)).await
+                }
+            },
         };
         let mut handle = match connected {
-            Err(_) => bail!("Pas de réponse de {host}:{port} (délai dépassé)"),
+            Err(_) => bail!("Pas de réponse de {host}:{port} pendant l'établissement de la connexion (délai dépassé)"),
             Ok(Ok(handle)) => handle,
             Ok(Err(e)) => {
                 // Clé du serveur refusée : on affiche l'explication détaillée.
@@ -657,37 +668,147 @@ impl client::Handler for Handler {
         };
         let fingerprint = public.fingerprint(HashAlg::Sha256).to_string();
 
-        let _guard = KNOWN_HOSTS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let mut known: HashMap<String, String> = fs::read_to_string(&self.known_hosts)
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default();
-
-        match known.get(&self.host_id) {
-            Some(expected) if *expected == fingerprint => Ok(true),
+        let expected = {
+            let _guard = KNOWN_HOSTS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            read_known(&self.known_hosts).get(&self.host_id).cloned()
+        };
+        match expected {
+            Some(expected) if expected == fingerprint => return Ok(true),
             Some(expected) => {
                 *self.rejection.lock().unwrap() = Some(format!(
                     "ATTENTION : la clé du serveur {} a changé.\n\
                      Attendue : {expected}\nReçue : {fingerprint}\n\
-                     Connexion refusée. Si ce changement est normal (serveur réinstallé), \
-                     supprimez la ligne « {} » de {}.",
+                     Connexion refusée : quelqu'un pourrait intercepter la connexion. Si ce changement \
+                     est normal (serveur réinstallé), supprimez la ligne « {} » de {}.",
                     self.host_id,
                     self.host_id,
                     self.known_hosts.display()
                 ));
-                Ok(false)
+                return Ok(false);
             }
-            None => {
-                known.insert(self.host_id.clone(), fingerprint.clone());
-                if let Ok(text) = serde_json::to_string_pretty(&known) {
-                    let _ = fs::write(&self.known_hosts, text);
-                }
-                self.sink.data(
-                    format!("\x1b[90m[Termoria] Nouveau serveur mémorisé ({fingerprint})\x1b[0m\r\n")
-                        .as_bytes(),
-                );
-                Ok(true)
-            }
+            None => {}
         }
+
+        // Serveur jamais vu par Termoria : déjà vérifié avec OpenSSH (~/.ssh/known_hosts) ?
+        let (host, port) = self.host_id.rsplit_once(':').map(|(h, p)| (h.to_string(), p.parse().unwrap_or(22))).unwrap_or((self.host_id.clone(), 22));
+        let openssh = openssh_fingerprints(&host, port);
+        let accepted = if openssh.contains(&fingerprint) {
+            self.sink.data(b"\x1b[90m[Termoria] Serveur reconnu (~/.ssh/known_hosts)\x1b[0m\r\n");
+            true
+        } else if !openssh.is_empty() {
+            *self.rejection.lock().unwrap() = Some(format!(
+                "ATTENTION : la clé du serveur {} ne correspond pas à celle de ~/.ssh/known_hosts.\n\
+                 Reçue : {fingerprint}\nConnexion refusée : quelqu'un pourrait intercepter la connexion.",
+                self.host_id
+            ));
+            return Ok(false);
+        } else {
+            // Première connexion : l'utilisateur confirme l'empreinte, comme avec OpenSSH.
+            let question = Confirm {
+                title: format!("Nouveau serveur : {}", self.host_id),
+                message: "Termoria ne connaît pas encore ce serveur. Vérifiez que l'empreinte ci-dessous est bien celle du \
+                          serveur (son administrateur peut l'obtenir avec « ssh-keygen -lf » sur la clé de l'hôte). \
+                          Elle sera mémorisée : un changement futur bloquera la connexion."
+                    .into(),
+                detail: format!("{} {fingerprint}", public.algorithm().as_str()),
+                accept: "Faire confiance et se connecter".into(),
+                reject: "Annuler".into(),
+            };
+            let answer = match self.sink.confirm(question) {
+                Some(rx) => matches!(tokio::time::timeout(Duration::from_secs(300), rx).await, Ok(Ok(true))),
+                None => {
+                    *self.rejection.lock().unwrap() = Some(format!(
+                        "Serveur {} jamais vérifié : ouvrez-le une fois dans un onglet pour confirmer sa clé.",
+                        self.host_id
+                    ));
+                    return Ok(false);
+                }
+            };
+            if !answer {
+                *self.rejection.lock().unwrap() = Some("Clé du serveur non confirmée : connexion annulée.".into());
+            }
+            answer
+        };
+        if accepted {
+            let _guard = KNOWN_HOSTS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let mut known = read_known(&self.known_hosts);
+            known.insert(self.host_id.clone(), fingerprint.clone());
+            if let Ok(text) = serde_json::to_string_pretty(&known) {
+                let _ = fs::write(&self.known_hosts, text);
+            }
+            self.sink.data(format!("\x1b[90m[Termoria] Nouveau serveur mémorisé ({fingerprint})\x1b[0m\r\n").as_bytes());
+        }
+        Ok(accepted)
+    }
+}
+
+fn read_known(path: &Path) -> HashMap<String, String> {
+    fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default()
+}
+
+/// Empreintes (SHA256) que ~/.ssh/known_hosts d'OpenSSH associe à cet hôte,
+/// noms hachés compris (« |1|sel|hachage »). Les lignes @revoked / @cert-authority sont ignorées.
+fn openssh_fingerprints(host: &str, port: u16) -> Vec<String> {
+    let Some(home) = std::env::var_os("USERPROFILE") else { return Vec::new() };
+    let Ok(text) = fs::read_to_string(Path::new(&home).join(".ssh").join("known_hosts")) else { return Vec::new() };
+    known_hosts_fingerprints(&text, host, port)
+}
+
+fn known_hosts_fingerprints(text: &str, host: &str, port: u16) -> Vec<String> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let name = if port == 22 { host.to_string() } else { format!("[{host}]:{port}") };
+    let matches_pattern = |pattern: &str| -> bool {
+        if let Some(rest) = pattern.strip_prefix("|1|") {
+            let Some((salt, hash)) = rest.split_once('|') else { return false };
+            let (Ok(salt), Ok(hash)) = (STANDARD.decode(salt), STANDARD.decode(hash)) else { return false };
+            let key = ring::hmac::Key::new(ring::hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, &salt);
+            ring::hmac::verify(&key, name.as_bytes(), &hash).is_ok()
+        } else {
+            pattern.eq_ignore_ascii_case(&name)
+        }
+    };
+    text.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#') && !l.starts_with('@'))
+        .filter_map(|l| {
+            let mut parts = l.split_whitespace();
+            let (hosts, kind, data) = (parts.next()?, parts.next()?, parts.next()?);
+            // Comme OpenSSH : un motif nié (« !hôte ») exclut l'hôte même si un autre le désigne.
+            if hosts.split(',').any(|p| p.strip_prefix('!').is_some_and(|n| matches_pattern(n)))
+                || !hosts.split(',').any(|p| !p.starts_with('!') && matches_pattern(p))
+            {
+                return None;
+            }
+            let key = PublicKey::from_openssh(&format!("{kind} {data}")).ok()?;
+            Some(key.fingerprint(HashAlg::Sha256).to_string())
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod known_hosts_tests {
+    use super::*;
+
+    /// Lignes hachées par « ssh-keygen -H » (OpenSSH pour Windows), empreinte donnée par « ssh-keygen -lf ».
+    const HASHED: &str = "|1|eU2qlFkRlru2Yq/D0ZzGFZOVwTU=|jAAoef4DunMYjIgbcAIpwEGTv0Q= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtq4SAHiITjyoq6OPA+F5+5y55c4DI3V84+mrrXmMTK\n\
+|1|/Undn3L5YO/g20k1MjhgjsI+IuI=|mF1yyWud6qkaqdi1BTMvSrL3iZk= ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtq4SAHiITjyoq6OPA+F5+5y55c4DI3V84+mrrXmMTK\n";
+    const FINGERPRINT: &str = "SHA256:fi111SBeLJCCWkbnrVt90w0E72Z2bW4rRWilXUkm4R4";
+
+    #[test]
+    fn noms_haches_d_openssh() {
+        assert_eq!(known_hosts_fingerprints(HASHED, "example.com", 22), vec![FINGERPRINT.to_string()]);
+        assert_eq!(known_hosts_fingerprints(HASHED, "example.com", 2222), vec![FINGERPRINT.to_string()]);
+        assert!(known_hosts_fingerprints(HASHED, "example.org", 22).is_empty());
+        assert!(known_hosts_fingerprints(HASHED, "example.com", 2200).is_empty());
+    }
+
+    #[test]
+    fn noms_en_clair_et_marqueurs() {
+        let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOtq4SAHiITjyoq6OPA+F5+5y55c4DI3V84+mrrXmMTK";
+        let text = format!("# commentaire\nsrv1,10.0.0.1 {key}\n@revoked srv2 {key}\n!srv3,srv3 {key}\n");
+        assert_eq!(known_hosts_fingerprints(&text, "10.0.0.1", 22), vec![FINGERPRINT.to_string()]);
+        assert_eq!(known_hosts_fingerprints(&text, "SRV1", 22).len(), 1);
+        assert!(known_hosts_fingerprints(&text, "srv2", 22).is_empty(), "les clés révoquées ne valent pas confiance");
+        assert!(known_hosts_fingerprints(&text, "srv3", 22).is_empty(), "motif nié");
     }
 }

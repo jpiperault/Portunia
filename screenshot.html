@@ -84,7 +84,7 @@
           case 'list_snippets': return [];
           case 'folder_colors': return { Production: 'red', 'Lab maison': 'green', Clients: 'blue' };
           case 'license_status': return { edition: 'free', preview: true, license: null, expired: false, features: ['sessionRecording', 'monitoringAlerts', 'serverDashboard', 'multiExec', 'containers', 'cloudStorage'].map((feature) => ({ feature, label: feature, edition: 'pro', allowed: true })) };
-          case 'lock_status': return { enabled: false, locked: false, hello: false, helloAvailable: true, timeoutMinutes: 15 };
+          case 'lock_status': return { enabled: location.search.includes('locked'), locked: location.search.includes('locked'), hello: false, helloAvailable: true, timeoutMinutes: 15 };
           case 'monitor_check': return args.targets.map((t, i) => t.id === 's5'
             ? { id: t.id, up: false, latencyMs: null, error: 'pas de réponse en 3 s' }
             : { id: t.id, up: true, latencyMs: 8 + (i * 7) % 30, error: null });
@@ -92,6 +92,12 @@
           case 'connect': {
             const s = sessions.find((x) => x.id === args.sessionId);
             window.__mock.channels.push(chId(args.onEvent));
+            if (s.name === 'recette-app') {
+              const id = chId(args.onEvent);
+              window.__mockConfirm = (accept) => accept ? send(id, bytes(terminalText(s.name))) : send(id, { event: 'closed', data: 'Clé du serveur non confirmée : connexion annulée.' });
+              setTimeout(() => send(id, { event: 'confirm', data: { id: 'q1', question: { title: 'Nouveau serveur : recette.dupont.example:22', message: 'Termoria ne connaît pas encore ce serveur. Vérifiez que l’empreinte ci-dessous est bien celle du serveur (son administrateur peut l’obtenir avec « ssh-keygen -lf » sur la clé de l’hôte). Elle sera mémorisée : un changement futur bloquera la connexion.', detail: 'ssh-ed25519 SHA256:fi111SBeLJCCWkbnrVt90w0E72Z2bW4rRWilXUkm4R4', accept: 'Faire confiance et se connecter', reject: 'Annuler' } } }), 150);
+              return { connectionId: 'c-' + args.sessionId, view: 'terminal', message: null };
+            }
             const id = chId(args.onEvent);
             setTimeout(() => send(id, bytes(terminalText(s.name))), 200);
             return { connectionId: 'c-' + args.sessionId, view: 'terminal', message: null };
@@ -99,6 +105,7 @@
           case 'fs_home': return '/home/deploy';
           case 'fs_list': return [E('releases', true, 0, 3600), E('scripts', true, 0, 86400), E('site', true, 0, 7200), E('.bashrc', false, 3771, 864000), E('backup-2026-10-23.tar.gz', false, 48234112, 50000), E('deploy.sh', false, 2048, 3600), E('notes.md', false, 1210, 600)];
           case 'tunnel_list': return [];
+          case 'confirm_answer': window.__mockConfirm?.(args.accept); return null;
           case 'containers_list': return {
             docker: { state: 'ok', items: [
               { id: 'ab12cd34ef56', name: 'web', image: 'nginx:1.27-alpine', state: 'running', status: 'Up 3 days' },

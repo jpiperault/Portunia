@@ -40,6 +40,8 @@ export interface Settings {
   localShells: { hidden: string[]; defaultId: string; custom: ShellSpec[]; atStartup: boolean };
   /** Rendu des terminaux : carte graphique (WebGL) si elle existe, toujours, ou jamais. */
   gpu: 'auto' | 'on' | 'off';
+  /** Confirmation avant de coller plusieurs lignes dans un terminal. */
+  confirmMultilinePaste: boolean;
   /** Mise en évidence de mots-clés dans les terminaux. */
   highlight: { enabled: boolean; rules: HighlightRule[] };
 }
@@ -63,6 +65,7 @@ export const DEFAULTS: Settings = {
   termTheme: 'auto',
   localShells: { hidden: [], defaultId: '', custom: [], atStartup: false },
   gpu: 'auto',
+  confirmMultilinePaste: true,
   highlight: { enabled: true, rules: DEFAULT_RULES },
 };
 
@@ -99,7 +102,7 @@ export const fontStack = (s: Settings) => `"${s.fontFamily}", "Cascadia Mono", C
 
 export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'error') => void) {
   const s = settings();
-  const check = (key: 'copyOnSelect' | 'rightClickPaste' | 'autoReconnect' | 'autoUpdate', label: string, hint: string) =>
+  const check = (key: 'copyOnSelect' | 'rightClickPaste' | 'autoReconnect' | 'autoUpdate' | 'confirmMultilinePaste', label: string, hint: string) =>
     h('label', { class: 'check setting' },
       h('input', { type: 'checkbox', checked: s[key], onchange: (e: Event) => updateSettings({ [key]: (e.target as HTMLInputElement).checked }) }),
       h('span', {}, label, h('span', { class: 'muted small block' }, hint)));
@@ -145,6 +148,7 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         h('p', { class: 'muted small', style: 'margin: 0' }, 'S’applique aux nouveaux onglets. Sans carte graphique (machine virtuelle, bureau à distance), le rendu classique est plus rapide.'),
         check('copyOnSelect', 'Copier automatiquement la sélection', 'Le texte sélectionné à la souris part dans le presse-papiers.'),
         check('rightClickPaste', 'Clic droit : copier ou coller', 'Avec une sélection, le clic droit copie ; sinon il colle (comme PuTTY).'),
+        check('confirmMultilinePaste', 'Confirmer avant de coller plusieurs lignes', 'Chaque ligne partirait aussitôt comme une commande : un texte copié d’une page web peut en cacher.'),
         h('h3', { class: 'label' }, 'Mise en évidence'),
         highlightSettings(),
         h('h3', { class: 'label' }, 'Connexion'),
