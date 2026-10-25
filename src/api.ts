@@ -1,7 +1,7 @@
 // Appels vers le cœur Rust (voir src-tauri/src/commands.rs).
 import { Channel, invoke } from '@tauri-apps/api/core';
 
-export type ViewKind = 'terminal' | 'screen' | 'desktop' | 'web';
+export type ViewKind = 'terminal' | 'screen' | 'desktop' | 'web' | 'files';
 
 export interface ChoiceOption { value: string; label: string }
 

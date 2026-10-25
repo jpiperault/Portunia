@@ -1,4 +1,4 @@
-// Explorateur de fichiers côté serveur (SFTP) : un panneau par onglet SSH.
+// Explorateur de fichiers côté serveur : panneau des onglets SSH (SFTP), ou onglet entier (FTP, S3…).
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { api, errorText, remoteFiles, RemoteEntry } from './api';
 import { h, icon } from './dom';
@@ -50,7 +50,11 @@ export class FilePanel {
   private dropping = false;
   private editing: Editing[] = [];
 
-  constructor(private readonly toast: (msg: string, kind?: 'info' | 'error') => void) {
+  constructor(
+    private readonly toast: (msg: string, kind?: 'info' | 'error') => void,
+    /** Protocole affiché dans l'en-tête (SFTP, FTPS, S3…). */
+    private readonly protocolLabel = 'SFTP',
+  ) {
     this.render();
   }
 
@@ -229,7 +233,7 @@ export class FilePanel {
 
     this.el.replaceChildren(
       h('div', { class: 'files-head' },
-        h('strong', {}, 'Fichiers'), h('span', { class: 'muted small grow' }, 'SFTP'),
+        h('strong', {}, 'Fichiers'), h('span', { class: 'muted small grow' }, this.protocolLabel),
         btn('home', 'Dossier personnel', async () => { if (this.connectionId) this.load(await api.fsHome(this.connectionId)); }),
         btn('up', 'Dossier parent', () => this.load(parent(this.cwd))),
         btn('refresh', 'Actualiser', () => this.load(this.cwd)),

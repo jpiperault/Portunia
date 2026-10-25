@@ -85,7 +85,7 @@ export function icon(name: keyof typeof ICONS | string, size = 16): SVGSVGElemen
 }
 
 export function viewIcon(view: string): string {
-  return view === 'desktop' || view === 'screen' ? 'desktop' : view === 'web' ? 'web' : 'terminal';
+  return view === 'desktop' || view === 'screen' ? 'desktop' : view === 'web' ? 'web' : view === 'files' ? 'files' : 'terminal';
 }
 
 /** Étiquette courte et couleur pour un protocole. */

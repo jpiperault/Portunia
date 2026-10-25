@@ -5,6 +5,7 @@ import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
 import { ContainersPanel } from './containers';
+import { FilesView } from './filesview';
 import { createMultiExec, MultiExecView } from './multiexec';
 import { openCredentialManager } from './credentials';
 import { createNetTools, NetToolsView, wakeSession } from './nettools';
@@ -66,6 +67,8 @@ interface Tab {
   containers?: ContainersPanel;
   /** Onglet ouvert sur une commande distante (shell ou journaux d'un conteneur). */
   remoteCommand?: string;
+  /** Onglet « fichiers seulement » (FTP, S3…). */
+  filesView?: FilesView;
 }
 
 const state = {
@@ -183,7 +186,7 @@ function renderTree() {
 // ---------- Onglets ----------
 
 /** Vue d'un onglet de session : terminal ou écran distant. */
-const viewOf = (tab: Tab): TerminalView | ScreenView | undefined => tab.term ?? tab.screen;
+const viewOf = (tab: Tab): TerminalView | ScreenView | FilesView | undefined => tab.term ?? tab.screen ?? tab.filesView;
 
 // ---------- Écran partagé ----------
 
@@ -360,7 +363,7 @@ function renderToolbar() {
         title: state.noteIds.has(session.id) ? 'Notes de cette session (une note existe)' : 'Notes de cette session (Markdown)',
         onclick: () => toggleNotes(tab),
       }, icon('edit', 14), state.noteIds.has(session.id) ? 'Notes •' : 'Notes'),
-      tab.files && h('button', {
+      tab.files && !tab.filesView && h('button', {
         class: `btn${shownSide(tab) === 'files' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'files'), title: 'Afficher / masquer l\'explorateur de fichiers',
         onclick: () => showSide(tab, 'files'),
       }, icon('files', 14), 'Fichiers'),
@@ -374,7 +377,8 @@ type SidePanel = 'files' | 'notes' | 'server' | 'containers' | '';
 
 /** Panneau réellement affiché pour cet onglet (celui demandé s'il existe, sinon les fichiers). */
 function shownSide(tab: Tab | undefined): SidePanel {
-  if (!tab || !state.side) return '';
+  // Onglet « fichiers seulement » : l'explorateur est déjà au centre.
+  if (!tab || !state.side || tab.filesView) return '';
   if (state.side === 'notes' && tab.notes) return 'notes';
   if (state.side === 'server' && tab.server) return 'server';
   if (state.side === 'containers' && tab.containers) return 'containers';
@@ -600,16 +604,17 @@ async function openSession(session: Session, quick?: QuickTarget) {
   view.addEventListener('pointerdown', (e) => {
     if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
   }, true);
-  if (proto.fileBrowser) tab.files = new FilePanel(toast);
+  if (proto.fileBrowser) tab.files = new FilePanel(toast, session.protocol === 'ftp' ? (session.values.security === 'none' ? 'FTP' : 'FTPS') : session.protocol === 's3' ? 'S3' : 'SFTP');
   const onState = (s: TermState, reason?: string) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
     // Connexion rapide SSH refusée (pas de clé, pas d'agent) : on demande les identifiants et on réessaie.
-    if (s === 'closed' && quick?.protocol === 'ssh' && reason && !reason.includes('Serveur de rebond') && /Authentification refusée|Champ requis manquant : Utilisateur/.test(reason)) {
+    const refused = quick?.protocol === 'ssh' ? /Authentification refusée|Champ requis manquant : Utilisateur/ : quick?.protocol === 'ftp' ? /Identifiants refusés/ : null;
+    if (s === 'closed' && quick && refused && reason && !reason.includes('Serveur de rebond') && refused.test(reason)) {
       askCredentials(quick, reason).then((cred) => {
         if (!cred || !state.tabs.includes(tab)) return;
-        Object.assign(quick.values, { username: cred.username, auth: 'password', password: cred.password });
-        quick.name = `${cred.username}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}${quick.values.jump ? ` via ${quick.values.jump}` : ''}`;
+        Object.assign(quick.values, { username: cred.username, password: cred.password }, quick.protocol === 'ssh' ? { auth: 'password' } : {});
+        if (quick.protocol === 'ssh') quick.name = `${cred.username}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}${quick.values.jump ? ` via ${quick.values.jump}` : ''}`;
         tab.title = quick.name;
         reconnect(tab);
       });
@@ -621,6 +626,12 @@ async function openSession(session: Session, quick?: QuickTarget) {
     renderAll();
   };
   state.tabs.push(tab);
+  if (proto.view === 'files' && tab.files) {
+    tab.filesView = new FilesView(termEl, tab.files, onState);
+    activate(tab.id);
+    await tab.filesView.connectWith(opener, session.name);
+    return;
+  }
   if (proto.view === 'screen') {
     tab.screen = new ScreenView(termEl, onState);
     tab.screen.onDetached = (message) => { toast(message); closeTab(tab.id); };
@@ -771,7 +782,7 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
   const files = activeTab()?.files;
   if (!files) return;
   if (payload.type === 'leave') return files.setDropping(false);
-  const inside = overFiles(payload.position);
+  const inside = !!activeTab()?.filesView || overFiles(payload.position);
   files.setDropping(payload.type !== 'drop' && inside);
   if (payload.type === 'drop' && inside) files.uploadPaths(payload.paths);
 });

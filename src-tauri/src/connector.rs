@@ -35,6 +35,8 @@ pub enum ViewKind {
     Desktop,
     /// Page web (consoles d'administration).
     Web,
+    /// Explorateur de fichiers seul (FTP, S3…) : pas de terminal.
+    Files,
 }
 
 #[derive(Serialize, Clone)]

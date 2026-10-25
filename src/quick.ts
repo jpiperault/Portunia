@@ -55,6 +55,17 @@ export function parseQuick(input: string): QuickTarget | null {
     } catch { return null; }
   }
 
+  // ftp://user@hôte, ftps://hôte:2121
+  const ftp = text.match(/^(ftps?):\/\/(.+?)\/?$/i);
+  if (ftp) {
+    const t = splitTarget(ftp[2]);
+    if (!t) return null;
+    const values: Record<string, unknown> = { host: t.host, security: ftp[1].toLowerCase() === 'ftps' ? 'explicit' : 'none' };
+    if (t.port) values.port = t.port;
+    if (t.user) values.username = t.user;
+    return { protocol: 'ftp', name: `${ftp[1].toLowerCase()}://${t.user ? `${t.user}@` : ''}${t.host}${t.port ? `:${t.port}` : ''}`, values };
+  }
+
   // ssh://user@hôte:port, rdp://hôte…
   const scheme = text.match(/^(ssh|rdp|vnc|telnet):\/\/(.+)$/i);
   const [keyword, target] = scheme
@@ -87,7 +98,7 @@ export function parseQuick(input: string): QuickTarget | null {
 }
 
 /** Texte d'aide affiché sous la barre de connexion rapide. */
-export const QUICK_HELP = 'ssh user@hôte[:port] · ssh -J bastion user@hôte · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · COM3@9600';
+export const QUICK_HELP = 'ssh user@hôte[:port] · ssh -J bastion user@hôte · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · ftps://user@hôte · COM3@9600';
 
 // ---------- Historique des connexions rapides ----------
 

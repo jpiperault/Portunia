@@ -19,6 +19,7 @@ impl Registry {
         registry.register(Arc::new(connectors::telnet::TelnetConnector));
         registry.register(Arc::new(connectors::vnc::VncConnector));
         registry.register(Arc::new(connectors::serial::SerialConnector));
+        registry.register(Arc::new(connectors::ftp::FtpConnector));
         registry.register(Arc::new(connectors::local::LocalShellConnector));
         registry
     }

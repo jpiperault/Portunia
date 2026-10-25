@@ -26,6 +26,7 @@
       const field = (key, label, type, extra) => Object.assign({ key, label, kind: { type }, required: false }, extra || {});
       const protocols = [
         { id: 'ssh', name: 'SSH', version: '0.3.0', description: 'Terminal sécurisé : clé privée, mot de passe ou agent.', view: 'terminal', builtin: true, fileBrowser: true, portForwarding: true, fields: [field('host', 'Hôte', 'text', { required: true }), field('port', 'Port', 'number'), Object.assign(field('credential', 'Identifiants partagés', 'suggest'), { kind: { type: 'suggest', source: 'credentials' }, placeholder: 'Vide = identifiants propres à cette session' }), field('username', 'Utilisateur', 'text', { required: true, hiddenBy: 'credential' }), field('password', 'Mot de passe', 'secret', { hiddenBy: 'credential' })] },
+        { id: 'ftp', name: 'FTP / FTPS', version: '0.1.0', description: 'Fichiers d’un serveur FTP, chiffré (FTPS) ou non.', view: 'files', builtin: true, fileBrowser: true, portForwarding: false, fields: [field('host', 'Hôte', 'text', { required: true }), field('port', 'Port', 'number')] },
         { id: 'rdp', name: 'Bureau à distance (RDP)', version: '0.2.0', description: 'Bureau Windows dans un onglet (IronRDP), ou dans le client Windows.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
         { id: 'vnc', name: 'VNC', version: '0.1.0', description: 'Écran distant affiché dans un onglet.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
         { id: 'web', name: 'Interface web', version: '0.1.0', description: 'Console d\'administration dans une fenêtre dédiée.', view: 'web', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('url', 'Adresse', 'text')] },
@@ -44,6 +45,7 @@
         S('s8', 'proxmox', 'Lab maison', 'web', { url: 'https://192.168.1.5:8006' }),
         S('s9', 'arduino', 'Lab maison', 'serial', { port: 'COM4' }),
         S('s10', 'recette-app', 'Clients/Dupont', 'ssh', { host: 'recette.dupont.example', port: 22, username: 'ops' }),
+        S('s11', 'ftp-hebergeur', 'Clients/Dupont', 'ftp', { host: 'ftp.dupont.example', security: 'explicit', username: 'dupont' }),
       ];
 
       const prompt = (h) => `\x1b[1;32mdeploy@${h}\x1b[0m:\x1b[1;34m~\x1b[0m$ `;
