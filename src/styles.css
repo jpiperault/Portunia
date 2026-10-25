@@ -298,6 +298,9 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .tun-remote { display: inline-flex; align-items: center; gap: 4px; }
 .tun-remote[hidden] { display: none; }
 .tun-remote input[type=text] { width: 170px; }
+.fld .tun-row select { width: auto; height: 32px; }
+.fld .tun-row input.tun-port { width: 84px; height: 32px; }
+.fld .tun-remote input[type=text] { width: 170px; height: 32px; }
 .tun-list { display: flex; flex-direction: column; gap: 6px; }
 .tun-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 .tun-item.on { border-color: #2c5a44; }

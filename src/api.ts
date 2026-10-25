@@ -54,7 +54,7 @@ export interface TransferProgress { done: number; total: number }
 export interface TunnelSpec {
   id: string;
   /** local = ssh -L (un port du PC mène à une machine vue depuis le serveur) ; dynamic = proxy SOCKS (ssh -D). */
-  kind: 'local' | 'dynamic';
+  kind: 'local' | 'dynamic' | 'remote';
   bindPort: number;
   remoteHost: string;
   remotePort: number;

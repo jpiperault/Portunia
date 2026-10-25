@@ -25,7 +25,7 @@ use russh::{
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
-use super::forward::SshForwarder;
+use super::forward::{serve_remote, RemoteForwards, SshForwarder};
 use super::sftp::SftpFiles;
 use crate::connector::*;
 use serde_json::Value;
@@ -37,7 +37,7 @@ impl Connector for SshConnector {
         Manifest {
             id: "ssh".into(),
             name: "SSH".into(),
-            version: "0.4.0".into(),
+            version: "0.5.0".into(),
             description: "Terminal sécurisé : clé privée, mot de passe ou agent.".into(),
             view: ViewKind::Terminal,
             builtin: true,
@@ -82,6 +82,10 @@ impl Connector for SshConnector {
                     .placeholder("Vide = connexion directe. Session SSH ou utilisateur@hôte:port"),
                 Field::new("mac", "Adresse MAC (Wake-on-LAN)", FieldKind::Text)
                     .placeholder("Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine"),
+                Field::new("x11", "Afficher les applications graphiques du serveur (X11)", FieldKind::Bool).default(false),
+                Field::new("x11Display", "Serveur X de ce PC", FieldKind::Text)
+                    .placeholder("localhost:0 (VcXsrv, X410…)")
+                    .show_if("x11", "true"),
                 Field::new("tunnels", "Tunnels", FieldKind::Tunnels),
             ],
         }
@@ -92,11 +96,14 @@ impl Connector for SshConnector {
         // session continue dans une tâche asynchrone.
         let (tx, rx) = unbounded_channel();
         let sink = ctx.sink.clone();
-        let (handle, channel, hops) = tauri::async_runtime::block_on(open(&ctx))?;
+        // Ports ouverts sur le serveur (-R) : leurs connexions arrivent au gestionnaire SSH.
+        let remote: RemoteForwards = Arc::default();
+        let extras = Extras { remote: remote.clone(), x11: x11_display(&ctx)? };
+        let (handle, channel, hops) = tauri::async_runtime::block_on(open(&ctx, &extras))?;
         let handle = Arc::new(handle);
         // L'explorateur de fichiers ouvre son propre canal SFTP sur la même connexion.
         let files: Arc<dyn RemoteFiles> = Arc::new(SftpFiles::new(handle.clone()));
-        let forwarder: Arc<dyn PortForwarder> = Arc::new(SshForwarder::new(handle.clone()));
+        let forwarder: Arc<dyn PortForwarder> = Arc::new(SshForwarder::new(handle.clone(), remote));
         let exec: Arc<dyn RemoteExec> = Arc::new(SshExec { handle: handle.clone() });
 
         // Tunnels à ouvrir dès la connexion.
@@ -205,12 +212,20 @@ type Hops = Vec<Handle>;
 
 /// Ouvre la session SSH et son terminal. Les connexions aux serveurs de rebond
 /// sont renvoyées pour rester ouvertes aussi longtemps que la session.
-async fn open(ctx: &ConnectContext) -> Result<(Handle, Channel, Hops)> {
-    let (handle, hops) = session(ctx, 0).await?;
+async fn open(ctx: &ConnectContext, extras: &Extras) -> Result<(Handle, Channel, Hops)> {
+    let (handle, hops) = session(ctx, 0, Some(extras)).await?;
     let channel = handle.channel_open_session().await?;
     channel
         .request_pty(false, "xterm-256color", ctx.cols as u32, ctx.rows as u32, 0, 0, &[])
         .await?;
+    if extras.x11.is_some() {
+        // Le serveur crée un DISPLAY ; les applications graphiques arrivent au gestionnaire SSH.
+        let cookie = uuid::Uuid::new_v4().simple().to_string();
+        channel
+            .request_x11(false, false, "MIT-MAGIC-COOKIE-1", cookie, 0)
+            .await
+            .map_err(|e| anyhow!("Affichage X11 refusé par le serveur : {e} (X11Forwarding yes dans sshd_config ?)"))?;
+    }
     // « remoteCommand » (shell d'un conteneur, journaux…) : lancée à la place du shell, avec terminal.
     match ctx.str("remoteCommand") {
         Some(command) => channel.exec(false, command.as_bytes()).await?,
@@ -226,7 +241,7 @@ const MAX_OUTPUT: usize = 64 * 1024;
 /// Lance une commande sans terminal (connexion dédiée, fermée ensuite).
 /// Les messages de la connexion (clé du serveur, rebonds) sont ignorés.
 pub async fn run_command(ctx: &ConnectContext, command: &str, timeout: Duration) -> Result<ExecOutput> {
-    let (handle, hops) = session(ctx, 0).await?;
+    let (handle, hops) = session(ctx, 0, None).await?;
     let result = tokio::time::timeout(timeout, async {
         let mut channel = handle.channel_open_session().await?;
         channel.exec(true, command.as_bytes()).await?;
@@ -258,12 +273,31 @@ impl Sink for QuietSink {
     fn data(&self, _bytes: &[u8]) {}
     fn closed(&self, _reason: Option<String>) {}
 }
+
+/// Ce que seule la session d'un terminal reçoit (pas les bastions ni les commandes multiples).
+struct Extras {
+    remote: RemoteForwards,
+    /// Adresse TCP du serveur X de ce PC.
+    x11: Option<String>,
+}
+
+/// « localhost:0 », « :1 », « 127.0.0.1:0.0 » → « 127.0.0.1:6000 » (port 6000 + écran).
+fn x11_display(ctx: &ConnectContext) -> Result<Option<String>> {
+    if !ctx.bool("x11") {
+        return Ok(None);
+    }
+    let display = ctx.str("x11Display").unwrap_or_else(|| "localhost:0".into());
+    let (host, rest) = display.rsplit_once(':').ok_or_else(|| anyhow!("Écran X11 invalide : {display} (ex. localhost:0)"))?;
+    let number: u16 = rest.split('.').next().unwrap_or("0").parse().map_err(|_| anyhow!("Écran X11 invalide : {display}"))?;
+    let host = if host.is_empty() || host == "localhost" { "127.0.0.1" } else { host };
+    Ok(Some(format!("{host}:{}", 6000 + number)))
+}
 /// Rebonds enchaînés au plus (bastion → bastion → serveur).
 const MAX_HOPS: usize = 3;
 
 /// Connexion authentifiée, directe ou à travers le serveur de rebond `jumpHost`
 /// (valeurs complètes d'une autre session, préparées par le cœur).
-fn session(ctx: &ConnectContext, depth: usize) -> Pin<Box<dyn Future<Output = Result<(Handle, Hops)>> + Send + '_>> {
+fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>) -> Pin<Box<dyn Future<Output = Result<(Handle, Hops)>> + Send + 'a>> {
     Box::pin(async move {
         let host = ctx.require("host", "Hôte")?;
         let port = ctx.port(22)?;
@@ -282,6 +316,9 @@ fn session(ctx: &ConnectContext, depth: usize) -> Pin<Box<dyn Future<Output = Re
             host_id: format!("{host}:{port}"),
             sink: ctx.sink.clone(),
             rejection: rejection.clone(),
+            remote: extras.map(|e| e.remote.clone()),
+            x11: extras.and_then(|e| e.x11.clone()),
+            x11_warned: Arc::default(),
         };
 
         let mut hops = Hops::new();
@@ -293,7 +330,7 @@ fn session(ctx: &ConnectContext, depth: usize) -> Pin<Box<dyn Future<Output = Re
                 let mut hop = ctx.clone();
                 hop.values = jump.clone().into_iter().collect();
                 let via = hop.str("host").unwrap_or_default();
-                let (bastion, earlier) = session(&hop, depth + 1)
+                let (bastion, earlier) = session(&hop, depth + 1, None)
                     .await
                     .with_context(|| format!("Serveur de rebond {via}"))?;
                 ctx.sink.data(format!("\x1b[90m[Termoria] Rebond par {via} vers {host}:{port}\x1b[0m\r\n").as_bytes());
@@ -521,12 +558,74 @@ struct Handler {
     sink: Arc<dyn Sink>,
     /// Explication à afficher si la clé du serveur est refusée.
     rejection: Arc<Mutex<Option<String>>>,
+    /// Ports ouverts sur le serveur (-R), seulement pour la session d'un terminal.
+    remote: Option<RemoteForwards>,
+    /// Serveur X de ce PC (adresse TCP) si l'affichage X11 est demandé.
+    x11: Option<String>,
+    x11_warned: Arc<std::sync::atomic::AtomicBool>,
 }
 
 static KNOWN_HOSTS_LOCK: Mutex<()> = Mutex::new(());
 
 impl client::Handler for Handler {
     type Error = russh::Error;
+
+    /// Connexion reçue sur un port ouvert sur le serveur (-R) : reliée à sa destination sur ce PC.
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: russh::Channel<client::Msg>,
+        _connected_address: &str,
+        connected_port: u32,
+        _originator_address: &str,
+        _originator_port: u32,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let target = self.remote.as_ref().and_then(|r| {
+            r.lock().unwrap().get(&connected_port).map(|t| (t.host.clone(), t.port, t.stats.clone()))
+        });
+        match target {
+            Some((host, port, stats)) => {
+                reply.accept().await;
+                tokio::spawn(serve_remote(channel, host, port, stats));
+            }
+            None => reply.reject(russh::ChannelOpenFailure::AdministrativelyProhibited).await,
+        }
+        Ok(())
+    }
+
+    /// Application graphique lancée sur le serveur : reliée au serveur X de ce PC (VcXsrv, X410…).
+    async fn server_channel_open_x11(
+        &mut self,
+        channel: russh::Channel<client::Msg>,
+        _originator_address: &str,
+        _originator_port: u32,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let Some(display) = self.x11.clone() else {
+            reply.reject(russh::ChannelOpenFailure::AdministrativelyProhibited).await;
+            return Ok(());
+        };
+        reply.accept().await;
+        let (sink, warned) = (self.sink.clone(), self.x11_warned.clone());
+        tokio::spawn(async move {
+            match tokio::net::TcpStream::connect(&display).await {
+                Ok(mut local) => {
+                    let mut remote = channel.into_stream();
+                    let _ = tokio::io::copy_bidirectional(&mut remote, &mut local).await;
+                }
+                Err(_) if !warned.swap(true, std::sync::atomic::Ordering::Relaxed) => {
+                    sink.data(format!(
+                        "\r\n\x1b[33m[Termoria] Une application graphique veut s'afficher, mais aucun serveur X ne répond sur {display}.\r\n\
+                         Démarrez VcXsrv (« Disable access control » coché) ou X410, puis relancez l'application.\x1b[0m\r\n"
+                    ).as_bytes());
+                }
+                Err(_) => {}
+            }
+        });
+        Ok(())
+    }
 
     /// Avertit dans le terminal si la connexion utilise un algorithme faible.
     async fn kex_done(

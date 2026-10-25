@@ -135,6 +135,7 @@ pub fn parse_ssh_config(text: &str, folder: &str) -> Vec<Candidate> {
             let mut opts: HashMap<String, String> = HashMap::new();
             let mut local = Vec::new();
             let mut dynamic = Vec::new();
+            let mut remote = Vec::new();
             for (pats, options) in &blocks {
                 let applies = pats.iter().any(|p| !p.starts_with('!') && glob(p, alias))
                     && !pats.iter().any(|p| p.strip_prefix('!').is_some_and(|n| glob(n, alias)));
@@ -145,6 +146,7 @@ pub fn parse_ssh_config(text: &str, folder: &str) -> Vec<Candidate> {
                     match k.as_str() {
                         "localforward" => local.push(v.clone()),
                         "dynamicforward" => dynamic.push(v.clone()),
+                        "remoteforward" => remote.push(v.clone()),
                         _ => {
                             opts.entry(k.clone()).or_insert_with(|| v.clone());
                         }
@@ -174,6 +176,18 @@ pub fn parse_ssh_config(text: &str, folder: &str) -> Vec<Candidate> {
                 if let Some(bp) = bind_port(spec) {
                     tunnels.push(tunnel(TunnelKind::Dynamic, bp, "", 0));
                 }
+            }
+            // RemoteForward port_du_serveur hôte:port (vu depuis ce PC)
+            for spec in &remote {
+                let mut parts = spec.split_whitespace();
+                if let (Some(bind), Some(dest)) = (parts.next(), parts.next()) {
+                    if let (Some(bp), Some((h, p))) = (bind_port(bind), split_host_port(dest)) {
+                        tunnels.push(tunnel(TunnelKind::Remote, bp, &h, p));
+                    }
+                }
+            }
+            if opts.get("forwardx11").is_some_and(|v| v.eq_ignore_ascii_case("yes")) {
+                values.push(("x11", json!(true)));
             }
             if !tunnels.is_empty() {
                 values.push(("tunnels", json!(tunnels)));
@@ -239,6 +253,11 @@ pub fn parse_putty_forwards(s: &str) -> Vec<TunnelSpec> {
                     Some(tunnel(TunnelKind::Local, bind_port(bind)?, &h, p))
                 }
                 "D" => Some(tunnel(TunnelKind::Dynamic, bind_port(rest.trim_end_matches('='))?, "", 0)),
+                "R" => {
+                    let (bind, dest) = rest.split_once('=')?;
+                    let (h, p) = split_host_port(dest)?;
+                    Some(tunnel(TunnelKind::Remote, bind_port(bind)?, &h, p))
+                }
                 _ => None,
             }
         })
@@ -450,6 +469,8 @@ Host web prod-web
     IdentityFile ~/.ssh/id_prod
     LocalForward 8080 localhost:80
     DynamicForward 1080
+    RemoteForward 9090 localhost:3000
+    ForwardX11 yes
 
 Host db
     HostName %h.interne
@@ -472,9 +493,11 @@ Host *
         assert_eq!(web.values["username"], json!("deploy"));
         assert!(web.values["keyPath"].as_str().unwrap().ends_with("id_prod"));
         let tunnels: Vec<TunnelSpec> = serde_json::from_value(web.values["tunnels"].clone()).unwrap();
-        assert_eq!(tunnels.len(), 2);
+        assert_eq!(tunnels.len(), 3);
         assert_eq!((tunnels[0].bind_port, tunnels[0].remote_host.as_str(), tunnels[0].remote_port), (8080, "localhost", 80));
         assert_eq!(tunnels[1].kind, TunnelKind::Dynamic);
+        assert_eq!((tunnels[2].kind, tunnels[2].bind_port, tunnels[2].remote_port), (TunnelKind::Remote, 9090, 3000));
+        assert_eq!(web.values["x11"], json!(true));
 
         let db = &c[2];
         assert_eq!(db.session.values["host"], json!("db.interne"));
@@ -486,10 +509,11 @@ Host *
     #[test]
     fn redirections_putty() {
         let t = parse_putty_forwards("L8080=localhost:80,D1080,R9000=x:1,4L2222=db.local:22");
-        assert_eq!(t.len(), 3);
+        assert_eq!(t.len(), 4);
         assert_eq!((t[0].bind_port, t[0].remote_port), (8080, 80));
         assert_eq!(t[1].kind, TunnelKind::Dynamic);
-        assert_eq!((t[2].bind_port, t[2].remote_host.as_str()), (2222, "db.local"));
+        assert_eq!((t[2].kind, t[2].bind_port, t[2].remote_host.as_str(), t[2].remote_port), (TunnelKind::Remote, 9000, "x", 1));
+        assert_eq!((t[3].bind_port, t[3].remote_host.as_str()), (2222, "db.local"));
         assert_eq!(percent_decode("Mon%20serveur%2Fprod"), "Mon serveur/prod");
     }
 

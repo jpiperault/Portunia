@@ -8,35 +8,44 @@ export const newTunnel = (): TunnelSpec => ({
 });
 
 export const describe = (t: TunnelSpec) =>
-  t.kind === 'dynamic' ? `Proxy SOCKS sur localhost:${t.bindPort}` : `localhost:${t.bindPort} → ${t.remoteHost}:${t.remotePort}`;
+  t.kind === 'dynamic' ? `Proxy SOCKS sur localhost:${t.bindPort}`
+  : t.kind === 'remote' ? `serveur:${t.bindPort} → ${t.remoteHost}:${t.remotePort} (ce PC)`
+  : `localhost:${t.bindPort} → ${t.remoteHost}:${t.remotePort}`;
 
 /** Lignes de saisie d'un tunnel (type, ports, destination). */
 function tunnelRow(t: TunnelSpec, onChange: () => void, onRemove?: () => void, withAuto = true): HTMLElement {
+  const row = h('div', { class: 'tun-row' });
   const num = (key: 'bindPort' | 'remotePort', label: string) =>
     h('input', {
       type: 'number', min: '1', max: '65535', value: String(t[key]), 'aria-label': label, title: label, class: 'tun-port',
       oninput: (e: Event) => { t[key] = Number((e.target as HTMLInputElement).value); onChange(); },
     });
-  const remote = h('span', { class: 'tun-remote', hidden: t.kind === 'dynamic' },
-    h('input', {
-      type: 'text', value: t.remoteHost, placeholder: 'hôte vu depuis le serveur', 'aria-label': 'Hôte de destination', spellcheck: 'false',
-      oninput: (e: Event) => { t.remoteHost = (e.target as HTMLInputElement).value.trim(); onChange(); },
-    }),
-    ':', num('remotePort', 'Port de destination'));
-  return h('div', { class: 'tun-row' },
-    h('select', {
-      'aria-label': 'Type de tunnel',
-      onchange: (e: Event) => { t.kind = (e.target as HTMLSelectElement).value as TunnelSpec['kind']; remote.hidden = t.kind === 'dynamic'; onChange(); },
-    },
-      h('option', { value: 'local', selected: t.kind === 'local' }, 'Port local'),
-      h('option', { value: 'dynamic', selected: t.kind === 'dynamic' }, 'Proxy SOCKS')),
-    h('span', { class: 'muted small' }, 'localhost:'), num('bindPort', 'Port sur ce PC'),
-    h('span', { class: 'muted', hidden: t.kind === 'dynamic' }, '→'),
-    remote,
-    withAuto && h('label', { class: 'check small', title: 'Ouvrir automatiquement à la connexion' },
-      h('input', { type: 'checkbox', checked: t.autoStart, onchange: (e: Event) => { t.autoStart = (e.target as HTMLInputElement).checked; onChange(); } }),
-      'auto'),
-    onRemove && h('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Supprimer ce tunnel', title: 'Supprimer', onclick: onRemove }, icon('trash', 14)));
+  const render = () => {
+    const reverse = t.kind === 'remote';
+    row.replaceChildren(
+      h('select', {
+        'aria-label': 'Type de tunnel',
+        onchange: (e: Event) => { t.kind = (e.target as HTMLSelectElement).value as TunnelSpec['kind']; onChange(); render(); },
+      },
+        h('option', { value: 'local', selected: t.kind === 'local' }, 'Port local'),
+        h('option', { value: 'dynamic', selected: t.kind === 'dynamic' }, 'Proxy SOCKS'),
+        h('option', { value: 'remote', selected: reverse }, 'Port du serveur (inverse)')),
+      h('span', { class: 'muted small' }, reverse ? 'serveur:' : 'localhost:'), num('bindPort', reverse ? 'Port ouvert sur le serveur' : 'Port sur ce PC'),
+      ...(t.kind === 'dynamic' ? [] : [
+        h('span', { class: 'muted' }, '→'),
+        h('span', { class: 'tun-remote' },
+          h('input', {
+            type: 'text', value: t.remoteHost, placeholder: reverse ? 'hôte vu depuis ce PC' : 'hôte vu depuis le serveur', 'aria-label': 'Hôte de destination', spellcheck: 'false',
+            oninput: (e: Event) => { t.remoteHost = (e.target as HTMLInputElement).value.trim(); onChange(); },
+          }),
+          ':', num('remotePort', 'Port de destination'))]),
+      ...(withAuto ? [h('label', { class: 'check small', title: 'Ouvrir automatiquement à la connexion' },
+        h('input', { type: 'checkbox', checked: t.autoStart, onchange: (e: Event) => { t.autoStart = (e.target as HTMLInputElement).checked; onChange(); } }),
+        'auto')] : []),
+      ...(onRemove ? [h('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Supprimer ce tunnel', title: 'Supprimer', onclick: onRemove }, icon('trash', 14))] : []));
+  };
+  render();
+  return row;
 }
 
 /** Champ « Tunnels » du formulaire de session. */
@@ -48,7 +57,8 @@ export function tunnelEditor(initial: unknown, onChange: (tunnels: TunnelSpec[])
       h('legend', {}, 'Tunnels'),
       h('p', { class: 'muted small tun-help' },
         '« Port local » : une adresse de ce PC (localhost:8080) mène à une machine que le serveur sait joindre, par exemple une base de données interne. ',
-        '« Proxy SOCKS » : réglez votre navigateur sur ce proxy pour naviguer comme si vous étiez sur le serveur.'),
+        '« Proxy SOCKS » : réglez votre navigateur sur ce proxy pour naviguer comme si vous étiez sur le serveur. ',
+        '« Port du serveur » (ssh -R) : un port du serveur mène à une machine de votre côté, par exemple pour montrer une application qui tourne sur ce PC.'),
       ...tunnels.map((t, i) => tunnelRow(t, () => onChange(tunnels), () => { tunnels.splice(i, 1); onChange(tunnels); render(); })),
       h('button', { type: 'button', class: 'btn', style: 'align-self: flex-start', onclick: () => { tunnels.push(newTunnel()); onChange(tunnels); render(); } },
         icon('plus', 14), 'Ajouter un tunnel'));

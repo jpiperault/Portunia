@@ -235,6 +235,8 @@ pub enum TunnelKind {
     Local,
     /// Proxy SOCKS5 sur ce PC : tout passe par le serveur (ssh -D).
     Dynamic,
+    /// Un port du serveur mène à `remote_host:remote_port` vu depuis ce PC (ssh -R).
+    Remote,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -260,6 +262,10 @@ impl TunnelSpec {
                 self.bind_port, self.remote_host, self.remote_port
             ),
             TunnelKind::Dynamic => format!("proxy SOCKS localhost:{}", self.bind_port),
+            TunnelKind::Remote => format!(
+                "serveur:{} → {}:{} (ce PC)",
+                self.bind_port, self.remote_host, self.remote_port
+            ),
         }
     }
 }

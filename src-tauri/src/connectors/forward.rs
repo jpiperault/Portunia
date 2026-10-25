@@ -1,5 +1,6 @@
-//! Tunnels SSH : redirection de port locale (ssh -L) et proxy SOCKS5 (ssh -D).
-//! Les ports n'écoutent que sur 127.0.0.1 : rien n'est exposé au réseau.
+//! Tunnels SSH : redirection de port locale (ssh -L), proxy SOCKS5 (ssh -D) et
+//! redirection inverse (ssh -R). Les ports de ce PC n'écoutent que sur 127.0.0.1,
+//! ceux du serveur que sur sa boucle locale : rien n'est exposé au réseau.
 
 use std::{
     collections::HashMap,
@@ -22,26 +23,41 @@ use crate::connector::{BoxFuture, PortForwarder, TunnelKind, TunnelSpec, TunnelS
 
 struct Running {
     spec: TunnelSpec,
-    listener: JoinHandle<()>,
+    /// Écoute locale (-L, -D) ; aucune pour -R (c'est le serveur qui écoute).
+    listener: Option<JoinHandle<()>>,
+    /// Port ouvert sur le serveur (-R).
+    remote_port: Option<u32>,
     stats: Arc<Stats>,
 }
 
 #[derive(Default)]
-struct Stats {
+pub struct Stats {
     connections: AtomicU32,
     last_error: Mutex<Option<String>>,
 }
 
+/// Destination d'un port ouvert sur le serveur (-R), partagée avec le gestionnaire SSH
+/// qui reçoit les connexions « forwarded-tcpip ».
+pub struct RemoteTarget {
+    pub host: String,
+    pub port: u16,
+    pub stats: Arc<Stats>,
+}
+
+pub type RemoteForwards = Arc<Mutex<HashMap<u32, RemoteTarget>>>;
+
 pub struct SshForwarder<H: client::Handler> {
     handle: Arc<client::Handle<H>>,
     running: Mutex<HashMap<String, Running>>,
+    remote: RemoteForwards,
 }
 
 impl<H: client::Handler> SshForwarder<H> {
-    pub fn new(handle: Arc<client::Handle<H>>) -> Self {
+    pub fn new(handle: Arc<client::Handle<H>>, remote: RemoteForwards) -> Self {
         Self {
             handle,
             running: Mutex::new(HashMap::new()),
+            remote,
         }
     }
 }
@@ -49,7 +65,9 @@ impl<H: client::Handler> SshForwarder<H> {
 impl<H: client::Handler> Drop for SshForwarder<H> {
     fn drop(&mut self) {
         for (_, tunnel) in self.running.lock().unwrap().drain() {
-            tunnel.listener.abort();
+            if let Some(l) = tunnel.listener {
+                l.abort();
+            }
         }
     }
 }
@@ -57,10 +75,23 @@ impl<H: client::Handler> Drop for SshForwarder<H> {
 impl<H: client::Handler + 'static> PortForwarder for SshForwarder<H> {
     fn start(&self, spec: TunnelSpec) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            if spec.kind == TunnelKind::Local && (spec.remote_host.trim().is_empty() || spec.remote_port == 0) {
+            if spec.kind != TunnelKind::Dynamic && (spec.remote_host.trim().is_empty() || spec.remote_port == 0) {
                 bail!("Indiquez l'hôte et le port de destination");
             }
             if self.running.lock().unwrap().contains_key(&spec.id) {
+                return Ok(());
+            }
+            if spec.kind == TunnelKind::Remote {
+                // Le serveur écoute sur sa boucle locale ; ses connexions arrivent au gestionnaire SSH.
+                let port = self
+                    .handle
+                    .tcpip_forward("127.0.0.1", spec.bind_port as u32)
+                    .await
+                    .map_err(|e| anyhow!("Le serveur refuse d'ouvrir le port {} : {e} (AllowTcpForwarding ?)", spec.bind_port))?;
+                let port = if port == 0 { spec.bind_port as u32 } else { port };
+                let stats = Arc::new(Stats::default());
+                self.remote.lock().unwrap().insert(port, RemoteTarget { host: spec.remote_host.clone(), port: spec.remote_port, stats: stats.clone() });
+                self.running.lock().unwrap().insert(spec.id.clone(), Running { spec, listener: None, remote_port: Some(port), stats });
                 return Ok(());
             }
             let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, spec.bind_port));
@@ -82,14 +113,22 @@ impl<H: client::Handler + 'static> PortForwarder for SshForwarder<H> {
                     });
                 }
             });
-            self.running.lock().unwrap().insert(spec.id.clone(), Running { spec, listener: task, stats });
+            self.running.lock().unwrap().insert(spec.id.clone(), Running { spec, listener: Some(task), remote_port: None, stats });
             Ok(())
         })
     }
 
     fn stop(&self, id: &str) {
-        if let Some(tunnel) = self.running.lock().unwrap().remove(id) {
-            tunnel.listener.abort();
+        let Some(tunnel) = self.running.lock().unwrap().remove(id) else { return };
+        if let Some(l) = tunnel.listener {
+            l.abort();
+        }
+        if let Some(port) = tunnel.remote_port {
+            self.remote.lock().unwrap().remove(&port);
+            let handle = self.handle.clone();
+            spawn(async move {
+                let _ = handle.cancel_tcpip_forward("127.0.0.1", port).await;
+            });
         }
     }
 
@@ -117,6 +156,7 @@ async fn serve<H: client::Handler>(
     let (host, port) = match spec.kind {
         TunnelKind::Local => (spec.remote_host.clone(), spec.remote_port),
         TunnelKind::Dynamic => socks5_handshake(&mut socket).await?,
+        TunnelKind::Remote => unreachable!("-R : pas d'écoute locale"),
     };
     let channel = handle
         .channel_open_direct_tcpip(host.clone(), port as u32, peer.ip().to_string(), peer.port() as u32)
@@ -215,4 +255,22 @@ mod tests {
         let req: &[u8] = &[5, 1, 0, 5, 1, 0, 1, 10, 0, 0, 12, 0, 80];
         assert_eq!(handshake(req).await.unwrap(), ("10.0.0.12".into(), 80));
     }
+}
+
+/// Connexion arrivée par un port ouvert sur le serveur (-R) : reliée à la destination sur ce PC.
+pub async fn serve_remote(channel: russh::Channel<client::Msg>, host: String, port: u16, stats: Arc<Stats>) {
+    stats.connections.fetch_add(1, Ordering::Relaxed);
+    let result = async {
+        let mut local = TcpStream::connect((host.as_str(), port))
+            .await
+            .with_context(|| format!("{host}:{port} injoignable depuis ce PC"))?;
+        let mut remote = channel.into_stream();
+        tokio::io::copy_bidirectional(&mut remote, &mut local).await?;
+        Ok::<_, anyhow::Error>(())
+    }
+    .await;
+    if let Err(e) = result {
+        *stats.last_error.lock().unwrap() = Some(format!("{e:#}"));
+    }
+    stats.connections.fetch_sub(1, Ordering::Relaxed);
 }

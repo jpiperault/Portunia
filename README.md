@@ -63,7 +63,8 @@ Autres fonctions :
 - terminal : recherche dans l'historique (Ctrl+Maj+F), police et taille réglables (Ctrl + molette), copier/coller au clic droit, liens ouverts par Ctrl+clic ;
 - écran partagé (jusqu'à 4 sessions côte à côte) et saisie multiple (Ctrl+Maj+B) pour taper la même chose sur plusieurs serveurs ;
 - commandes enregistrées (Ctrl+Maj+P) : par session, par dossier ou pour toutes, avec variables {{host}}, {{username}}… ;
-- tunnels SSH : port local (ssh -L) et proxy SOCKS5 (ssh -D), ouverts à la connexion ou à la demande, n'écoutant que sur 127.0.0.1 ;
+- tunnels SSH : port local (ssh -L), proxy SOCKS5 (ssh -D) et port du serveur vers ce PC (ssh -R), ouverts à la connexion ou à la demande, n'écoutant que sur les boucles locales ; repris de ~/.ssh/config et de PuTTY ;
+- X11 : les applications graphiques lancées sur le serveur s'affichent sur ce PC (avec VcXsrv ou X410) ;
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi et téléchargement de fichiers ou de dossiers entiers (glisser-déposer compris), édition d'un fichier distant dans votre éditeur avec renvoi automatique à chaque enregistrement, création, renommage, suppression, suivi des transferts ;
 - import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Termoria ;
