@@ -45,6 +45,7 @@ pub fn run() {
             commands::save_session,
             commands::delete_session,
             commands::connect,
+            commands::connect_quick,
             commands::term_write,
             commands::term_resize,
             commands::disconnect,

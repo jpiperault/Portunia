@@ -1,7 +1,10 @@
 // Écran distant (VNC…) affiché dans un onglet : image dans un canvas, clavier et souris renvoyés.
-import { api, errorText, InputEvent, ScreenEvent, TermEvent } from './api';
+import { api, ConnectResponse, errorText, InputEvent, ScreenEvent, TermEvent } from './api';
 import { h } from './dom';
 import type { TermState } from './terminal';
+
+/** Ouvre la connexion à la taille demandée (session enregistrée ou connexion rapide). */
+export type ScreenOpener = (width: number, height: number, onEvent: (e: TermEvent) => void) => Promise<ConnectResponse>;
 
 /** Touches spéciales → « keysym » X11 (RFC 6143). */
 const KEYSYMS: Record<string, number> = {
@@ -37,7 +40,7 @@ export class ScreenView {
   private readonly ctx = this.canvas.getContext('2d', { alpha: false })!;
   private readonly status = h('div', { class: 'screen-status' });
   private connectionId: string | null = null;
-  private sessionId = '';
+  private opener: ScreenOpener | null = null;
   private label = '';
   private connecting = false;
   private disposed = false;
@@ -72,14 +75,18 @@ export class ScreenView {
     return this.connectionId;
   }
 
-  async connect(sessionId: string, label: string) {
-    this.sessionId = sessionId;
+  connect(sessionId: string, label: string) {
+    return this.connectWith((width, height, onEvent) => api.connect(sessionId, width, height, onEvent), label);
+  }
+
+  async connectWith(opener: ScreenOpener, label: string) {
+    this.opener = opener;
     this.label = label;
     this.setStatus(`Connexion à ${label}…`);
     this.onState('connecting');
     this.connecting = true;
     try {
-      const res = await api.connect(sessionId, Math.max(640, this.container.clientWidth), Math.max(480, this.container.clientHeight), (e) => this.onEvent(e)).finally(() => { this.connecting = false; });
+      const res = await opener(Math.max(640, this.container.clientWidth), Math.max(480, this.container.clientHeight), (e) => this.onEvent(e)).finally(() => { this.connecting = false; });
       if (this.disposed) {
         if (res.connectionId) api.disconnect(res.connectionId).catch(() => {});
         return;
@@ -102,8 +109,8 @@ export class ScreenView {
   }
 
   reconnectNow() {
-    if (this.connectionId || this.connecting || !this.sessionId) return;
-    this.connect(this.sessionId, this.label);
+    if (this.connectionId || this.connecting || !this.opener) return;
+    this.connectWith(this.opener, this.label);
   }
 
   cancelReconnect() { /* pas de reconnexion automatique pour un écran */ }

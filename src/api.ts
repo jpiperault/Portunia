@@ -283,3 +283,11 @@ export const shells = {
   },
   openElevated: (shell: ShellSpec) => invoke<void>('open_shell_elevated', { shell }),
 };
+
+// ---------- Connexion rapide ----------
+
+export function connectQuick(protocol: string, name: string, values: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+  const channel = new Channel<TermEvent>();
+  channel.onmessage = onEvent;
+  return invoke<ConnectResponse>('connect_quick', { protocol, name, values, cols, rows, onEvent: channel });
+}

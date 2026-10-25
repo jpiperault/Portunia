@@ -216,23 +216,52 @@ pub async fn connect(
         .unwrap()
         .get(&session_id)
         .ok_or("Session introuvable")?;
-    let connector = state
-        .registry
-        .get(&session.protocol)
-        .ok_or_else(|| format!("Extension « {} » non installée", session.protocol))?;
-    let view = connector.manifest().view;
-
     let mut values = session.values.clone();
     for key in &session.secret_keys {
         if let Some(secret) = secrets::get(&session.id, key).map_err(err)? {
             values.insert(key.clone(), Value::String(secret));
         }
     }
+    start_connection(&app, &state, &session.protocol, session.name.clone(), values, cols, rows, on_event).await
+}
 
+/// Connexion rapide : sans session enregistrée (« ssh deploy@10.0.1.12 »).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn connect_quick(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    protocol: String,
+    name: String,
+    values: HashMap<String, Value>,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<TermEvent>,
+) -> CmdResult<ConnectResponse> {
+    state.unlocked()?;
+    start_connection(&app, &state, &protocol, name, values, cols, rows, on_event).await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn start_connection(
+    app: &AppHandle,
+    state: &AppState,
+    protocol: &str,
+    name: String,
+    values: HashMap<String, Value>,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<TermEvent>,
+) -> CmdResult<ConnectResponse> {
+    let connector = state
+        .registry
+        .get(protocol)
+        .ok_or_else(|| format!("Extension « {protocol} » non installée"))?;
+    let view = connector.manifest().view;
     let connection_id = uuid::Uuid::new_v4().to_string();
     let ctx = ConnectContext {
         app: app.clone(),
-        session_name: session.name.clone(),
+        session_name: name,
         values,
         cols: cols.max(2),
         rows: rows.max(2),

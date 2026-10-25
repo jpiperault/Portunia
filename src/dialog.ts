@@ -13,9 +13,11 @@ interface Opts {
   folders: string[];
   existing?: Session;
   defaultFolder?: string;
+  /** Titre de la fenêtre (sinon « Nouvelle session » ou « Modifier la session »). */
+  title?: string;
 }
 
-export function openSessionDialog({ protocols, folders, existing, defaultFolder }: Opts): Promise<DialogResult | null> {
+export function openSessionDialog({ protocols, folders, existing, defaultFolder, title }: Opts): Promise<DialogResult | null> {
   return new Promise((resolve) => {
     let protocol = protocols.find((p) => p.id === existing?.protocol) ?? protocols[0];
     // Valeurs saisies, conservées quand on change de protocole.
@@ -135,7 +137,7 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder 
     const dialog = h('dialog', { class: 'dialog', 'aria-labelledby': 'dlg-title' },
       h('form', { method: 'dialog', onsubmit: (e: Event) => { e.preventDefault(); submit(true); } },
         h('header', { class: 'dlg-head' },
-          h('h2', { id: 'dlg-title' }, existing ? 'Modifier la session' : 'Nouvelle session'),
+          h('h2', { id: 'dlg-title' }, title ?? (existing ? 'Modifier la session' : 'Nouvelle session')),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: () => close(null) }, icon('close'))),
         h('div', { class: 'dlg-body' },
           h('fieldset', { class: 'fld' }, h('legend', {}, 'Protocole'), picker),

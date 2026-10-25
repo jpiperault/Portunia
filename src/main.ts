@@ -1,7 +1,8 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, errorText, Manifest, Session, Snippet } from './api';
-import { badge, h, icon } from './dom';
+import { api, connectQuick, errorText, Manifest, Session, Snippet, TermEvent } from './api';
+import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
+import { badge, h, icon, viewIcon } from './dom';
 import { openSessionDialog } from './dialog';
 import { renderExtensions } from './extensions';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -29,6 +30,8 @@ interface Tab {
   shell?: ShellSpec;
   title: string;
   sessionId?: string;
+  /** Connexion rapide (pas de session enregistrée). */
+  quick?: QuickTarget;
   protocol?: string;
   view: HTMLElement;
   term?: TerminalView;
@@ -260,13 +263,14 @@ function renderTabs() {
       paint(tabEl, colorOf(sessionOf(t.sessionId)?.folder ?? '', state.folderColors));
       return tabEl;
     }),
+    h('button', { class: 'icon-btn', 'aria-label': 'Palette : sessions, shells, actions et connexion rapide', title: 'Aller à… ou connexion rapide (Ctrl Maj O)', onclick: () => openGlobalPalette() }, icon('search')),
     h('button', { class: 'icon-btn', 'aria-label': 'Ouvrir une session ou un shell local', title: 'Nouvelle session ou shell local (Ctrl Maj T : shell par défaut)', onclick: (e: MouseEvent) => openPlusMenu(e) }, icon('plus')),
   );
 }
 
 function renderToolbar() {
   const tab = activeTab();
-  const session = sessionOf(tab?.sessionId);
+  const session = sessionOf(tab?.sessionId) ?? (tab?.quick && quickSession(tab.quick));
   if (tab?.kind === 'local' && tab.shell) return renderLocalToolbar(tab, tab.shell);
   if (!tab || tab.kind !== 'session' || !session) {
     toolbar.replaceChildren();
@@ -290,7 +294,7 @@ function renderToolbar() {
     h('div', { class: 'toolbar-actions' },
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
       tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => viewOf(tab)?.cancelReconnect() }, icon('close', 14), 'Annuler la reconnexion'),
-      tab.state === 'connected' && protocolOf(session.protocol)?.portForwarding && h('button', {
+      !tab.quick && tab.state === 'connected' && protocolOf(session.protocol)?.portForwarding && h('button', {
         class: 'btn', title: 'Redirections de ports à travers cette session',
         onclick: () => { const id = tab.term?.connection; if (id) openTunnels(session, id, toast, () => reload()); },
       }, icon('tunnel', 14), 'Tunnels'),
@@ -314,7 +318,9 @@ function renderToolbar() {
         class: `btn${state.showFiles ? ' on' : ''}`, 'aria-pressed': String(state.showFiles), title: 'Afficher / masquer l\'explorateur de fichiers',
         onclick: () => { state.showFiles = !state.showFiles; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
       }, icon('files', 14), 'Fichiers'),
-      h('button', { class: 'btn', onclick: () => editSession(session) }, icon('edit', 14), 'Modifier')),
+      tab.quick
+        ? h('button', { class: 'btn primary', title: 'Garder cette connexion dans la liste des sessions', onclick: () => tab.quick && saveQuick(tab.quick) }, icon('plus', 14), 'Enregistrer comme session')
+        : h('button', { class: 'btn', onclick: () => editSession(session) }, icon('edit', 14), 'Modifier')),
   );
 }
 
@@ -428,14 +434,40 @@ function closeTab(id: string) {
 
 // ---------- Sessions ----------
 
-async function openSession(session: Session) {
+/** Session éphémère d'une connexion rapide (jamais enregistrée telle quelle). */
+const quickSession = (t: QuickTarget): Session => ({ id: '', name: t.name, folder: '', protocol: t.protocol, values: t.values, tags: [], secretKeys: [] });
+
+/** Connexion rapide : un onglet sans session enregistrée (valeurs par défaut de l'extension complétées). */
+function openQuick(target: QuickTarget) {
+  const defaults = Object.fromEntries((protocolOf(target.protocol)?.fields ?? []).filter((f) => f.default !== undefined).map((f) => [f.key, f.default]));
+  const full = { ...target, values: { ...defaults, ...target.values } };
+  return openSession(quickSession(full), full);
+}
+
+/** Propose d'enregistrer une connexion rapide comme session (formulaire prérempli). */
+async function saveQuick(target: QuickTarget) {
+  const result = await openSessionDialog({
+    protocols: state.protocols, folders: folders(), title: 'Enregistrer comme session',
+    // Le mot de passe saisi pour la connexion rapide n'est pas repris.
+    existing: quickSession({ ...target, values: { ...withoutPassword(target.values) } }),
+  });
+  if (!result) return;
+  await reload();
+  toast(`Session « ${result.session.name} » enregistrée`);
+  if (result.connect) await openSession(result.session);
+}
+
+async function openSession(session: Session, quick?: QuickTarget) {
   const proto = protocolOf(session.protocol);
   if (!proto) return toast(`Extension « ${session.protocol} » non installée`, 'error');
+  const opener = (cols: number, rows: number, onEvent: (e: TermEvent) => void) => quick
+    ? connectQuick(quick.protocol, quick.name, quick.values, cols, rows, onEvent)
+    : api.connect(session.id, cols, rows, onEvent);
 
   // Bureau à distance (client Windows) et web s'ouvrent dans leur propre fenêtre.
   if (proto.view === 'desktop' || proto.view === 'web') {
     try {
-      const res = await api.connect(session.id, 80, 24, () => {});
+      const res = await opener(80, 24, () => {});
       toast(res.message ?? `${session.name} ouvert`);
     } catch (e) {
       toast(errorText(e), 'error');
@@ -443,7 +475,7 @@ async function openSession(session: Session) {
     return;
   }
 
-  const existing = state.tabs.find((t) => t.sessionId === session.id);
+  const existing = !quick && state.tabs.find((t) => t.sessionId === session.id);
   if (existing) return activate(existing.id);
 
   const termEl = h('div', { class: 'term-view' });
@@ -451,8 +483,8 @@ async function openSession(session: Session) {
   const view = h('div', { class: 'pane' }, paneHead, termEl);
   views.append(view);
   const tab: Tab = {
-    id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: session.id, protocol: session.protocol,
-    view, paneHead, state: 'connecting', receive: true,
+    id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: quick ? undefined : session.id, protocol: session.protocol,
+    quick, view, paneHead, state: 'connecting', receive: true,
   };
   // Cliquer dans un volet de l'écran partagé le rend actif.
   view.addEventListener('pointerdown', (e) => {
@@ -462,6 +494,16 @@ async function openSession(session: Session) {
   const onState = (s: TermState, reason?: string) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
+    // Connexion rapide SSH refusée (pas de clé, pas d'agent) : on demande les identifiants et on réessaie.
+    if (s === 'closed' && quick?.protocol === 'ssh' && reason && /Authentification refusée|Champ requis manquant : Utilisateur/.test(reason)) {
+      askCredentials(quick, reason).then((cred) => {
+        if (!cred || !state.tabs.includes(tab)) return;
+        Object.assign(quick.values, { username: cred.username, auth: 'password', password: cred.password });
+        quick.name = `${cred.username}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}`;
+        tab.title = quick.name;
+        reconnect(tab);
+      });
+    }
     const id = viewOf(tab)?.connection;
     if (s === 'connected' && id) tab.files?.attach(id);
     if (s === 'closed') { tab.files?.detach(); tab.recording = undefined; }
@@ -473,13 +515,13 @@ async function openSession(session: Session) {
     tab.screen = new ScreenView(termEl, onState);
     tab.screen.onDetached = (message) => { toast(message); closeTab(tab.id); };
     activate(tab.id);
-    await tab.screen.connect(session.id, session.name);
+    await tab.screen.connectWith(opener, session.name);
     return;
   }
   tab.term = new TerminalView(termEl, onState);
   activate(tab.id);
   tab.term.inputHook = (data) => broadcastFrom(tab, data);
-  await tab.term.connect(session.id, session.name);
+  await tab.term.connectWith(opener, session.name);
 }
 
 // ---------- Enregistrement des sessions ----------
@@ -630,6 +672,7 @@ document.addEventListener('keydown', (e) => {
   else if (key === 'b') { e.preventDefault(); toggleBroadcast(); }
   else if (key === 'p') { e.preventDefault(); openPalette(snippetContext()); }
   else if (key === 'l') { e.preventDefault(); lockNow(toast, () => reload()); }
+  else if (key === 'o') { e.preventDefault(); openGlobalPalette(); }
 });
 
 initTheme();
@@ -763,3 +806,57 @@ function renderLocalToolbar(tab: Tab, shell: ShellSpec) {
 
 $('manage-shells').append(icon('settings', 14));
 $('manage-shells').addEventListener('click', () => openSettingsDialog(toast));
+
+// ---------- Palette globale et connexion rapide ----------
+
+function paletteEntries(): PaletteEntry[] {
+  const sessionEntries: PaletteEntry[] = state.sessions.map((s) => {
+    const v = s.values;
+    const target = [v.username && `${v.username}@`, v.host ?? v.url ?? v.port].filter(Boolean).join('');
+    const proto = protocolOf(s.protocol);
+    return {
+      label: s.name, group: proto?.name ?? s.protocol, icon: proto ? viewIcon(proto.view) : 'terminal',
+      hint: [s.folder, target].filter(Boolean).join(' · '), keywords: `${String(target)} ${s.tags.join(' ')} ${s.protocol}`,
+      action: () => openSession(s),
+    };
+  });
+  const shellEntries: PaletteEntry[] = visibleShells().map((s) => ({
+    label: s.name, group: 'Shell local', icon: s.icon === 'wsl' ? 'wsl' : s.icon === 'git' ? 'git' : 'prompt',
+    hint: `${s.command} ${s.args.join(' ')}`, keywords: 'shell local terminal', action: () => openLocalShell(s),
+  }));
+  const actions: PaletteEntry[] = [
+    { label: 'Nouvelle session', group: 'Action', icon: 'plus', hint: 'Ctrl+Maj+N', action: () => newSession() },
+    { label: 'Commandes enregistrées', group: 'Action', icon: 'commands', hint: 'Ctrl+Maj+P', action: () => openSnippetManager(snippetContext()) },
+    { label: 'Enregistrements', group: 'Action', icon: 'play', action: () => openRecordings(toast) },
+    { label: 'Importer / exporter', group: 'Action', icon: 'upload', action: () => openImportExport((msg) => { toast(msg); reload(); }, toast) },
+    { label: 'Extensions', group: 'Action', icon: 'puzzle', action: () => openExtensions() },
+    { label: 'Supervision des serveurs', group: 'Action', icon: 'refresh', action: () => monitor.openOverview((s) => openSession(s)) },
+    { label: 'Paramètres', group: 'Action', icon: 'settings', action: () => openSettingsDialog(toast) },
+    { label: 'Verrouiller Termoria', group: 'Action', icon: 'lock', hint: 'Ctrl+Maj+L', action: () => lockNow(toast, () => reload()) },
+  ];
+  return [...sessionEntries, ...shellEntries, ...actions];
+}
+
+function openGlobalPalette(initial = '') {
+  openCommandPalette(paletteEntries(), (target) => openQuick(target), initial);
+}
+
+// Entrée dans la recherche : « user@hôte », « rdp srv-01 »… = connexion rapide.
+search.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const target = parseQuick(search.value);
+  if (!target) return;
+  e.preventDefault();
+  rememberQuick(search.value);
+  search.value = '';
+  state.filter = '';
+  renderTree();
+  openQuick(target);
+});
+
+/** Valeurs d'une connexion rapide sans le mot de passe ; « auto » devient « clé ». */
+function withoutPassword(values: Record<string, unknown>): Record<string, unknown> {
+  const { password: _password, ...rest } = values;
+  if (rest.auth === 'auto') rest.auth = 'key';
+  return rest;
+}

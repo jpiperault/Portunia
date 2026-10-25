@@ -187,6 +187,21 @@ async fn open(ctx: &ConnectContext) -> Result<(client::Handle<Handler>, Channel)
             auth_password(&mut handle, &user, &password).await?
         }
         "agent" => auth_agent(&mut handle, &user).await?,
+        // Connexion rapide : clé par défaut si elle s'ouvre sans phrase secrète, puis agent.
+        "auto" => {
+            let mut ok = false;
+            if let Some(key) = default_key().and_then(|p| load_secret_key(&p, None).ok()) {
+                let hash = handle.best_supported_rsa_hash().await?.flatten();
+                ok = handle
+                    .authenticate_publickey(&user, PrivateKeyWithHashAlg::new(Arc::new(key), hash))
+                    .await?
+                    .success();
+            }
+            if !ok {
+                ok = auth_agent(&mut handle, &user).await.unwrap_or(false);
+            }
+            ok
+        }
         _ => {
             let path = ctx
                 .str("keyPath")
