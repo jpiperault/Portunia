@@ -1,6 +1,6 @@
 [package]
 name = "termoria"
-version = "0.23.0"
+version = "0.24.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 

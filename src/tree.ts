@@ -15,6 +15,8 @@ export interface TreeActions {
   colorKey(path: string): string | undefined;
   setFolderColor(path: string, color: string | null): void;
   activeSessionId(): string | undefined;
+  /** La session a une note. */
+  hasNote(sessionId: string): boolean;
   openSession(s: Session): void;
   editSession(s: Session): void;
   duplicateSession(s: Session): void;
@@ -143,6 +145,7 @@ export class SessionTree {
       },
         h('span', { class: `dot${a.isConnected(s.id) ? ' on' : ''} ${a.health(s.id).cls}`, title: a.health(s.id).title }),
         h('span', { class: 'grow ellipsis' }, s.name),
+        a.hasNote(s.id) && h('span', { class: 'note-mark', title: 'Cette session a une note' }, icon('edit', 12)),
         badge(s.protocol)),
       h('div', { class: 'row-actions' },
         h('button', { class: 'icon-btn sm', 'aria-label': `Modifier ${s.name}`, title: 'Modifier', onclick: () => a.editSession(s) }, icon('edit', 14)),

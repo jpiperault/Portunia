@@ -1,7 +1,8 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, connectQuick, errorText, Manifest, Session, Snippet, TermEvent } from './api';
+import { api, connectQuick, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { openKeyManager } from './keys';
+import { NotesPanel } from './notes';
 import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
 import { badge, h, icon, viewIcon } from './dom';
 import { openSessionDialog } from './dialog';
@@ -46,6 +47,8 @@ interface Tab {
   receive: boolean;
   /** Fichier en cours d'enregistrement. */
   recording?: string;
+  /** Notes de la session (panneau de droite). */
+  notes?: NotesPanel;
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
 }
@@ -58,6 +61,10 @@ const state = {
   filter: '',
   folders: [] as string[],
   showFiles: true,
+  /** Notes à la place des fichiers dans le panneau de droite. */
+  showNotes: false,
+  /** Sessions qui ont une note. */
+  noteIds: new Set<string>(),
   /** Onglets affichés côte à côte (2 à 4), vide = un seul onglet à l'écran. */
   split: [] as string[],
   /** Saisie multiple : la frappe part vers toutes les sessions de l'écran partagé. */
@@ -105,6 +112,7 @@ const sessionTree = new SessionTree(tree, {
   colorKey: (path) => state.folderColors[path],
   setFolderColor: (path, color) => act(() => folderColors.set(path, color)),
   activeSessionId: () => activeTab()?.sessionId,
+  hasNote: (id) => state.noteIds.has(id),
   openSession: (s) => openSession(s),
   editSession: (s) => editSession(s),
   duplicateSession: (s) => act(async () => {
@@ -320,9 +328,14 @@ function renderToolbar() {
         onclick: () => toggleBroadcast(),
       }, icon('broadcast', 14), state.broadcast ? 'Saisie multiple : ACTIVE' : 'Saisie multiple'),
       tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), 'Déconnecter'),
+      !tab.quick && h('button', {
+        class: `btn${state.showNotes && tab.notes ? ' on' : ''}`, 'aria-pressed': String(state.showNotes && !!tab.notes),
+        title: state.noteIds.has(session.id) ? 'Notes de cette session (une note existe)' : 'Notes de cette session (Markdown)',
+        onclick: () => toggleNotes(tab),
+      }, icon('edit', 14), state.noteIds.has(session.id) ? 'Notes •' : 'Notes'),
       tab.files && h('button', {
-        class: `btn${state.showFiles ? ' on' : ''}`, 'aria-pressed': String(state.showFiles), title: 'Afficher / masquer l\'explorateur de fichiers',
-        onclick: () => { state.showFiles = !state.showFiles; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
+        class: `btn${state.showFiles && !state.showNotes ? ' on' : ''}`, 'aria-pressed': String(state.showFiles && !state.showNotes), title: 'Afficher / masquer l\'explorateur de fichiers',
+        onclick: () => { state.showFiles = state.showNotes || !state.showFiles; state.showNotes = false; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
       }, icon('files', 14), 'Fichiers'),
       tab.quick
         ? h('button', { class: 'btn primary', title: 'Garder cette connexion dans la liste des sessions', onclick: () => tab.quick && saveQuick(tab.quick) }, icon('plus', 14), 'Enregistrer comme session')
@@ -330,15 +343,37 @@ function renderToolbar() {
   );
 }
 
-/** Panneau de droite : explorateur de fichiers du serveur de l'onglet actif. */
+/** Panneau de droite : notes de la session, ou explorateur de fichiers du serveur de l'onglet actif. */
 function renderSidePanel() {
-  const files = activeTab()?.files;
-  if (!files || !state.showFiles) {
+  const tab = activeTab();
+  const panel = state.showNotes && tab?.notes ? tab.notes.el : state.showFiles ? tab?.files?.el : undefined;
+  if (!panel) {
     details.hidden = true;
     return;
   }
   details.hidden = false;
-  if (details.firstChild !== files.el) details.replaceChildren(files.el);
+  if (details.firstChild !== panel) details.replaceChildren(panel);
+}
+
+/** Affiche / masque les notes de la session de l'onglet. */
+function toggleNotes(tab: Tab) {
+  const session = sessionOf(tab.sessionId);
+  if (!session) return;
+  const created = !tab.notes;
+  if (!tab.notes) {
+    tab.notes = new NotesPanel(session.id, session.name, toast, (text) => {
+      if (!tab.term?.connection) return toast('La session n\'est pas connectée', 'error');
+      if (!broadcastFrom(tab, text)) tab.term.send(text);
+      tab.term.focus();
+    }, (has) => {
+      if (has) state.noteIds.add(session.id); else state.noteIds.delete(session.id);
+      renderToolbar();
+      renderTree();
+    });
+  }
+  state.showNotes = created || !state.showNotes;
+  renderAll();
+  requestAnimationFrame(() => viewOf(tab)?.refit());
 }
 
 function renderStatus() {
@@ -426,6 +461,7 @@ function closeTab(id: string) {
   if (index < 0) return;
   const [tab] = state.tabs.splice(index, 1);
   viewOf(tab)?.dispose();
+  tab.notes?.flush();
   tab.player?.dispose();
   tab.view.remove();
   const wasSplit = state.split.includes(id);
@@ -578,6 +614,7 @@ function reconnect(tab: Tab) {
 async function reload() {
   try {
     [state.protocols, state.sessions, state.folders, state.snippets, state.folderColors] = await Promise.all([api.listProtocols(), api.listSessions(), api.listFolders(), api.listSnippets(), folderColors.list()]);
+    state.noteIds = new Set(await notes.list().catch(() => [] as string[]));
   } catch (e) {
     toast(errorText(e), 'error');
   }

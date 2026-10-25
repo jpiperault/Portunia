@@ -6,6 +6,7 @@ mod keys;
 mod license;
 mod lock;
 mod monitor;
+mod notes;
 mod recording;
 mod registry;
 mod secrets;
@@ -107,6 +108,9 @@ pub fn run() {
             commands::ssh_key_default_comment,
             commands::ssh_key_generate,
             commands::ssh_key_install,
+            commands::note_get,
+            commands::note_set,
+            commands::notes_list,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

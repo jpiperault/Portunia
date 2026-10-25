@@ -312,3 +312,11 @@ export const sshKeys = {
   install: (connectionId: string, publicKey: string) =>
     invoke<'added' | 'alreadyThere'>('ssh_key_install', { connectionId, public: publicKey }),
 };
+
+// ---------- Notes ----------
+
+export const notes = {
+  get: (sessionId: string) => invoke<string>('note_get', { sessionId }),
+  set: (sessionId: string, text: string) => invoke<void>('note_set', { sessionId, text }),
+  list: () => invoke<string[]>('notes_list'),
+};

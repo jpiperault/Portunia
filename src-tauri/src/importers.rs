@@ -419,6 +419,9 @@ pub struct Backup {
     pub folders: Vec<String>,
     #[serde(default)]
     pub snippets: Vec<Snippet>,
+    /// Notes des sessions, par identifiant.
+    #[serde(default)]
+    pub notes: std::collections::HashMap<String, String>,
 }
 
 pub fn read_backup(path: &PathBuf) -> Result<Backup> {

@@ -18,6 +18,7 @@ use crate::connector::{
 };
 use crate::importers::{self, Candidate};
 use crate::keys;
+use crate::notes::Notes;
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
 use crate::transfer;
@@ -37,6 +38,7 @@ pub struct AppState {
     recordings: Mutex<HashMap<String, Recorder>>,
     /// Fichiers distants ouverts dans un éditeur local : (connexion, surveillance).
     edits: Mutex<HashMap<String, (String, tauri::async_runtime::JoinHandle<()>)>>,
+    notes: Mutex<Notes>,
 }
 
 impl AppState {
@@ -49,6 +51,7 @@ impl AppState {
             lock: Mutex::new(Lock::load(&data_dir)),
             recordings: Mutex::new(HashMap::new()),
             edits: Mutex::new(HashMap::new()),
+            notes: Mutex::new(Notes::load(data_dir.join("notes.json"))),
             data_dir,
         }
     }
@@ -138,6 +141,7 @@ pub fn save_session(state: State<'_, AppState>, input: SaveSessionInput) -> CmdR
 #[tauri::command]
 pub fn delete_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     let removed = state.store.lock().unwrap().remove(&id).map_err(err)?;
+    state.notes.lock().unwrap().remove(&id).map_err(err)?;
     if let Some(session) = removed {
         for key in &session.secret_keys {
             secrets::delete(&session.id, key).map_err(err)?;
@@ -563,7 +567,11 @@ pub fn import_apply(state: State<'_, AppState>, sessions: Vec<Session>) -> CmdRe
 pub fn export_backup(state: State<'_, AppState>, path: String) -> CmdResult<usize> {
     let (sessions, folders, snippets) = state.store.lock().unwrap().export_parts();
     let count = sessions.len();
-    let backup = importers::Backup { app: "termoria".into(), version: 1, sessions, folders, snippets };
+    let notes = {
+        let all = state.notes.lock().unwrap();
+        sessions.iter().filter_map(|s| all.all().get(&s.id).map(|n| (s.id.clone(), n.clone()))).collect()
+    };
+    let backup = importers::Backup { app: "termoria".into(), version: 1, sessions, folders, snippets, notes };
     let text = serde_json::to_string_pretty(&backup).map_err(err)?;
     std::fs::write(&path, text).map_err(|e| format!("Écriture impossible : {e}"))?;
     Ok(count)
@@ -586,6 +594,13 @@ pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<Back
         .unwrap()
         .merge_backup(backup.sessions, backup.folders, backup.snippets)
         .map_err(full)?;
+    // Notes des sessions restaurées (une note existante est gardée).
+    let mut notes = state.notes.lock().unwrap();
+    for (id, text) in &backup.notes {
+        if notes.get(id).is_empty() && state.store.lock().unwrap().get(id).is_some() {
+            notes.set(id, text).map_err(err)?;
+        }
+    }
     Ok(BackupReport { added, skipped, snippets })
 }
 
@@ -1060,4 +1075,24 @@ pub async fn ssh_key_install(state: State<'_, AppState>, connection_id: String, 
         connection.exec().ok_or("Ce protocole ne permet pas d'installer une clé")?
     };
     keys::install(exec.as_ref(), &public).await.map_err(full)
+}
+
+// ---------- Notes ----------
+
+#[tauri::command]
+pub fn note_get(state: State<'_, AppState>, session_id: String) -> CmdResult<String> {
+    state.unlocked()?;
+    Ok(state.notes.lock().unwrap().get(&session_id))
+}
+
+#[tauri::command]
+pub fn note_set(state: State<'_, AppState>, session_id: String, text: String) -> CmdResult<()> {
+    state.unlocked()?;
+    state.notes.lock().unwrap().set(&session_id, &text).map_err(err)
+}
+
+/// Sessions qui ont une note.
+#[tauri::command]
+pub fn notes_list(state: State<'_, AppState>) -> Vec<String> {
+    state.notes.lock().unwrap().ids()
 }
