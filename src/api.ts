@@ -407,3 +407,25 @@ export function multiExec(sessionIds: string[], command: string, timeoutSecs: nu
   channel.onmessage = onEvent;
   return invoke<string>('multi_exec', { sessionIds, command, timeoutSecs, onEvent: channel });
 }
+
+// ---------- Conteneurs ----------
+
+export interface Container { id: string; name: string; image: string; state: string; status: string }
+export interface Pod { namespace: string; name: string; ready: string; status: string; restarts: string; age: string }
+export type Source<T> = { state: 'absent' } | { state: 'error'; message: string } | { state: 'ok'; items: T[] };
+export interface Inventory { docker: Source<Container>; kube: Source<Pod> }
+
+export const containers = {
+  list: (connectionId: string) => invoke<Inventory>('containers_list', { connectionId }),
+  action: (connectionId: string, kind: 'docker' | 'kube', action: string, id: string, namespace?: string) =>
+    invoke<string>('container_action', { connectionId, kind, action, id, namespace: namespace ?? null }),
+  command: (kind: 'docker' | 'kube', what: 'shell' | 'logs', id: string, namespace?: string) =>
+    invoke<string>('container_command', { kind, what, id, namespace: namespace ?? null }),
+};
+
+/** Session enregistrée ouverte avec des valeurs en plus (commande distante…). */
+export function connectWith(sessionId: string, extra: Record<string, unknown>, label: string, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+  const channel = new Channel<TermEvent>();
+  channel.onmessage = onEvent;
+  return invoke<ConnectResponse>('connect_with', { sessionId, extra, label, cols, rows, onEvent: channel });
+}

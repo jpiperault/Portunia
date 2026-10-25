@@ -1,9 +1,10 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, connectQuick, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, connectQuick, connectWith, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
+import { ContainersPanel } from './containers';
 import { createMultiExec, MultiExecView } from './multiexec';
 import { openCredentialManager } from './credentials';
 import { createNetTools, NetToolsView, wakeSession } from './nettools';
@@ -13,7 +14,7 @@ import { openSessionDialog } from './dialog';
 import { renderExtensions } from './extensions';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { FilePanel } from './files';
-import { TerminalView, TermState } from './terminal';
+import { Opener, TerminalView, TermState } from './terminal';
 import { ScreenView } from './screen';
 import { leafOf, parentOf, SessionTree } from './tree';
 import { showMenu } from './menu';
@@ -61,6 +62,10 @@ interface Tab {
   multi?: MultiExecView;
   /** Tableau de bord du serveur (panneau de droite, Pro). */
   server?: ServerPanel;
+  /** Conteneurs du serveur (panneau de droite, Pro). */
+  containers?: ContainersPanel;
+  /** Onglet ouvert sur une commande distante (shell ou journaux d'un conteneur). */
+  remoteCommand?: string;
 }
 
 const state = {
@@ -341,6 +346,11 @@ function renderToolbar() {
       }, icon('broadcast', 14), state.broadcast ? 'Saisie multiple : ACTIVE' : 'Saisie multiple'),
       tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), 'Déconnecter'),
       tab.state === 'connected' && session.protocol === 'ssh' && h('button', {
+        class: `btn${shownSide(tab) === 'containers' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'containers'),
+        title: 'Conteneurs Docker / Podman et pods Kubernetes du serveur',
+        onclick: () => toggleContainers(tab),
+      }, icon('box', 14), 'Conteneurs', !allows('containers') && h('span', { class: 'chip pro locked' }, 'PRO')),
+      tab.state === 'connected' && session.protocol === 'ssh' && h('button', {
         class: `btn${shownSide(tab) === 'server' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'server'),
         title: 'Tableau de bord : processeur, mémoire, disques, processus, services en échec',
         onclick: () => toggleServer(tab),
@@ -360,13 +370,14 @@ function renderToolbar() {
   );
 }
 
-type SidePanel = 'files' | 'notes' | 'server' | '';
+type SidePanel = 'files' | 'notes' | 'server' | 'containers' | '';
 
 /** Panneau réellement affiché pour cet onglet (celui demandé s'il existe, sinon les fichiers). */
 function shownSide(tab: Tab | undefined): SidePanel {
   if (!tab || !state.side) return '';
   if (state.side === 'notes' && tab.notes) return 'notes';
   if (state.side === 'server' && tab.server) return 'server';
+  if (state.side === 'containers' && tab.containers) return 'containers';
   return tab.files ? 'files' : '';
 }
 
@@ -376,7 +387,8 @@ function renderSidePanel() {
   const side = shownSide(tab);
   // Le tableau de bord ne relève les mesures que lorsqu'il est visible.
   for (const t of state.tabs) t.server?.setVisible(t === tab && side === 'server');
-  const panel = side === 'notes' ? tab?.notes?.el : side === 'server' ? tab?.server?.el : side === 'files' ? tab?.files?.el : undefined;
+  for (const t of state.tabs) t.containers?.setVisible(t === tab && side === 'containers');
+  const panel = side === 'notes' ? tab?.notes?.el : side === 'server' ? tab?.server?.el : side === 'containers' ? tab?.containers?.el : side === 'files' ? tab?.files?.el : undefined;
   if (!panel) {
     details.hidden = true;
     return;
@@ -515,6 +527,7 @@ function closeTab(id: string) {
   viewOf(tab)?.dispose();
   tab.notes?.flush();
   tab.server?.dispose();
+  tab.containers?.dispose();
   tab.player?.dispose();
   tab.netTools?.dispose();
   tab.multi?.dispose();
@@ -572,7 +585,7 @@ async function openSession(session: Session, quick?: QuickTarget) {
     return;
   }
 
-  const existing = !quick && state.tabs.find((t) => t.sessionId === session.id);
+  const existing = !quick && state.tabs.find((t) => t.sessionId === session.id && !t.remoteCommand);
   if (existing) return activate(existing.id);
 
   const termEl = h('div', { class: 'term-view' });
@@ -1029,4 +1042,49 @@ function openMultiExec(folder: string | null = null, ids?: string[]) {
   }
   activate(tab.id);
   tab.multi?.select(folder, ids);
+}
+
+// ---------- Conteneurs (Pro) ----------
+
+function toggleContainers(tab: Tab) {
+  if (!allows('containers')) return toast('Les conteneurs Docker et Kubernetes font partie de Termoria Pro (Paramètres › Licence)', 'error');
+  const id = tab.term?.connection;
+  if (!id) return;
+  if (!tab.containers || tab.containers.connectionId !== id) {
+    tab.containers?.dispose();
+    tab.containers = new ContainersPanel(id, tab.title, toast, (label, command) => openRemoteTerminal(tab, label, command));
+  }
+  showSide(tab, 'containers');
+}
+
+/** Nouvel onglet terminal sur le même serveur, qui lance une commande (shell d'un conteneur, journaux). */
+async function openRemoteTerminal(parent: Tab, label: string, command: string) {
+  const session = sessionOf(parent.sessionId);
+  const quick = parent.quick;
+  if (!session && !quick) return;
+  const opener: Opener = quick
+    ? (cols, rows, onEvent) => connectQuick(quick.protocol, label, { ...quick.values, remoteCommand: command }, cols, rows, onEvent)
+    : (cols, rows, onEvent) => connectWith(session!.id, { remoteCommand: command }, label, cols, rows, onEvent);
+  const termEl = h('div', { class: 'term-view' });
+  const paneHead = h('div', { class: 'pane-head', hidden: true });
+  const view = h('div', { class: 'pane' }, paneHead, termEl);
+  views.append(view);
+  const tab: Tab = {
+    id: crypto.randomUUID(), kind: 'session', title: label, sessionId: parent.sessionId, protocol: 'ssh',
+    remoteCommand: command, view, paneHead, state: 'connecting', receive: true,
+  };
+  view.addEventListener('pointerdown', (e) => {
+    if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
+  }, true);
+  tab.term = new TerminalView(termEl, (s, reason) => {
+    tab.state = s;
+    if (s === 'closed' && reason && tab.id !== state.active) toast(`${label} : ${reason}`, 'error');
+    renderAll();
+  });
+  // Shell quitté ou journaux interrompus : pas de relance automatique (Entrée relance).
+  tab.term.autoReconnect = false;
+  state.tabs.push(tab);
+  activate(tab.id);
+  tab.term.inputHook = (data) => broadcastFrom(tab, data);
+  await tab.term.connectWith(opener, label, 'Ouverture de');
 }

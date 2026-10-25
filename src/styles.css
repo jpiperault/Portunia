@@ -562,3 +562,8 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .mx-row-head { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: none; border: 0; color: var(--text); text-align: left; cursor: pointer; }
 .mx-output { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); max-height: 320px; overflow: auto; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
 .lvl-ok { color: #3fb950; }
+
+/* Conteneurs */
+.ct-toolbar { padding: 8px 12px 0; }
+.ct-filter { width: 100%; box-sizing: border-box; height: 30px; padding: 0 10px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); }
+.ct-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: 13px; }

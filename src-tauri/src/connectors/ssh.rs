@@ -211,7 +211,11 @@ async fn open(ctx: &ConnectContext) -> Result<(Handle, Channel, Hops)> {
     channel
         .request_pty(false, "xterm-256color", ctx.cols as u32, ctx.rows as u32, 0, 0, &[])
         .await?;
-    channel.request_shell(false).await?;
+    // « remoteCommand » (shell d'un conteneur, journaux…) : lancée à la place du shell, avec terminal.
+    match ctx.str("remoteCommand") {
+        Some(command) => channel.exec(false, command.as_bytes()).await?,
+        None => channel.request_shell(false).await?,
+    }
     Ok((handle, channel, hops))
 }
 

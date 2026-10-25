@@ -22,6 +22,7 @@ use crate::notes::Notes;
 use crate::credentials::{Credential, Credentials};
 use crate::nettools;
 use crate::serverstats;
+use crate::containers;
 use crate::connector::RemoteExec;
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
@@ -1474,4 +1475,56 @@ pub fn multi_exec(
         let _ = on_event.send(MultiEvent::Done { ok, failed });
     });
     Ok(job_id)
+}
+
+// ---------- Conteneurs Docker / Kubernetes (Pro) ----------
+
+#[tauri::command]
+pub async fn containers_list(state: State<'_, AppState>, connection_id: String) -> CmdResult<containers::Inventory> {
+    state.unlocked()?;
+    state.license.lock().unwrap().require(Feature::Containers).map_err(full)?;
+    let exec = exec_of(&state, &connection_id)?;
+    containers::list(exec.as_ref()).await.map_err(full)
+}
+
+#[tauri::command]
+pub async fn container_action(
+    state: State<'_, AppState>,
+    connection_id: String,
+    kind: String,
+    action: String,
+    id: String,
+    namespace: Option<String>,
+) -> CmdResult<String> {
+    state.unlocked()?;
+    state.license.lock().unwrap().require(Feature::Containers).map_err(full)?;
+    let exec = exec_of(&state, &connection_id)?;
+    containers::action(exec.as_ref(), &kind, &action, &id, namespace.as_deref()).await.map_err(full)
+}
+
+/// Commande de terminal pour un shell ou les journaux d'un conteneur (vérifiée ici).
+#[tauri::command]
+pub fn container_command(state: State<'_, AppState>, kind: String, what: String, id: String, namespace: Option<String>) -> CmdResult<String> {
+    state.license.lock().unwrap().require(Feature::Containers).map_err(full)?;
+    containers::terminal_command(&kind, &what, &id, namespace.as_deref()).map_err(full)
+}
+
+/// Session enregistrée ouverte avec des valeurs en plus (ex. remoteCommand pour un conteneur).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn connect_with(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    extra: HashMap<String, Value>,
+    label: String,
+    cols: u16,
+    rows: u16,
+    on_event: Channel<TermEvent>,
+) -> CmdResult<ConnectResponse> {
+    state.unlocked()?;
+    let session = state.store.lock().unwrap().get(&session_id).ok_or("Session introuvable")?;
+    let mut values = session_values(&state, &session)?;
+    values.extend(extra);
+    start_connection(&app, &state, &session.protocol, label, values, cols, rows, on_event).await
 }

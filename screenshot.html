@@ -94,6 +94,24 @@
           case 'fs_home': return '/home/deploy';
           case 'fs_list': return [E('releases', true, 0, 3600), E('scripts', true, 0, 86400), E('site', true, 0, 7200), E('.bashrc', false, 3771, 864000), E('backup-2026-10-23.tar.gz', false, 48234112, 50000), E('deploy.sh', false, 2048, 3600), E('notes.md', false, 1210, 600)];
           case 'tunnel_list': return [];
+          case 'containers_list': return {
+            docker: { state: 'ok', items: [
+              { id: 'ab12cd34ef56', name: 'web', image: 'nginx:1.27-alpine', state: 'running', status: 'Up 3 days' },
+              { id: '9f8e7d6c5b4a', name: 'api', image: 'registry.local/api:2.4.1', state: 'running', status: 'Up 3 days (healthy)' },
+              { id: '0f9e8d7c6b5a', name: 'backup', image: 'alpine:3.20', state: 'exited', status: 'Exited (1) 2 hours ago' },
+            ] },
+            kube: { state: 'ok', items: [
+              { namespace: 'prod', name: 'api-7c9f5d8b6-x2k9p', ready: '1/1', status: 'Running', restarts: '0', age: '3d' },
+              { namespace: 'prod', name: 'worker-5b8d7f9c4-q7w3e', ready: '0/1', status: 'CrashLoopBackOff', restarts: '14 (2m ago)', age: '1h' },
+            ] },
+          };
+          case 'container_command': return 'exec docker exec -it ' + args.id + ' sh';
+          case 'container_action': return '';
+          case 'connect_with': {
+            const id = chId(args.onEvent);
+            setTimeout(() => send(id, { event: 'data', data: b64('\x1b[1;32mroot@ab12cd34ef56\x1b[0m:/# ') }), 200);
+            return { connectionId: 'cw-' + Date.now(), view: 'terminal', message: null };
+          }
           case 'multi_exec': {
             const id = chId(args.onEvent);
             const outs = { s1: [0, 'uptime: 14:02 up 14 days, load 0.42\n/dev/sda2  40G  18G  20G  48% /'], s2: [0, 'uptime: 14:02 up 3 days, load 1.10\n/dev/sda2  40G  31G  7G  82% /'], s3: [1, '', 'df: /data: No such file or directory'] };
