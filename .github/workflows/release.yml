@@ -49,7 +49,7 @@ jobs:
           owner: jpiperault
           repo: Termoria-releases
           # Le dépôt public ne contient pas ce code : le tag y est créé sur sa branche main.
-          commitish: main
+          releaseCommitish: main
           tagName: ${{ github.ref_name }}
           releaseName: Termoria ${{ github.ref_name }}
           releaseBody: Installez Termoria avec le fichier « setup.exe » ci-dessous. Les versions suivantes s'installent ensuite automatiquement depuis l'application.
