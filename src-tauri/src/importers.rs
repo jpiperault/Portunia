@@ -179,8 +179,12 @@ pub fn parse_ssh_config(text: &str, folder: &str) -> Vec<Candidate> {
                 values.push(("tunnels", json!(tunnels)));
             }
             let mut notes = Vec::new();
-            if opts.contains_key("proxyjump") || opts.contains_key("proxycommand") {
-                notes.push("ProxyJump / ProxyCommand non repris (serveur de rebond)");
+            // ProxyJump : noms d'autres hôtes du fichier (importés comme sessions) ou user@hôte:port.
+            if let Some(jump) = opts.get("proxyjump").filter(|j| !j.eq_ignore_ascii_case("none")) {
+                values.push(("jump", json!(jump)));
+            }
+            if opts.contains_key("proxycommand") {
+                notes.push("ProxyCommand non repris (utilisez « Serveur de rebond »)");
             }
             if !opts.contains_key("user") {
                 notes.push("utilisateur à compléter");
@@ -470,7 +474,7 @@ Host *
         assert_eq!(db.session.values["host"], json!("db.interne"));
         assert_eq!(db.session.values["port"], json!(2222));
         assert_eq!(db.session.values["username"], json!("root"), "valeur par défaut de Host *");
-        assert!(db.note.as_deref().unwrap().contains("ProxyJump"));
+        assert_eq!(db.session.values["jump"], json!("bastion"));
     }
 
     #[test]

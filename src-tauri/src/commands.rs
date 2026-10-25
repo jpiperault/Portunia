@@ -216,12 +216,7 @@ pub async fn connect(
         .unwrap()
         .get(&session_id)
         .ok_or("Session introuvable")?;
-    let mut values = session.values.clone();
-    for key in &session.secret_keys {
-        if let Some(secret) = secrets::get(&session.id, key).map_err(err)? {
-            values.insert(key.clone(), Value::String(secret));
-        }
-    }
+    let values = session_values(&session)?;
     start_connection(&app, &state, &session.protocol, session.name.clone(), values, cols, rows, on_event).await
 }
 
@@ -248,7 +243,7 @@ async fn start_connection(
     state: &AppState,
     protocol: &str,
     name: String,
-    values: HashMap<String, Value>,
+    mut values: HashMap<String, Value>,
     cols: u16,
     rows: u16,
     on_event: Channel<TermEvent>,
@@ -257,6 +252,9 @@ async fn start_connection(
         .registry
         .get(protocol)
         .ok_or_else(|| format!("Extension « {protocol} » non installée"))?;
+    if protocol == "ssh" {
+        resolve_jump(state, &mut values, &mut Vec::new())?;
+    }
     let view = connector.manifest().view;
     let connection_id = uuid::Uuid::new_v4().to_string();
     let ctx = ConnectContext {
@@ -593,6 +591,24 @@ pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<Back
 /// Suggestions d'un champ (ex. ports COM présents), fournies par l'extension.
 #[tauri::command]
 pub fn field_suggestions(state: State<'_, AppState>, protocol: String, source: String) -> Vec<ChoiceOption> {
+    // Serveurs de rebond : les sessions SSH enregistrées (le cœur seul les connaît).
+    if source == "ssh-sessions" {
+        let mut list: Vec<ChoiceOption> = state
+            .store
+            .lock()
+            .unwrap()
+            .list()
+            .into_iter()
+            .filter(|s| s.protocol == "ssh")
+            .map(|s| {
+                let host = s.values.get("host").and_then(Value::as_str).unwrap_or("");
+                let user = s.values.get("username").and_then(Value::as_str).unwrap_or("");
+                ChoiceOption { label: if user.is_empty() { host.into() } else { format!("{user}@{host}") }, value: s.name }
+            })
+            .collect();
+        list.sort_by(|a, b| a.value.to_lowercase().cmp(&b.value.to_lowercase()));
+        return list;
+    }
     state.registry.get(&protocol).map(|c| c.suggestions(&source)).unwrap_or_default()
 }
 
@@ -923,4 +939,81 @@ pub async fn connect_local(
 pub fn open_shell_elevated(state: State<'_, AppState>, shell: crate::connectors::local::ShellSpec) -> CmdResult<()> {
     state.unlocked()?;
     crate::connectors::local::open_elevated(&shell).map_err(full)
+}
+
+// ---------- Serveurs de rebond (SSH) ----------
+
+/// Rebonds enchaînés au plus.
+const MAX_JUMPS: usize = 3;
+
+/// Valeurs d'une session, mots de passe compris.
+fn session_values(session: &Session) -> CmdResult<HashMap<String, Value>> {
+    let mut values = session.values.clone();
+    for key in &session.secret_keys {
+        if let Some(secret) = secrets::get(&session.id, key).map_err(err)? {
+            values.insert(key.clone(), Value::String(secret));
+        }
+    }
+    Ok(values)
+}
+
+/// Champ « jump » (nom d'une session SSH ou user@hôte:port, plusieurs séparés
+/// par des virgules comme ProxyJump) → valeurs complètes dans `jumpHost`.
+fn resolve_jump(state: &AppState, values: &mut HashMap<String, Value>, visited: &mut Vec<String>) -> CmdResult<()> {
+    let spec = values.get("jump").and_then(Value::as_str).unwrap_or("").trim().to_string();
+    values.remove("jumpHost");
+    if spec.is_empty() {
+        return Ok(());
+    }
+    // « a,b » : a d'abord, puis b, puis le serveur.
+    let mut previous: Option<HashMap<String, Value>> = None;
+    for hop in spec.split(',').map(str::trim).filter(|h| !h.is_empty()) {
+        if visited.len() >= MAX_JUMPS {
+            return Err(format!("Trop de serveurs de rebond enchaînés (maximum {MAX_JUMPS})"));
+        }
+        let mut hop_values = jump_values(state, hop, visited)?;
+        if let Some(before) = previous.take() {
+            hop_values.insert("jumpHost".into(), Value::Object(before.into_iter().collect()));
+        }
+        previous = Some(hop_values);
+    }
+    if let Some(last) = previous {
+        values.insert("jumpHost".into(), Value::Object(last.into_iter().collect()));
+    }
+    Ok(())
+}
+
+fn jump_values(state: &AppState, hop: &str, visited: &mut Vec<String>) -> CmdResult<HashMap<String, Value>> {
+    let found = state
+        .store
+        .lock()
+        .unwrap()
+        .list()
+        .into_iter()
+        .find(|s| s.protocol == "ssh" && (s.id == hop || s.name.eq_ignore_ascii_case(hop)));
+    if let Some(session) = found {
+        if visited.contains(&session.id) {
+            return Err(format!("Boucle de serveurs de rebond : « {} » revient deux fois", session.name));
+        }
+        visited.push(session.id.clone());
+        let mut values = session_values(&session)?;
+        // Le bastion n'ouvre pas ses propres tunnels.
+        values.remove("tunnels");
+        resolve_jump(state, &mut values, visited)?;
+        return Ok(values);
+    }
+    visited.push(hop.to_string());
+    let (user, rest) = hop
+        .rsplit_once('@')
+        .ok_or_else(|| format!("Serveur de rebond « {hop} » : aucune session SSH de ce nom (ou indiquez utilisateur@hôte)"))?;
+    let (host, port) = match rest.rsplit_once(':') {
+        Some((h, p)) if !h.contains(':') => (h, p.parse::<u16>().map_err(|_| format!("Port invalide pour le rebond « {hop} »"))?),
+        _ => (rest.trim_matches(|c| c == '[' || c == ']'), 22),
+    };
+    Ok(HashMap::from([
+        ("host".into(), Value::String(host.into())),
+        ("port".into(), Value::from(port)),
+        ("username".into(), Value::String(user.into())),
+        ("auth".into(), Value::String("auto".into())),
+    ]))
 }

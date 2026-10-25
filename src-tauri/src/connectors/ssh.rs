@@ -5,7 +5,9 @@ use std::{
     borrow::Cow,
     collections::HashMap,
     fs,
+    future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -26,6 +28,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use super::forward::SshForwarder;
 use super::sftp::SftpFiles;
 use crate::connector::*;
+use serde_json::Value;
 
 pub struct SshConnector;
 
@@ -34,7 +37,7 @@ impl Connector for SshConnector {
         Manifest {
             id: "ssh".into(),
             name: "SSH".into(),
-            version: "0.3.0".into(),
+            version: "0.4.0".into(),
             description: "Terminal sécurisé : clé privée, mot de passe ou agent.".into(),
             view: ViewKind::Terminal,
             builtin: true,
@@ -69,6 +72,8 @@ impl Connector for SshConnector {
                     FieldKind::Bool,
                 )
                 .default(false),
+                Field::new("jump", "Serveur de rebond (bastion)", FieldKind::Suggest { source: "ssh-sessions".into() })
+                    .placeholder("Vide = connexion directe. Session SSH ou utilisateur@hôte:port"),
                 Field::new("tunnels", "Tunnels", FieldKind::Tunnels),
             ],
         }
@@ -79,7 +84,7 @@ impl Connector for SshConnector {
         // session continue dans une tâche asynchrone.
         let (tx, rx) = unbounded_channel();
         let sink = ctx.sink.clone();
-        let (handle, channel) = tauri::async_runtime::block_on(open(&ctx))?;
+        let (handle, channel, hops) = tauri::async_runtime::block_on(open(&ctx))?;
         let handle = Arc::new(handle);
         // L'explorateur de fichiers ouvre son propre canal SFTP sur la même connexion.
         let files: Arc<dyn RemoteFiles> = Arc::new(SftpFiles::new(handle.clone()));
@@ -106,6 +111,8 @@ impl Connector for SshConnector {
             let _ = handle
                 .disconnect(Disconnect::ByApplication, "", "fr")
                 .await;
+            // Les serveurs de rebond se ferment après la session.
+            drop(hops);
             sink.closed(result.err().map(|e| format!("{e:#}")));
         });
         Ok(Outcome::Terminal(Box::new(SshConnection { tx, files, forwarder })))
@@ -146,91 +153,130 @@ impl TerminalConnection for SshConnection {
 
 type Channel = russh::Channel<client::Msg>;
 
-async fn open(ctx: &ConnectContext) -> Result<(client::Handle<Handler>, Channel)> {
-    let host = ctx.require("host", "Hôte")?;
-    let port = ctx.port(22)?;
-    let user = ctx.require("username", "Utilisateur")?;
+type Handle = client::Handle<Handler>;
+type Hops = Vec<Handle>;
 
-    let config = Arc::new(client::Config {
-        // Détecte une connexion morte en moins d'une minute (réseau coupé, veille).
-        keepalive_interval: Some(Duration::from_secs(15)),
-        keepalive_max: 3,
-        preferred: if ctx.bool("legacy") { legacy_preferred() } else { Preferred::DEFAULT },
-        ..Default::default()
-    });
-    let rejection = Arc::new(Mutex::new(None));
-    let handler = Handler {
-        known_hosts: ctx.data_dir.join("known_hosts.json"),
-        host_id: format!("{host}:{port}"),
-        sink: ctx.sink.clone(),
-        rejection: rejection.clone(),
-    };
-
-    let connecting = client::connect(config, (host.as_str(), port), handler);
-    let mut handle = match tokio::time::timeout(Duration::from_secs(15), connecting).await {
-        Err(_) => bail!("Pas de réponse de {host}:{port} (délai dépassé)"),
-        Ok(Ok(handle)) => handle,
-        Ok(Err(e)) => {
-            // Clé du serveur refusée : on affiche l'explication détaillée.
-            if let Some(reason) = rejection.lock().unwrap().take() {
-                bail!(reason);
-            }
-            return Err(anyhow!(e).context(format!("Connexion impossible à {host}:{port}")));
-        }
-    };
-
-    let ok = match ctx.str("auth").as_deref().unwrap_or("key") {
-        "password" => {
-            let password = ctx
-                .raw("password")
-                .ok_or_else(|| anyhow!("Aucun mot de passe enregistré pour cette session"))?;
-            auth_password(&mut handle, &user, &password).await?
-        }
-        "agent" => auth_agent(&mut handle, &user).await?,
-        // Connexion rapide : clé par défaut si elle s'ouvre sans phrase secrète, puis agent.
-        "auto" => {
-            let mut ok = false;
-            if let Some(key) = default_key().and_then(|p| load_secret_key(&p, None).ok()) {
-                let hash = handle.best_supported_rsa_hash().await?.flatten();
-                ok = handle
-                    .authenticate_publickey(&user, PrivateKeyWithHashAlg::new(Arc::new(key), hash))
-                    .await?
-                    .success();
-            }
-            if !ok {
-                ok = auth_agent(&mut handle, &user).await.unwrap_or(false);
-            }
-            ok
-        }
-        _ => {
-            let path = ctx
-                .str("keyPath")
-                .map(PathBuf::from)
-                .or_else(default_key)
-                .ok_or_else(|| anyhow!("Aucune clé privée trouvée dans ~/.ssh"))?;
-            let key = load_secret_key(&path, ctx.raw("passphrase").as_deref())
-                .with_context(|| format!("Lecture de la clé impossible : {}", path.display()))?;
-            let hash = handle.best_supported_rsa_hash().await?.flatten();
-            handle
-                .authenticate_publickey(&user, PrivateKeyWithHashAlg::new(Arc::new(key), hash))
-                .await?
-                .success()
-        }
-    };
-    if !ok {
-        bail!(
-            "Authentification refusée pour {user}@{host}.\n\
-             Vérifiez l'identifiant. Note : par défaut, OpenSSH interdit la connexion \
-             de root par mot de passe (PermitRootLogin prohibit-password)."
-        );
-    }
-
+/// Ouvre la session SSH et son terminal. Les connexions aux serveurs de rebond
+/// sont renvoyées pour rester ouvertes aussi longtemps que la session.
+async fn open(ctx: &ConnectContext) -> Result<(Handle, Channel, Hops)> {
+    let (handle, hops) = session(ctx, 0).await?;
     let channel = handle.channel_open_session().await?;
     channel
         .request_pty(false, "xterm-256color", ctx.cols as u32, ctx.rows as u32, 0, 0, &[])
         .await?;
     channel.request_shell(false).await?;
-    Ok((handle, channel))
+    Ok((handle, channel, hops))
+}
+
+/// Rebonds enchaînés au plus (bastion → bastion → serveur).
+const MAX_HOPS: usize = 3;
+
+/// Connexion authentifiée, directe ou à travers le serveur de rebond `jumpHost`
+/// (valeurs complètes d'une autre session, préparées par le cœur).
+fn session(ctx: &ConnectContext, depth: usize) -> Pin<Box<dyn Future<Output = Result<(Handle, Hops)>> + Send + '_>> {
+    Box::pin(async move {
+        let host = ctx.require("host", "Hôte")?;
+        let port = ctx.port(22)?;
+        let user = ctx.require("username", "Utilisateur")?;
+
+        let config = Arc::new(client::Config {
+            // Détecte une connexion morte en moins d'une minute (réseau coupé, veille).
+            keepalive_interval: Some(Duration::from_secs(15)),
+            keepalive_max: 3,
+            preferred: if ctx.bool("legacy") { legacy_preferred() } else { Preferred::DEFAULT },
+            ..Default::default()
+        });
+        let rejection = Arc::new(Mutex::new(None));
+        let handler = Handler {
+            known_hosts: ctx.data_dir.join("known_hosts.json"),
+            host_id: format!("{host}:{port}"),
+            sink: ctx.sink.clone(),
+            rejection: rejection.clone(),
+        };
+
+        let mut hops = Hops::new();
+        let connected = match ctx.values.get("jumpHost") {
+            Some(Value::Object(jump)) => {
+                if depth >= MAX_HOPS {
+                    bail!("Trop de serveurs de rebond enchaînés (maximum {MAX_HOPS})");
+                }
+                let mut hop = ctx.clone();
+                hop.values = jump.clone().into_iter().collect();
+                let via = hop.str("host").unwrap_or_default();
+                let (bastion, earlier) = session(&hop, depth + 1)
+                    .await
+                    .with_context(|| format!("Serveur de rebond {via}"))?;
+                ctx.sink.data(format!("\x1b[90m[Termoria] Rebond par {via} vers {host}:{port}\x1b[0m\r\n").as_bytes());
+                let tunnel = bastion
+                    .channel_open_direct_tcpip(host.clone(), port as u32, "127.0.0.1", 0)
+                    .await
+                    .with_context(|| format!("{via} n'a pas pu joindre {host}:{port}"))?;
+                hops = earlier;
+                hops.push(bastion);
+                tokio::time::timeout(Duration::from_secs(15), client::connect_stream(config, tunnel.into_stream(), handler)).await
+            }
+            _ => tokio::time::timeout(Duration::from_secs(15), client::connect(config, (host.as_str(), port), handler)).await,
+        };
+        let mut handle = match connected {
+            Err(_) => bail!("Pas de réponse de {host}:{port} (délai dépassé)"),
+            Ok(Ok(handle)) => handle,
+            Ok(Err(e)) => {
+                // Clé du serveur refusée : on affiche l'explication détaillée.
+                if let Some(reason) = rejection.lock().unwrap().take() {
+                    bail!(reason);
+                }
+                return Err(anyhow!(e).context(format!("Connexion impossible à {host}:{port}")));
+            }
+        };
+
+        let ok = match ctx.str("auth").as_deref().unwrap_or("key") {
+            "password" => {
+                let password = ctx
+                    .raw("password")
+                    .ok_or_else(|| anyhow!("Aucun mot de passe enregistré pour cette session"))?;
+                auth_password(&mut handle, &user, &password).await?
+            }
+            "agent" => auth_agent(&mut handle, &user).await?,
+            // Connexion rapide : clé par défaut si elle s'ouvre sans phrase secrète, puis agent.
+            "auto" => {
+                let mut ok = false;
+                if let Some(key) = default_key().and_then(|p| load_secret_key(&p, None).ok()) {
+                    let hash = handle.best_supported_rsa_hash().await?.flatten();
+                    ok = handle
+                        .authenticate_publickey(&user, PrivateKeyWithHashAlg::new(Arc::new(key), hash))
+                        .await?
+                        .success();
+                }
+                if !ok {
+                    ok = auth_agent(&mut handle, &user).await.unwrap_or(false);
+                }
+                ok
+            }
+            _ => {
+                let path = ctx
+                    .str("keyPath")
+                    .map(PathBuf::from)
+                    .or_else(default_key)
+                    .ok_or_else(|| anyhow!("Aucune clé privée trouvée dans ~/.ssh"))?;
+                let key = load_secret_key(&path, ctx.raw("passphrase").as_deref())
+                    .with_context(|| format!("Lecture de la clé impossible : {}", path.display()))?;
+                let hash = handle.best_supported_rsa_hash().await?.flatten();
+                handle
+                    .authenticate_publickey(&user, PrivateKeyWithHashAlg::new(Arc::new(key), hash))
+                    .await?
+                    .success()
+            }
+        };
+        if !ok {
+            bail!(
+                "Authentification refusée pour {user}@{host}.\n\
+                 Vérifiez l'identifiant. Note : par défaut, OpenSSH interdit la connexion \
+                 de root par mot de passe (PermitRootLogin prohibit-password)."
+            );
+        }
+
+        Ok((handle, hops))
+    })
 }
 
 /// Mot de passe, puis « keyboard-interactive » (utilisé par certains serveurs

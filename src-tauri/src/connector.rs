@@ -303,6 +303,7 @@ pub enum Outcome {
     Detached(String),
 }
 
+#[derive(Clone)]
 pub struct ConnectContext {
     pub app: AppHandle,
     pub session_name: String,

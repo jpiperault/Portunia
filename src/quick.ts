@@ -38,6 +38,15 @@ export function parseQuick(input: string): QuickTarget | null {
   const text = input.trim();
   if (!text) return null;
 
+  // « ssh -J bastion user@hôte » (ou -J à la fin) : serveur de rebond, comme OpenSSH.
+  const before = text.match(/^(?:ssh\s+)?-J\s+(\S+)\s+(\S+)$/i);
+  const after = text.match(/^ssh\s+(\S+)\s+-J\s+(\S+)$/i);
+  if (before || after) {
+    const [jump, target] = before ? [before[1], before[2]] : [after![2], after![1]];
+    const t = parseQuick(`ssh ${target}`);
+    return t && { ...t, name: `${t.name} via ${jump}`, values: { ...t.values, jump } };
+  }
+
   // Adresse web
   if (/^https?:\/\/\S+$/i.test(text)) {
     try {
@@ -78,7 +87,7 @@ export function parseQuick(input: string): QuickTarget | null {
 }
 
 /** Texte d'aide affiché sous la barre de connexion rapide. */
-export const QUICK_HELP = 'ssh user@hôte[:port] · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · COM3@9600';
+export const QUICK_HELP = 'ssh user@hôte[:port] · ssh -J bastion user@hôte · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · COM3@9600';
 
 // ---------- Historique des connexions rapides ----------
 

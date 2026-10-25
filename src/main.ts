@@ -290,6 +290,7 @@ function renderToolbar() {
       coloredFolder && h('span', { class: 'env-label', title: 'Couleur du dossier' }, coloredFolder.toUpperCase()),
       icon('terminal'), h('strong', {}, target || session.name),
       session.folder && h('span', { class: 'muted' }, `· ${session.folder}`),
+      typeof v.jump === 'string' && v.jump.trim() && h('span', { class: 'muted', title: 'Serveur de rebond' }, `· via ${v.jump}`),
       h('span', { class: 'muted' }, `· ${label}`)),
     h('div', { class: 'toolbar-actions' },
       tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), 'Reconnecter'),
@@ -495,11 +496,11 @@ async function openSession(session: Session, quick?: QuickTarget) {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
     // Connexion rapide SSH refusée (pas de clé, pas d'agent) : on demande les identifiants et on réessaie.
-    if (s === 'closed' && quick?.protocol === 'ssh' && reason && /Authentification refusée|Champ requis manquant : Utilisateur/.test(reason)) {
+    if (s === 'closed' && quick?.protocol === 'ssh' && reason && !reason.includes('Serveur de rebond') && /Authentification refusée|Champ requis manquant : Utilisateur/.test(reason)) {
       askCredentials(quick, reason).then((cred) => {
         if (!cred || !state.tabs.includes(tab)) return;
         Object.assign(quick.values, { username: cred.username, auth: 'password', password: cred.password });
-        quick.name = `${cred.username}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}`;
+        quick.name = `${cred.username}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}${quick.values.jump ? ` via ${quick.values.jump}` : ''}`;
         tab.title = quick.name;
         reconnect(tab);
       });
