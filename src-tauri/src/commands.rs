@@ -21,6 +21,8 @@ use crate::keys;
 use crate::notes::Notes;
 use crate::credentials::{Credential, Credentials};
 use crate::nettools;
+use crate::serverstats;
+use crate::connector::RemoteExec;
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
 use crate::transfer;
@@ -1361,4 +1363,20 @@ pub fn credential_delete(state: State<'_, AppState>, id: String) -> CmdResult<()
         }
     }
     state.credentials.lock().unwrap().remove(&id).map_err(err)
+}
+
+// ---------- Tableau de bord du serveur (Pro) ----------
+
+fn exec_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteExec>> {
+    let connections = state.connections.lock().unwrap();
+    let connection = connections.get(connection_id).ok_or("Session fermée")?;
+    connection.exec().ok_or_else(|| "Ce protocole ne permet pas de lancer des commandes".into())
+}
+
+#[tauri::command]
+pub async fn server_stats(state: State<'_, AppState>, connection_id: String) -> CmdResult<serverstats::ServerStats> {
+    state.unlocked()?;
+    state.license.lock().unwrap().require(Feature::ServerDashboard).map_err(full)?;
+    let exec = exec_of(&state, &connection_id)?;
+    serverstats::collect(exec.as_ref()).await.map_err(full)
 }

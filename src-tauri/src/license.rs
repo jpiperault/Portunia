@@ -40,15 +40,27 @@ pub enum Feature {
     Vaults,
     /// Espaces partagés d'équipe (à venir).
     TeamSpaces,
+    /// Tableau de bord d'un serveur (CPU, mémoire, disques…).
+    ServerDashboard,
+    /// Commande lancée sur plusieurs serveurs.
+    MultiExec,
+    /// Conteneurs Docker et Kubernetes.
+    Containers,
+    /// Stockage objet S3.
+    CloudStorage,
 }
 
 impl Feature {
-    pub const ALL: [Feature; 5] = [
+    pub const ALL: [Feature; 9] = [
         Feature::SessionRecording,
         Feature::MonitoringAlerts,
         Feature::Sync,
         Feature::Vaults,
         Feature::TeamSpaces,
+        Feature::ServerDashboard,
+        Feature::MultiExec,
+        Feature::Containers,
+        Feature::CloudStorage,
     ];
 
     /// Édition minimale qui débloque la fonctionnalité.
@@ -66,6 +78,10 @@ impl Feature {
             Feature::Sync => "Synchronisation chiffrée entre PC",
             Feature::Vaults => "Coffres de mots de passe (Bitwarden, KeePass…)",
             Feature::TeamSpaces => "Espaces partagés d'équipe",
+            Feature::ServerDashboard => "Tableau de bord des serveurs",
+            Feature::MultiExec => "Commande sur plusieurs serveurs",
+            Feature::Containers => "Conteneurs Docker et Kubernetes",
+            Feature::CloudStorage => "Stockage S3",
         }
     }
 }

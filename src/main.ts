@@ -3,6 +3,7 @@ import './styles.css';
 import { api, connectQuick, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
+import { ServerPanel } from './dashboard';
 import { openCredentialManager } from './credentials';
 import { createNetTools, NetToolsView, wakeSession } from './nettools';
 import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
@@ -55,6 +56,8 @@ interface Tab {
   player?: Player;
   /** Outils réseau (onglet « tools »). */
   netTools?: NetToolsView;
+  /** Tableau de bord du serveur (panneau de droite, Pro). */
+  server?: ServerPanel;
 }
 
 const state = {
@@ -64,9 +67,8 @@ const state = {
   active: null as string | null,
   filter: '',
   folders: [] as string[],
-  showFiles: true,
-  /** Notes à la place des fichiers dans le panneau de droite. */
-  showNotes: false,
+  /** Panneau de droite affiché (vide = masqué). */
+  side: 'files' as SidePanel,
   /** Sessions qui ont une note. */
   noteIds: new Set<string>(),
   /** Onglets affichés côte à côte (2 à 4), vide = un seul onglet à l'écran. */
@@ -334,14 +336,19 @@ function renderToolbar() {
         onclick: () => toggleBroadcast(),
       }, icon('broadcast', 14), state.broadcast ? 'Saisie multiple : ACTIVE' : 'Saisie multiple'),
       tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), 'Déconnecter'),
+      tab.state === 'connected' && session.protocol === 'ssh' && h('button', {
+        class: `btn${shownSide(tab) === 'server' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'server'),
+        title: 'Tableau de bord : processeur, mémoire, disques, processus, services en échec',
+        onclick: () => toggleServer(tab),
+      }, icon('chart', 14), 'Serveur', !allows('serverDashboard') && h('span', { class: 'chip pro locked' }, 'PRO')),
       !tab.quick && h('button', {
-        class: `btn${state.showNotes && tab.notes ? ' on' : ''}`, 'aria-pressed': String(state.showNotes && !!tab.notes),
+        class: `btn${shownSide(tab) === 'notes' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'notes'),
         title: state.noteIds.has(session.id) ? 'Notes de cette session (une note existe)' : 'Notes de cette session (Markdown)',
         onclick: () => toggleNotes(tab),
       }, icon('edit', 14), state.noteIds.has(session.id) ? 'Notes •' : 'Notes'),
       tab.files && h('button', {
-        class: `btn${state.showFiles && !state.showNotes ? ' on' : ''}`, 'aria-pressed': String(state.showFiles && !state.showNotes), title: 'Afficher / masquer l\'explorateur de fichiers',
-        onclick: () => { state.showFiles = state.showNotes || !state.showFiles; state.showNotes = false; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
+        class: `btn${shownSide(tab) === 'files' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'files'), title: 'Afficher / masquer l\'explorateur de fichiers',
+        onclick: () => showSide(tab, 'files'),
       }, icon('files', 14), 'Fichiers'),
       tab.quick
         ? h('button', { class: 'btn primary', title: 'Garder cette connexion dans la liste des sessions', onclick: () => tab.quick && saveQuick(tab.quick) }, icon('plus', 14), 'Enregistrer comme session')
@@ -349,16 +356,52 @@ function renderToolbar() {
   );
 }
 
-/** Panneau de droite : notes de la session, ou explorateur de fichiers du serveur de l'onglet actif. */
+type SidePanel = 'files' | 'notes' | 'server' | '';
+
+/** Panneau réellement affiché pour cet onglet (celui demandé s'il existe, sinon les fichiers). */
+function shownSide(tab: Tab | undefined): SidePanel {
+  if (!tab || !state.side) return '';
+  if (state.side === 'notes' && tab.notes) return 'notes';
+  if (state.side === 'server' && tab.server) return 'server';
+  return tab.files ? 'files' : '';
+}
+
+/** Panneau de droite de l'onglet actif : fichiers, notes ou tableau de bord du serveur. */
 function renderSidePanel() {
   const tab = activeTab();
-  const panel = state.showNotes && tab?.notes ? tab.notes.el : state.showFiles ? tab?.files?.el : undefined;
+  const side = shownSide(tab);
+  // Le tableau de bord ne relève les mesures que lorsqu'il est visible.
+  for (const t of state.tabs) t.server?.setVisible(t === tab && side === 'server');
+  const panel = side === 'notes' ? tab?.notes?.el : side === 'server' ? tab?.server?.el : side === 'files' ? tab?.files?.el : undefined;
   if (!panel) {
     details.hidden = true;
     return;
   }
   details.hidden = false;
   if (details.firstChild !== panel) details.replaceChildren(panel);
+}
+
+/** Affiche un panneau, ou le masque s'il est déjà affiché. */
+function showSide(tab: Tab, side: Exclude<SidePanel, ''>) {
+  state.side = shownSide(tab) === side ? '' : side;
+  renderAll();
+  requestAnimationFrame(() => viewOf(tab)?.refit());
+}
+
+/** Tableau de bord du serveur de l'onglet (Pro). */
+function toggleServer(tab: Tab) {
+  if (!allows('serverDashboard')) return toast('Le tableau de bord des serveurs fait partie de Termoria Pro (Paramètres › Licence)', 'error');
+  const id = tab.term?.connection;
+  if (!id) return;
+  if (!tab.server || tab.server.connectionId !== id) {
+    tab.server?.dispose();
+    tab.server = new ServerPanel(id, tab.title, (cmd) => {
+      if (!tab.term?.connection) return;
+      tab.term.send(cmd);
+      tab.term.focus();
+    });
+  }
+  showSide(tab, 'server');
 }
 
 /** Affiche / masque les notes de la session de l'onglet. */
@@ -377,9 +420,8 @@ function toggleNotes(tab: Tab) {
       renderTree();
     });
   }
-  state.showNotes = created || !state.showNotes;
-  renderAll();
-  requestAnimationFrame(() => viewOf(tab)?.refit());
+  if (created) state.side = '';
+  showSide(tab, 'notes');
 }
 
 function renderStatus() {
@@ -468,6 +510,7 @@ function closeTab(id: string) {
   const [tab] = state.tabs.splice(index, 1);
   viewOf(tab)?.dispose();
   tab.notes?.flush();
+  tab.server?.dispose();
   tab.player?.dispose();
   tab.netTools?.dispose();
   tab.view.remove();

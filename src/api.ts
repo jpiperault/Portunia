@@ -373,3 +373,24 @@ export const credentials = {
   save: (credential: Credential, secrets: Record<string, string>) => invoke<Credential>('credential_save', { credential, secrets }),
   remove: (id: string) => invoke<void>('credential_delete', { id }),
 };
+
+// ---------- Tableau de bord du serveur ----------
+
+export interface ServerStats {
+  os: string;
+  kernel: string;
+  hostname: string;
+  uptimeSecs: number;
+  load: [number, number, number];
+  cpus: number;
+  cpuPercent: number;
+  memTotalKb: number;
+  memAvailableKb: number;
+  swapTotalKb: number;
+  swapFreeKb: number;
+  disks: { mount: string; fs: string; totalKb: number; usedKb: number }[];
+  processes: { pid: number; cpu: number; mem: number; name: string }[];
+  failedServices: string[];
+}
+
+export const serverStats = (connectionId: string) => invoke<ServerStats>('server_stats', { connectionId });

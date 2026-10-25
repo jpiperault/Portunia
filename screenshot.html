@@ -79,7 +79,7 @@
           case 'list_folders': return ['Clients', 'Clients/Dupont', 'Lab maison', 'Production', 'Production/Web'];
           case 'list_snippets': return [];
           case 'folder_colors': return { Production: 'red', 'Lab maison': 'green', Clients: 'blue' };
-          case 'license_status': return { edition: 'free', preview: true, license: null, expired: false, features: [] };
+          case 'license_status': return { edition: 'free', preview: true, license: null, expired: false, features: ['sessionRecording', 'monitoringAlerts', 'serverDashboard', 'multiExec', 'containers', 'cloudStorage'].map((feature) => ({ feature, label: feature, edition: 'pro', allowed: true })) };
           case 'lock_status': return { enabled: false, locked: false, hello: false, helloAvailable: true, timeoutMinutes: 15 };
           case 'monitor_check': return args.targets.map((t, i) => t.id === 's5'
             ? { id: t.id, up: false, latencyMs: null, error: 'pas de réponse en 3 s' }
@@ -94,6 +94,14 @@
           case 'fs_home': return '/home/deploy';
           case 'fs_list': return [E('releases', true, 0, 3600), E('scripts', true, 0, 86400), E('site', true, 0, 7200), E('.bashrc', false, 3771, 864000), E('backup-2026-10-23.tar.gz', false, 48234112, 50000), E('deploy.sh', false, 2048, 3600), E('notes.md', false, 1210, 600)];
           case 'tunnel_list': return [];
+          case 'server_stats': {
+            const t = Date.now() / 1000;
+            return { os: 'Debian GNU/Linux 13 (trixie)', kernel: '6.12.48-amd64', hostname: 'srv-web-01', uptimeSecs: 51322 + Math.round(t % 1000), load: [0.42, 0.31, 0.25], cpus: 4,
+              cpuPercent: 18 + 12 * Math.sin(t / 3), memTotalKb: 8042512, memAvailableKb: 2620000, swapTotalKb: 2097148, swapFreeKb: 1900000,
+              disks: [{ mount: '/', fs: 'ext4', totalKb: 41152736, usedKb: 18245600 }, { mount: '/var/lib/mysql', fs: 'xfs', totalKb: 104857600, usedKb: 96000000 }],
+              processes: [{ pid: 1184, cpu: 12.5, mem: 1.2, name: 'nginx' }, { pid: 901, cpu: 6.1, mem: 4.8, name: 'php-fpm8.4' }, { pid: 733, cpu: 3.4, mem: 22.6, name: 'mariadbd' }, { pid: 1, cpu: 0.1, mem: 0.2, name: 'systemd' }],
+              failedServices: ['backup-nightly.service'] };
+          }
           case 'credentials_list': return [
             { id: 'c1', name: 'Admin production', username: 'admin', auth: 'key', keyPath: '', domain: '', secretKeys: ['passphrase'], usedBy: ['srv-web-01', 'srv-web-02', 'srv-db-01'] },
             { id: 'c2', name: 'Compte domaine', username: 'jpiperault', auth: 'password', keyPath: '', domain: 'CORP', secretKeys: ['password'], usedBy: [] },

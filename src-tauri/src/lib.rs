@@ -12,6 +12,7 @@ mod notes;
 mod recording;
 mod registry;
 mod secrets;
+mod serverstats;
 mod store;
 mod transfer;
 
@@ -122,6 +123,7 @@ pub fn run() {
             commands::credentials_list,
             commands::credential_save,
             commands::credential_delete,
+            commands::server_stats,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");
