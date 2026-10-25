@@ -28,7 +28,9 @@ impl Connector for VncConnector {
             fields: vec![
                 Field::new("host", "Hôte", FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(5900),
-                Field::new("password", "Mot de passe VNC", FieldKind::Secret),
+                Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
+                    .placeholder("Vide = identifiants propres à cette session"),
+                Field::new("password", "Mot de passe VNC", FieldKind::Secret).hidden_by("credential"),
                 Field::new("viewOnly", "Lecture seule (ni clavier ni souris)", FieldKind::Bool).default(false),
                 Field::new("mac", "Adresse MAC (Wake-on-LAN)", FieldKind::Text)
                     .placeholder("Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine"),

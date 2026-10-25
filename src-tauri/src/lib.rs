@@ -1,6 +1,7 @@
 mod commands;
 mod connector;
 mod connectors;
+mod credentials;
 mod importers;
 mod keys;
 mod license;
@@ -118,6 +119,9 @@ pub fn run() {
             commands::net_traceroute,
             commands::net_ports,
             commands::net_wake,
+            commands::credentials_list,
+            commands::credential_save,
+            commands::credential_delete,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

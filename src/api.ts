@@ -23,6 +23,8 @@ export interface Field {
   default?: unknown;
   placeholder?: string;
   showIf?: { key: string; equals: string };
+  /** Masqué quand cet autre champ est rempli. */
+  hiddenBy?: string;
 }
 
 export interface Manifest {
@@ -352,4 +354,22 @@ export const net = {
   ports: (host: string, ports: string, onEvent: (e: NetEvent) => void) => invoke<string>('net_ports', { host, ports, onEvent: netChannel(onEvent) }),
   cancel: (id: string) => invoke<void>('net_cancel', { id }),
   wake: (mac: string, broadcast: string | null) => invoke<string>('net_wake', { mac, broadcast }),
+};
+
+// ---------- Identifiants partagés ----------
+
+export interface Credential {
+  id: string;
+  name: string;
+  username: string;
+  auth: 'password' | 'key' | 'agent';
+  keyPath: string;
+  domain: string;
+  secretKeys: string[];
+}
+
+export const credentials = {
+  list: () => invoke<(Credential & { usedBy: string[] })[]>('credentials_list'),
+  save: (credential: Credential, secrets: Record<string, string>) => invoke<Credential>('credential_save', { credential, secrets }),
+  remove: (id: string) => invoke<void>('credential_delete', { id }),
 };

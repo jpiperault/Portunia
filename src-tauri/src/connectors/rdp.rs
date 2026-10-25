@@ -34,14 +34,18 @@ impl Connector for RdpConnector {
             fields: vec![
                 Field::new("host", "Hôte", FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(3389),
-                Field::new("username", "Utilisateur", FieldKind::Text).placeholder("DOMAINE\\utilisateur"),
+                Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
+                    .placeholder("Vide = identifiants propres à cette session"),
+                Field::new("username", "Utilisateur", FieldKind::Text)
+                    .placeholder("DOMAINE\\utilisateur")
+                    .hidden_by("credential"),
                 Field::new(
                     "client",
                     "Affichage",
                     choice(&[("tab", "Dans un onglet"), ("mstsc", "Client Windows (mstsc)")]),
                 )
                 .default("tab"),
-                Field::new("password", "Mot de passe", FieldKind::Secret).show_if("client", "tab"),
+                Field::new("password", "Mot de passe", FieldKind::Secret).show_if("client", "tab").hidden_by("credential"),
                 Field::new("fullscreen", "Plein écran", FieldKind::Bool).default(false).show_if("client", "mstsc"),
                 Field::new("multimon", "Utiliser tous les écrans", FieldKind::Bool)
                     .default(false)

@@ -19,6 +19,7 @@ use crate::connector::{
 use crate::importers::{self, Candidate};
 use crate::keys;
 use crate::notes::Notes;
+use crate::credentials::{Credential, Credentials};
 use crate::nettools;
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
@@ -40,6 +41,7 @@ pub struct AppState {
     /// Fichiers distants ouverts dans un éditeur local : (connexion, surveillance).
     edits: Mutex<HashMap<String, (String, tauri::async_runtime::JoinHandle<()>)>>,
     notes: Mutex<Notes>,
+    credentials: Mutex<Credentials>,
 }
 
 impl AppState {
@@ -53,6 +55,7 @@ impl AppState {
             recordings: Mutex::new(HashMap::new()),
             edits: Mutex::new(HashMap::new()),
             notes: Mutex::new(Notes::load(data_dir.join("notes.json"))),
+            credentials: Mutex::new(Credentials::load(data_dir.join("credentials.json"))),
             data_dir,
         }
     }
@@ -222,7 +225,7 @@ pub async fn connect(
         .unwrap()
         .get(&session_id)
         .ok_or("Session introuvable")?;
-    let values = session_values(&session)?;
+    let values = session_values(&state, &session)?;
     start_connection(&app, &state, &session.protocol, session.name.clone(), values, cols, rows, on_event).await
 }
 
@@ -572,7 +575,8 @@ pub fn export_backup(state: State<'_, AppState>, path: String) -> CmdResult<usiz
         let all = state.notes.lock().unwrap();
         sessions.iter().filter_map(|s| all.all().get(&s.id).map(|n| (s.id.clone(), n.clone()))).collect()
     };
-    let backup = importers::Backup { app: "termoria".into(), version: 1, sessions, folders, snippets, notes };
+    let credentials = state.credentials.lock().unwrap().list().into_iter().map(|mut c| { c.secret_keys.clear(); c }).collect();
+    let backup = importers::Backup { app: "termoria".into(), version: 1, sessions, folders, snippets, notes, credentials };
     let text = serde_json::to_string_pretty(&backup).map_err(err)?;
     std::fs::write(&path, text).map_err(|e| format!("Écriture impossible : {e}"))?;
     Ok(count)
@@ -595,6 +599,15 @@ pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<Back
         .unwrap()
         .merge_backup(backup.sessions, backup.folders, backup.snippets)
         .map_err(full)?;
+    // Identifiants partagés absents : recréés sans mot de passe (à ressaisir).
+    {
+        let mut creds = state.credentials.lock().unwrap();
+        for c in &backup.credentials {
+            if creds.find(&c.id).is_none() && creds.find(&c.name).is_none() {
+                creds.restore(c.clone()).map_err(err)?;
+            }
+        }
+    }
     // Notes des sessions restaurées (une note existante est gardée).
     let mut notes = state.notes.lock().unwrap();
     for (id, text) in &backup.notes {
@@ -608,6 +621,17 @@ pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<Back
 /// Suggestions d'un champ (ex. ports COM présents), fournies par l'extension.
 #[tauri::command]
 pub fn field_suggestions(state: State<'_, AppState>, protocol: String, source: String) -> Vec<ChoiceOption> {
+    // Identifiants partagés : proposés par leur nom.
+    if source == "credentials" {
+        return state
+            .credentials
+            .lock()
+            .unwrap()
+            .list()
+            .into_iter()
+            .map(|c| ChoiceOption { label: if c.username.is_empty() { c.auth } else { c.username }, value: c.name })
+            .collect();
+    }
     // Serveurs de rebond : les sessions SSH enregistrées (le cœur seul les connaît).
     if source == "ssh-sessions" {
         let mut list: Vec<ChoiceOption> = state
@@ -964,13 +988,15 @@ pub fn open_shell_elevated(state: State<'_, AppState>, shell: crate::connectors:
 const MAX_JUMPS: usize = 3;
 
 /// Valeurs d'une session, mots de passe compris.
-fn session_values(session: &Session) -> CmdResult<HashMap<String, Value>> {
+fn session_values(state: &AppState, session: &Session) -> CmdResult<HashMap<String, Value>> {
     let mut values = session.values.clone();
     for key in &session.secret_keys {
         if let Some(secret) = secrets::get(&session.id, key).map_err(err)? {
             values.insert(key.clone(), Value::String(secret));
         }
     }
+    // Identifiants partagés : ils remplacent utilisateur, authentification et secrets.
+    state.credentials.lock().unwrap().apply(&mut values).map_err(full)?;
     Ok(values)
 }
 
@@ -1013,7 +1039,7 @@ fn jump_values(state: &AppState, hop: &str, visited: &mut Vec<String>) -> CmdRes
             return Err(format!("Boucle de serveurs de rebond : « {} » revient deux fois", session.name));
         }
         visited.push(session.id.clone());
-        let mut values = session_values(&session)?;
+        let mut values = session_values(state, &session)?;
         // Le bastion n'ouvre pas ses propres tunnels.
         values.remove("tunnels");
         resolve_jump(state, &mut values, visited)?;
@@ -1267,4 +1293,72 @@ fn s(n: usize) -> &'static str {
 #[tauri::command]
 pub fn net_wake(mac: String, broadcast: Option<String>) -> CmdResult<String> {
     nettools::wake(&mac, broadcast.as_deref()).map_err(full)
+}
+
+// ---------- Identifiants partagés ----------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialView {
+    #[serde(flatten)]
+    credential: Credential,
+    /// Sessions qui l'utilisent.
+    used_by: Vec<String>,
+}
+
+fn credential_users(state: &AppState, c: &Credential) -> Vec<String> {
+    state
+        .store
+        .lock()
+        .unwrap()
+        .list()
+        .into_iter()
+        .filter(|s| {
+            s.values
+                .get("credential")
+                .and_then(Value::as_str)
+                .is_some_and(|k| k.trim() == c.id || k.trim().eq_ignore_ascii_case(&c.name))
+        })
+        .map(|s| s.name)
+        .collect()
+}
+
+#[tauri::command]
+pub fn credentials_list(state: State<'_, AppState>) -> CmdResult<Vec<CredentialView>> {
+    state.unlocked()?;
+    let list = state.credentials.lock().unwrap().list();
+    Ok(list
+        .into_iter()
+        .map(|c| CredentialView { used_by: credential_users(&state, &c), credential: c })
+        .collect())
+}
+
+#[tauri::command]
+pub fn credential_save(state: State<'_, AppState>, credential: Credential, secrets: HashMap<String, String>) -> CmdResult<Credential> {
+    state.unlocked()?;
+    let old_name = state.credentials.lock().unwrap().find(&credential.id).map(|c| c.name.clone());
+    let saved = state.credentials.lock().unwrap().save(credential, &secrets).map_err(full)?;
+    // Renommé : les sessions qui le désignaient par son nom suivent.
+    if let Some(old) = old_name.filter(|o| *o != saved.name) {
+        let mut store = state.store.lock().unwrap();
+        for mut s in store.list() {
+            if s.values.get("credential").and_then(Value::as_str).is_some_and(|k| k.trim().eq_ignore_ascii_case(&old)) {
+                s.values.insert("credential".into(), Value::String(saved.name.clone()));
+                store.upsert(s).map_err(err)?;
+            }
+        }
+    }
+    Ok(saved)
+}
+
+#[tauri::command]
+pub fn credential_delete(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.unlocked()?;
+    if let Some(c) = state.credentials.lock().unwrap().find(&id).cloned() {
+        let users = credential_users(&state, &c);
+        if !users.is_empty() {
+            return Err(format!("« {} » est utilisé par {} : retirez-le de ces sessions d'abord", c.name, users.join(", ")));
+        }
+    }
+    state.credentials.lock().unwrap().remove(&id).map_err(err)
 }

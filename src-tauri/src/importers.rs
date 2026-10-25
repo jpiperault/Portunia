@@ -422,6 +422,9 @@ pub struct Backup {
     /// Notes des sessions, par identifiant.
     #[serde(default)]
     pub notes: std::collections::HashMap<String, String>,
+    /// Identifiants partagés, sans leurs secrets.
+    #[serde(default)]
+    pub credentials: Vec<crate::credentials::Credential>,
 }
 
 pub fn read_backup(path: &PathBuf) -> Result<Backup> {

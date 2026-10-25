@@ -33,7 +33,10 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
     const error = h('p', { class: 'form-error', role: 'alert' });
 
     const fieldValue = (f: Field) => (f.key in values ? values[f.key] : f.default);
-    const visible = (f: Field) => !f.showIf || String(fieldValue(protocol.fields.find((x) => x.key === f.showIf!.key)!) ?? '') === f.showIf.equals;
+    const filled = (key: string) => String(values[key] ?? '').trim() !== '';
+    const visible = (f: Field) =>
+      !(f.hiddenBy && filled(f.hiddenBy))
+      && (!f.showIf || String(fieldValue(protocol.fields.find((x) => x.key === f.showIf!.key)!) ?? '') === f.showIf.equals);
 
     function renderPicker() {
       picker.replaceChildren(
@@ -49,7 +52,15 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
 
     function renderInput(f: Field): HTMLElement {
       const current = fieldValue(f);
-      const set = (v: unknown) => { values[f.key] = v; if (protocol.fields.some((x) => x.showIf?.key === f.key)) renderFields(); };
+      const set = (v: unknown) => {
+        // Champ « identifiants partagés » : on ne redessine que s'il passe de vide à rempli (ou l'inverse), pour garder le focus.
+        const wasFilled = filled(f.key);
+        values[f.key] = v;
+        if (protocol.fields.some((x) => x.showIf?.key === f.key) || (protocol.fields.some((x) => x.hiddenBy === f.key) && wasFilled !== filled(f.key))) {
+          renderFields();
+          if (f.kind.type !== 'choice' && f.kind.type !== 'bool') fieldsBox.querySelector<HTMLInputElement>(`[data-key="${f.key}"]`)?.focus();
+        }
+      };
       switch (f.kind.type) {
         case 'bool':
           return h('label', { class: 'check' },
@@ -81,15 +92,16 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
             api.fieldSuggestions(protocol.id, f.kind.source)
               .then((opts) => {
                 datalist.replaceChildren(...opts.map((o) => h('option', { value: o.value }, o.label)));
-                if (!current && opts.length === 1) { values[f.key] = opts[0].value; renderFields(); }
+                // Un seul choix possible pour un champ obligatoire (ex. un seul port COM) : prérempli.
+                if (f.required && !current && opts.length === 1) { values[f.key] = opts[0].value; renderFields(); }
               })
               .catch(() => {});
           }
           return h('label', { class: `fld${isNum ? ' fld-small' : ''}` }, f.label + (f.required ? ' *' : ''),
             h('input', {
               type: isNum ? 'number' : 'text', value: current == null ? '' : String(current), list: listId,
-              placeholder: f.placeholder ?? '', spellcheck: 'false',
-              oninput: (e: Event) => { const v = (e.target as HTMLInputElement).value; values[f.key] = isNum && v !== '' ? Number(v) : v; },
+              placeholder: f.placeholder ?? '', spellcheck: 'false', 'data-key': f.key,
+              oninput: (e: Event) => { const v = (e.target as HTMLInputElement).value; set(isNum && v !== '' ? Number(v) : v); },
             }),
             datalist);
         }

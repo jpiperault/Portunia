@@ -3,6 +3,7 @@ import './styles.css';
 import { api, connectQuick, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
+import { openCredentialManager } from './credentials';
 import { createNetTools, NetToolsView, wakeSession } from './nettools';
 import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
 import { badge, h, icon, viewIcon } from './dom';
@@ -690,6 +691,8 @@ $('open-recordings').append(icon('play'), h('span', { class: 'grow' }, 'Enregist
 $('open-recordings').addEventListener('click', () => openRecordings(toast));
 $('open-nettools').append(icon('broadcast'), h('span', { class: 'grow' }, 'Outils réseau'));
 $('open-nettools').addEventListener('click', () => openNetTools());
+$('open-credentials').append(icon('user'), h('span', { class: 'grow' }, 'Identifiants partagés'));
+$('open-credentials').addEventListener('click', () => openCredentialManager(toast, () => reload()));
 setPlayerHandler(openReplay);
 $('open-import').append(icon('upload'), h('span', { class: 'grow' }, 'Importer / exporter'));
 $('open-import').addEventListener('click', () => openImportExport((msg) => { toast(msg); reload(); }, toast));
@@ -883,6 +886,7 @@ function paletteEntries(): PaletteEntry[] {
     { label: 'Extensions', group: 'Action', icon: 'puzzle', action: () => openExtensions() },
     { label: 'Supervision des serveurs', group: 'Action', icon: 'refresh', action: () => monitor.openOverview((s) => openSession(s)) },
     { label: 'Clés SSH', group: 'Action', icon: 'lock', hint: 'Créer, copier, installer', keywords: 'ssh-keygen ed25519 rsa authorized_keys', action: () => { const t = activeTab(); const s = sessionOf(t?.sessionId) ?? (t?.quick && quickSession(t.quick)); if (t && s && s.protocol === 'ssh' && t.state === 'connected') openKeysFor(t, s); else openKeyManager({ toast }); } },
+    { label: 'Identifiants partagés', group: 'Action', icon: 'user', hint: 'Un compte pour plusieurs sessions', keywords: 'mot de passe compte login credentials', action: () => openCredentialManager(toast, () => reload()) },
     { label: 'Outils réseau', group: 'Action', icon: 'broadcast', hint: 'Ping, traceroute, ports, DNS, Wake-on-LAN', keywords: 'ping tracert traceroute port scan dns nslookup wol wake', action: () => openNetTools() },
     { label: 'Paramètres', group: 'Action', icon: 'settings', action: () => openSettingsDialog(toast) },
     { label: 'Verrouiller Termoria', group: 'Action', icon: 'lock', hint: 'Ctrl+Maj+L', action: () => lockNow(toast, () => reload()) },

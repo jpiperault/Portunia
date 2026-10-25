@@ -54,6 +54,7 @@ Autres fonctions :
 - clés SSH : création Ed25519 ou RSA 4096 dans ~/.ssh (phrase secrète conseillée), copie de la clé publique, installation sur le serveur de l'onglet en un clic (authorized_keys et droits corrigés), puis la session passe à l'authentification par clé (bouton « Clé SSH » ou palette) ;
 - notes par session en Markdown (bouton « Notes », panneau de droite) : titres, listes, cases à cocher cliquables, liens, blocs de code envoyés au terminal d'un clic ; enregistrement automatique, repère dans l'arbre, incluses dans la sauvegarde Termoria ;
 - outils réseau (onglet, palette ou clic droit sur une session) : ping et traceroute sans droits administrateur, test de ports TCP (listes et plages, services reconnus), résolution DNS, Wake-on-LAN (adresse MAC enregistrée sur la session, « Réveiller » au clic droit) ;
+- identifiants partagés : un compte (utilisateur, mot de passe, clé ou agent, domaine) choisi dans plusieurs sessions SSH, RDP ou VNC ; on change le mot de passe une fois, toutes suivent ;
 - palette globale (Ctrl+Maj+O) : aller à une session, un shell local ou une action en quelques lettres ;
 - arbre des sessions avec dossiers et sous-dossiers (dossiers vides possibles), glisser-déposer pour ranger, menu clic droit (dupliquer, ouvrir tout un dossier…), recherche (Ctrl+Maj+K), onglets ;
 - terminal : recherche dans l'historique (Ctrl+Maj+F), police et taille réglables (Ctrl + molette), copier/coller au clic droit, liens ouverts par Ctrl+clic ;

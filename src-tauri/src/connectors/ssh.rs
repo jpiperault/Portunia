@@ -48,7 +48,9 @@ impl Connector for SshConnector {
                     .required()
                     .placeholder("serveur.exemple.fr ou 10.0.0.12"),
                 Field::new("port", "Port", FieldKind::Number).default(22),
-                Field::new("username", "Utilisateur", FieldKind::Text).required(),
+                Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
+                    .placeholder("Vide = identifiants propres à cette session"),
+                Field::new("username", "Utilisateur", FieldKind::Text).required().hidden_by("credential"),
                 Field::new(
                     "auth",
                     "Authentification",
@@ -58,14 +60,18 @@ impl Connector for SshConnector {
                         ("agent", "Agent (Pageant / OpenSSH)"),
                     ]),
                 )
-                .default("key"),
+                .default("key")
+                .hidden_by("credential"),
                 Field::new("keyPath", "Fichier de clé privée", FieldKind::File)
                     .placeholder("Vide = ~/.ssh/id_ed25519, id_ecdsa ou id_rsa")
-                    .show_if("auth", "key"),
+                    .show_if("auth", "key")
+                    .hidden_by("credential"),
                 Field::new("passphrase", "Phrase de passe de la clé", FieldKind::Secret)
-                    .show_if("auth", "key"),
+                    .show_if("auth", "key")
+                    .hidden_by("credential"),
                 Field::new("password", "Mot de passe", FieldKind::Secret)
-                    .show_if("auth", "password"),
+                    .show_if("auth", "password")
+                    .hidden_by("credential"),
                 Field::new(
                     "legacy",
                     "Compatibilité anciens équipements (autorise des algorithmes faibles)",

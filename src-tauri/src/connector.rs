@@ -78,6 +78,9 @@ pub struct Field {
     pub placeholder: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub show_if: Option<ShowIf>,
+    /// Champ masqué (et ignoré) quand cet autre champ est rempli (ex. identifiants partagés).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden_by: Option<String>,
 }
 
 impl Field {
@@ -90,7 +93,13 @@ impl Field {
             default: None,
             placeholder: None,
             show_if: None,
+            hidden_by: None,
         }
+    }
+
+    pub fn hidden_by(mut self, key: &str) -> Self {
+        self.hidden_by = Some(key.into());
+        self
     }
 
     pub fn required(mut self) -> Self {

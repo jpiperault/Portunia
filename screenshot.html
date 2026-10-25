@@ -25,7 +25,7 @@
 
       const field = (key, label, type, extra) => Object.assign({ key, label, kind: { type }, required: false }, extra || {});
       const protocols = [
-        { id: 'ssh', name: 'SSH', version: '0.3.0', description: 'Terminal sécurisé : clé privée, mot de passe ou agent.', view: 'terminal', builtin: true, fileBrowser: true, portForwarding: true, fields: [field('host', 'Hôte', 'text', { required: true }), field('port', 'Port', 'number'), field('username', 'Utilisateur', 'text')] },
+        { id: 'ssh', name: 'SSH', version: '0.3.0', description: 'Terminal sécurisé : clé privée, mot de passe ou agent.', view: 'terminal', builtin: true, fileBrowser: true, portForwarding: true, fields: [field('host', 'Hôte', 'text', { required: true }), field('port', 'Port', 'number'), Object.assign(field('credential', 'Identifiants partagés', 'suggest'), { kind: { type: 'suggest', source: 'credentials' }, placeholder: 'Vide = identifiants propres à cette session' }), field('username', 'Utilisateur', 'text', { required: true, hiddenBy: 'credential' }), field('password', 'Mot de passe', 'secret', { hiddenBy: 'credential' })] },
         { id: 'rdp', name: 'Bureau à distance (RDP)', version: '0.2.0', description: 'Bureau Windows dans un onglet (IronRDP), ou dans le client Windows.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
         { id: 'vnc', name: 'VNC', version: '0.1.0', description: 'Écran distant affiché dans un onglet.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
         { id: 'web', name: 'Interface web', version: '0.1.0', description: 'Console d\'administration dans une fenêtre dédiée.', view: 'web', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('url', 'Adresse', 'text')] },
@@ -94,6 +94,11 @@
           case 'fs_home': return '/home/deploy';
           case 'fs_list': return [E('releases', true, 0, 3600), E('scripts', true, 0, 86400), E('site', true, 0, 7200), E('.bashrc', false, 3771, 864000), E('backup-2026-10-23.tar.gz', false, 48234112, 50000), E('deploy.sh', false, 2048, 3600), E('notes.md', false, 1210, 600)];
           case 'tunnel_list': return [];
+          case 'credentials_list': return [
+            { id: 'c1', name: 'Admin production', username: 'admin', auth: 'key', keyPath: '', domain: '', secretKeys: ['passphrase'], usedBy: ['srv-web-01', 'srv-web-02', 'srv-db-01'] },
+            { id: 'c2', name: 'Compte domaine', username: 'jpiperault', auth: 'password', keyPath: '', domain: 'CORP', secretKeys: ['password'], usedBy: [] },
+          ];
+          case 'field_suggestions': return args.source === 'credentials' ? [{ value: 'Admin production', label: 'admin' }, { value: 'Compte domaine', label: 'jpiperault' }] : [];
           case 'shells_detect': return [
             { id: 'pwsh', name: 'PowerShell 7', command: 'pwsh.exe', args: ['-NoLogo'], cwd: '', icon: 'pwsh' },
             { id: 'cmd', name: 'Invite de commandes', command: 'cmd.exe', args: [], cwd: '', icon: 'cmd' },
@@ -188,6 +193,7 @@
       <div id="tree" class="tree"></div>
       <div class="sidebar-foot">
         <button id="open-snippets" class="tree-item"></button>
+        <button id="open-credentials" class="tree-item"></button>
         <button id="open-recordings" class="tree-item"></button>
         <button id="open-nettools" class="tree-item"></button>
         <button id="open-import" class="tree-item"></button>
