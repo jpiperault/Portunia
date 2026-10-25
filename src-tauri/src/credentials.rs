@@ -3,7 +3,7 @@
 //! d'identifiants Windows, comme ceux des sessions ; credentials.json ne
 //! contient que le reste.
 
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
@@ -46,15 +46,24 @@ fn vault_id(id: &str) -> String {
 pub struct Credentials {
     path: PathBuf,
     list: Vec<Credential>,
+    /// Fichier chiffré non lu (verrouillé) : aucune écriture avant de l'avoir relu.
+    locked: bool,
 }
 
 impl Credentials {
     pub fn load(path: PathBuf) -> Self {
-        let list = fs::read_to_string(&path)
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
-        Self { path, list }
+        let (list, locked) = crate::vault::load_json(&path);
+        Self { path, list, locked }
+    }
+
+    /// Relit le fichier (après déverrouillage).
+    pub fn reload(&mut self) {
+        (self.list, self.locked) = crate::vault::load_json(&self.path);
+    }
+
+    /// Réécrit le fichier dans le mode courant (chiffré ou non).
+    pub fn rewrite(&self) -> Result<()> {
+        self.persist()
     }
 
     pub fn list(&self) -> Vec<Credential> {
@@ -156,16 +165,17 @@ impl Credentials {
     }
 
     fn persist(&self) -> Result<()> {
-        let tmp = self.path.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_string_pretty(&self.list)?)?;
-        fs::rename(&tmp, &self.path)?;
-        Ok(())
+        if self.locked {
+            bail!("Termoria est verrouillé : les identifiants ne sont pas chargés");
+        }
+        crate::vault::write(&self.path, &serde_json::to_string_pretty(&self.list)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn store() -> (Credentials, PathBuf) {
         let path = std::env::temp_dir().join(format!("termoria-cred-{}.json", uuid::Uuid::new_v4()));
@@ -178,6 +188,7 @@ mod tests {
 
     #[test]
     fn noms_uniques_et_relecture() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, path) = store();
         let saved = store.save(cred("Admin prod", "key"), &HashMap::new()).unwrap();
         assert!(!saved.id.is_empty());
@@ -191,6 +202,7 @@ mod tests {
 
     #[test]
     fn remplace_les_valeurs_de_la_session() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, path) = store();
         let mut c = cred("Domaine", "key");
         c.domain = "CORP".into();

@@ -1,21 +1,30 @@
 //! Notes Markdown par session, rangées à part des sessions (notes.json).
 
-use std::{collections::HashMap, fs, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Result;
 
 pub struct Notes {
     path: PathBuf,
     notes: HashMap<String, String>,
+    /// Fichier chiffré non lu (verrouillé) : aucune écriture avant de l'avoir relu.
+    locked: bool,
 }
 
 impl Notes {
     pub fn load(path: PathBuf) -> Self {
-        let notes = fs::read_to_string(&path)
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or_default();
-        Self { path, notes }
+        let (notes, locked) = crate::vault::load_json(&path);
+        Self { path, notes, locked }
+    }
+
+    /// Relit le fichier (après déverrouillage).
+    pub fn reload(&mut self) {
+        (self.notes, self.locked) = crate::vault::load_json(&self.path);
+    }
+
+    /// Réécrit le fichier dans le mode courant (chiffré ou non).
+    pub fn rewrite(&self) -> Result<()> {
+        self.save()
     }
 
     pub fn get(&self, id: &str) -> String {
@@ -49,20 +58,22 @@ impl Notes {
     }
 
     fn save(&self) -> Result<()> {
-        // Écriture dans un fichier temporaire puis remplacement : pas de note tronquée.
-        let tmp = self.path.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_string_pretty(&self.notes)?)?;
-        fs::rename(&tmp, &self.path)?;
-        Ok(())
+        if self.locked {
+            anyhow::bail!("Termoria est verrouillé : les notes ne sont pas chargées");
+        }
+        // Écriture atomique (fichier temporaire puis remplacement), chiffrée si besoin.
+        crate::vault::write(&self.path, &serde_json::to_string_pretty(&self.notes)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn enregistre_relit_et_supprime() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let path = std::env::temp_dir().join(format!("termoria-notes-{}.json", uuid::Uuid::new_v4()));
         let mut notes = Notes::load(path.clone());
         notes.set("a", "# Prod\n- [ ] sauvegarde").unwrap();

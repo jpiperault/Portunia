@@ -45,7 +45,7 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 | Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
-| Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console Windows (ConPTY). Section « Ce PC », menu « + », Ctrl+Maj+T. |
+| Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console de Windows Terminal livrée avec Termoria (OpenConsole, plus rapide que celle du système : écho de la frappe 47 → 17 ms, sorties volumineuses 11 → 38 Mo/s). Section « Ce PC », menu « + », Ctrl+Maj+T. |
 | FTP / FTPS | Onglet fichiers | Explorateur en pleine largeur (envoi, téléchargement, glisser-déposer, renommage, suppression). FTPS explicite par défaut, avec reprise de session TLS (exigée par FileZilla Server et vsftpd) et certificats vérifiés par Windows ; certificat auto-signé accepté sur demande. Connexion rouverte d'elle-même après inactivité. `ftps://user@hôte` en connexion rapide. |
 | Stockage S3 (Pro) | Onglet fichiers | Amazon S3 et services compatibles (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…) : compartiments, dossiers, envoi et téléchargement (jusqu'à 5 Go par fichier), renommage et suppression de dossiers entiers. Adressage par chemin pour MinIO / Ceph. Client intégré (signature AWS SigV4), sans le SDK d'Amazon. |
 | Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
@@ -86,6 +86,7 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 ## Sécurité
 
 - **Mots de passe** dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ; les sauvegardes et imports n'en contiennent pas.
+- **Données chiffrées** dès qu'un mot de passe maître est défini : sessions, notes, identifiants partagés et empreintes des serveurs (AES-256-GCM, clé de données enveloppée par le mot de passe maître via PBKDF2, copie protégée par le compte Windows pour Windows Hello). Mot de passe oublié sans Windows Hello : données perdues, d'où les **sauvegardes protégées par une phrase de passe** (Importer / exporter).
 - **Verrouillage** par mot de passe maître (PBKDF2, 600 000 itérations) ou Windows Hello : verrouillé, le cœur refuse toute action sensible (frappe dans un terminal, fichiers, export…) et l'interface est inerte ; essais limités (attente croissante après 5 échecs).
 - **Serveurs SSH** : empreinte affichée et confirmée à la première connexion (ou reprise de `~/.ssh/known_hosts`), connexion bloquée si la clé change ; algorithmes anciens seulement sur demande.
 - **Fichiers venus d'un serveur** : noms nettoyés (pas de `..\`, de flux NTFS ni de noms réservés) ; « Modifier » refuse les types que Windows exécuterait (.exe, .bat, .js, .lnk…).
@@ -149,6 +150,10 @@ Le cœur ne connaît aucun protocole. Une extension :
 1. Créez `src-tauri/src/connectors/monproto.rs` qui implémente `Connector` (prenez `telnet.rs` comme modèle).
 2. Déclarez-le dans `connectors/mod.rs` et enregistrez-le dans `Registry::with_builtins()`.
 3. Facultatif : ajoutez une couleur `.badge-monproto` dans `src/styles.css`.
+
+## Composants tiers
+
+- Console de Windows Terminal (`conpty.dll`, `OpenConsole.exe`) : Microsoft, licence MIT — voir `src-tauri/conpty/`.
 
 ## Pistes pour la suite
 

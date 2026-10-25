@@ -734,7 +734,7 @@ impl client::Handler for Handler {
             let mut known = read_known(&self.known_hosts);
             known.insert(self.host_id.clone(), fingerprint.clone());
             if let Ok(text) = serde_json::to_string_pretty(&known) {
-                let _ = fs::write(&self.known_hosts, text);
+                let _ = crate::vault::write(&self.known_hosts, &text);
             }
             self.sink.data(format!("\x1b[90m[Termoria] Nouveau serveur mémorisé ({fingerprint})\x1b[0m\r\n").as_bytes());
         }
@@ -743,7 +743,8 @@ impl client::Handler for Handler {
 }
 
 fn read_known(path: &Path) -> HashMap<String, String> {
-    fs::read_to_string(path).ok().and_then(|text| serde_json::from_str(&text).ok()).unwrap_or_default()
+    // Chiffré avec les autres données quand un mot de passe maître est défini.
+    crate::vault::load_json(path).0
 }
 
 /// Empreintes (SHA256) que ~/.ssh/known_hosts d'OpenSSH associe à cet hôte,

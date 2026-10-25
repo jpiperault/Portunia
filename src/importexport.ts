@@ -57,12 +57,14 @@ export function openImportExport(done: (message: string) => void, toast: (m: str
           }, 'Analyser')));
     }));
 
+    const exportPass = h('input', { type: 'password', autocomplete: 'new-password', placeholder: 'Vide = fichier en clair' });
     body.replaceChildren(
       h('p', { class: 'muted small', style: 'margin: 0' }, 'Les mots de passe ne sont jamais importés ni exportés : ils restent dans le Gestionnaire d\'identifiants Windows.'),
       ...cards,
       h('section', { class: 'ext-fields' },
         h('div', { class: 'ext-head' }, h('h3', {}, 'Sauvegarde Termoria')),
-        h('p', { class: 'muted small', style: 'margin: 0' }, 'Un fichier avec toutes vos sessions, dossiers et commandes, pour les sauvegarder ou les copier sur un autre PC.'),
+        h('p', { class: 'muted small', style: 'margin: 0' }, 'Un fichier avec toutes vos sessions, dossiers, notes et commandes, pour les sauvegarder ou les copier sur un autre PC. Protégez-le par une phrase de passe : sans elle, il est lisible par quiconque l\'ouvre.'),
+        h('label', { class: 'fld' }, 'Phrase de passe (recommandée, 8 caractères min.)', exportPass),
         h('div', { class: 'imp-actions' },
           h('button', {
             type: 'button', class: 'btn', onclick: async () => {
@@ -70,8 +72,9 @@ export function openImportExport(done: (message: string) => void, toast: (m: str
               const path = await save({ defaultPath: `termoria-sauvegarde-${date}.json`, filters: [{ name: 'Sauvegarde Termoria', extensions: ['json'] }] });
               if (!path) return;
               try {
-                const n = await api.exportBackup(path);
-                toast(`${n} session(s) exportée(s)`);
+                const n = await api.exportBackup(path, exportPass.value || null);
+                toast(`${n} session(s) exportée(s)${exportPass.value ? ' (fichier chiffré)' : ''}`);
+                exportPass.value = '';
               } catch (e) { toast(errorText(e), 'error'); }
             },
           }, icon('download', 14), 'Exporter…'),
@@ -80,7 +83,16 @@ export function openImportExport(done: (message: string) => void, toast: (m: str
               const path = await open({ multiple: false, directory: false, filters: [{ name: 'Sauvegarde Termoria', extensions: ['json'] }] });
               if (typeof path !== 'string') return;
               try {
-                const r = await api.importBackup(path);
+                let r;
+                try {
+                  r = await api.importBackup(path, null);
+                } catch (e) {
+                  // Sauvegarde chiffrée : on demande sa phrase de passe.
+                  if (!errorText(e).startsWith('PHRASE_REQUISE')) throw e;
+                  const pass = await askPassphrase();
+                  if (pass === null) return;
+                  r = await api.importBackup(path, pass);
+                }
                 dialog.close();
                 done(`${r.added} session(s) restaurée(s)${r.skipped ? `, ${r.skipped} déjà présente(s)` : ''}${r.snippets ? `, ${r.snippets} commande(s)` : ''}`);
               } catch (e) { toast(errorText(e), 'error'); }
@@ -134,4 +146,25 @@ export function openImportExport(done: (message: string) => void, toast: (m: str
   document.body.append(dialog);
   dialog.showModal();
   home();
+}
+
+/** Phrase de passe d'une sauvegarde chiffrée (null : annulé). */
+function askPassphrase(): Promise<string | null> {
+  return new Promise((resolve) => {
+    let value: string | null = null;
+    const input = h('input', { type: 'password', autocomplete: 'off', 'aria-label': 'Phrase de passe' });
+    const dialog = h('dialog', { class: 'dialog', 'aria-labelledby': 'pass-title', style: 'width: min(440px, calc(100vw - 32px))' },
+      h('form', { method: 'dialog', onsubmit: () => { value = input.value; } },
+        h('header', { class: 'dlg-head' }, h('h2', { id: 'pass-title' }, 'Sauvegarde protégée')),
+        h('div', { class: 'dlg-body' },
+          h('p', { class: 'muted small', style: 'margin: 0' }, 'Cette sauvegarde est chiffrée. Saisissez la phrase de passe choisie à l’export.'),
+          input),
+        h('footer', { class: 'dlg-foot' },
+          h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, 'Annuler'),
+          h('button', { type: 'submit', class: 'btn primary' }, 'Restaurer'))));
+    dialog.addEventListener('close', () => { dialog.remove(); resolve(value); });
+    document.body.append(dialog);
+    dialog.showModal();
+    input.focus();
+  });
 }

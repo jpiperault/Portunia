@@ -75,14 +75,22 @@ async function showLockScreen(onUnlocked: () => void, known?: LockStatus) {
     lastActivity = Date.now();
     onUnlocked();
   };
+  const unlockButton = h('button', { type: 'submit', class: 'btn primary' }, 'Déverrouiller');
   const tryPassword = async () => {
+    if (unlockButton.disabled) return;
     error.textContent = '';
+    // La vérification du mot de passe est volontairement coûteuse (contre les essais en série).
+    unlockButton.disabled = true;
+    unlockButton.textContent = 'Déverrouillage…';
     try {
       await security.unlock(input.value);
       done();
     } catch (e) {
       error.textContent = errorText(e);
       input.select();
+    } finally {
+      unlockButton.disabled = false;
+      unlockButton.textContent = 'Déverrouiller';
     }
   };
   const tryHello = async () => {
@@ -103,7 +111,7 @@ async function showLockScreen(onUnlocked: () => void, known?: LockStatus) {
       h('p', { class: 'muted small' }, 'Les sessions ouvertes continuent de tourner en arrière-plan.'),
       input,
       error,
-      h('button', { type: 'submit', class: 'btn primary' }, 'Déverrouiller'),
+      unlockButton,
       status.hello && status.helloAvailable && h('button', { type: 'button', class: 'btn', onclick: tryHello }, icon('user', 14), 'Windows Hello')));
   document.body.append(overlay);
   input.focus();
@@ -123,13 +131,18 @@ export function securitySection(toast: Toast, refresh: () => void): HTMLElement 
     const confirm2 = h('input', { type: 'password', placeholder: 'Confirmer', autocomplete: 'new-password' });
     const save = async () => {
       if (next.value !== confirm2.value) return toast('Les deux mots de passe ne correspondent pas', 'error');
+      // Première activation : les données vont être chiffrées, l'oubli du mot de passe serait sans recours.
+      if (!s.enabled && !confirm('Vos sessions, notes et identifiants partagés vont être chiffrés sur ce PC.\n\nSi vous oubliez ce mot de passe (et sans Windows Hello), ils seront perdus : personne ne pourra les récupérer. Pensez à exporter une sauvegarde protégée.\n\nActiver le mot de passe maître ?')) return;
       try { render(await security.lockSetPassword(current.value, next.value)); toast('Mot de passe maître enregistré'); refresh(); }
       catch (e) { toast(errorText(e), 'error'); }
     };
     box.replaceChildren(...[
       h('p', { class: 'muted small', style: 'margin: 0' }, s.enabled
         ? 'Termoria demande le mot de passe maître au démarrage et après une période d\'inactivité. Verrouillé, il n\'ouvre aucune session et ne lit aucun mot de passe enregistré.'
-        : 'Protégez Termoria par un mot de passe maître : il sera demandé au démarrage et après une période d\'inactivité.'),
+        : 'Protégez Termoria par un mot de passe maître : il sera demandé au démarrage et après une période d\'inactivité, et vos données seront chiffrées sur ce PC.'),
+      s.enabled && h('p', { class: `small ${s.encrypted ? 'muted' : 'form-error'}`, style: 'margin: 0' }, s.encrypted
+        ? 'Sessions, notes, identifiants partagés et empreintes des serveurs sont chiffrés sur ce PC (AES-256). Mot de passe oublié et sans Windows Hello : ils seraient perdus. Exportez de temps en temps une sauvegarde protégée (Importer / exporter).'
+        : 'Vos données seront chiffrées au prochain déverrouillage par mot de passe.'),
       h('div', { class: 'pw-grid' }, s.enabled && current, next, confirm2,
         h('button', { type: 'button', class: 'btn', onclick: save }, s.enabled ? 'Changer le mot de passe' : 'Activer le verrouillage')),
       s.enabled && h('div', { class: 'row2' },

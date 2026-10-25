@@ -380,7 +380,11 @@ mod debit {
         std::thread::sleep(std::time::Duration::from_millis(300));
         sink.0.lock().unwrap().0 = 0;
         let start = std::time::Instant::now();
-        shell.write(format!("type \"{file}\"\r").as_bytes()).unwrap();
+        // Commande mesurée : `type` par défaut, ou TERMORIA_BENCH_CMD ({file} remplacé).
+        let command = std::env::var("TERMORIA_BENCH_CMD")
+            .map(|c| c.replace("{file}", &file))
+            .unwrap_or_else(|_| format!("type \"{file}\""));
+        shell.write(format!("{command}\r").as_bytes()).unwrap();
         loop {
             std::thread::sleep(std::time::Duration::from_millis(20));
             let g = sink.0.lock().unwrap();

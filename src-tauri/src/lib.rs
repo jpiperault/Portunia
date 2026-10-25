@@ -17,6 +17,7 @@ mod serverstats;
 mod store;
 mod tls;
 mod transfer;
+mod vault;
 
 use tauri::Manager;
 
@@ -40,6 +41,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
+            // Développement : dossier de données séparé (TERMORIA_DATA_DIR) pour ne jamais
+            // toucher aux vraies données d'une Termoria installée pendant les essais.
+            #[cfg(debug_assertions)]
+            let data_dir = std::env::var_os("TERMORIA_DATA_DIR").map(std::path::PathBuf::from).unwrap_or(data_dir);
             std::fs::create_dir_all(&data_dir)?;
             let store = store::Store::load(data_dir.join("sessions.json"));
             app.manage(commands::AppState::new(

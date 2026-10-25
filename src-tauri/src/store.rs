@@ -3,7 +3,7 @@
 
 use std::{collections::HashMap, fs, path::PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -74,6 +74,8 @@ pub struct Store {
     folders: Vec<String>,
     snippets: Vec<Snippet>,
     folder_colors: HashMap<String, String>,
+    /// Fichier chiffré non lu (Termoria verrouillé) : aucune écriture tant qu'il n'est pas relu.
+    locked: bool,
 }
 
 /// « /Prod//Web/ » → « Prod/Web ». Chaîne vide = racine.
@@ -100,27 +102,53 @@ fn parent_of(path: &str) -> &str {
 
 impl Store {
     pub fn load(path: PathBuf) -> Self {
-        let file = match fs::read_to_string(&path) {
-            Ok(text) => match serde_json::from_str::<FileFormat>(&text) {
-                Ok(file) => file,
-                Err(_) => {
-                    // Ne jamais écraser un fichier illisible : on le met de côté.
-                    let _ = fs::rename(&path, path.with_extension("json.illisible"));
-                    FileFormat::default()
-                }
-            },
-            Err(_) => FileFormat::default(),
-        };
+        let (file, locked) = Self::read_file(&path);
         Self {
             path,
             sessions: file.sessions,
             folders: file.folders,
             snippets: file.snippets,
             folder_colors: file.folder_colors,
+            locked,
         }
     }
 
+    /// Contenu du fichier, et « verrouillé » s'il est chiffré et la clé absente.
+    fn read_file(path: &std::path::Path) -> (FileFormat, bool) {
+        match crate::vault::read(path) {
+            Ok(crate::vault::Content::Text(text)) => match serde_json::from_str::<FileFormat>(&text) {
+                Ok(file) => (file, false),
+                Err(_) => {
+                    // Ne jamais écraser un fichier illisible : on le met de côté.
+                    let _ = fs::rename(path, path.with_extension("json.illisible"));
+                    (FileFormat::default(), false)
+                }
+            },
+            Ok(crate::vault::Content::Missing) => (FileFormat::default(), false),
+            // Chiffré et verrouillé, ou déchiffrement impossible : rien n'est chargé ni écrasé.
+            Ok(crate::vault::Content::Locked) | Err(_) => (FileFormat::default(), true),
+        }
+    }
+
+    /// Relit le fichier (après déverrouillage).
+    pub fn reload(&mut self) {
+        let (file, locked) = Self::read_file(&self.path);
+        self.sessions = file.sessions;
+        self.folders = file.folders;
+        self.snippets = file.snippets;
+        self.folder_colors = file.folder_colors;
+        self.locked = locked;
+    }
+
+    /// Réécrit le fichier dans le mode courant (chiffré ou non).
+    pub fn rewrite(&self) -> Result<()> {
+        self.persist()
+    }
+
     fn persist(&self) -> Result<()> {
+        if self.locked {
+            bail!("Termoria est verrouillé : les sessions ne sont pas chargées");
+        }
         let file = FileFormat {
             version: 4,
             sessions: self.sessions.clone(),
@@ -128,12 +156,7 @@ impl Store {
             snippets: self.snippets.clone(),
             folder_colors: self.folder_colors.clone(),
         };
-        let tmp = self.path.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_string_pretty(&file)?)
-            .with_context(|| format!("Écriture impossible : {}", tmp.display()))?;
-        fs::rename(&tmp, &self.path)
-            .with_context(|| format!("Écriture impossible : {}", self.path.display()))?;
-        Ok(())
+        crate::vault::write(&self.path, &serde_json::to_string_pretty(&file)?)
     }
 
     pub fn list(&self) -> Vec<Session> {
@@ -393,6 +416,33 @@ impl Store {
 mod tests {
     use super::*;
 
+    #[test]
+    fn fichier_chiffre_jamais_ecrase_avant_deverrouillage() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("termoria-store-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("sessions.json");
+        let key = crate::vault::random_bytes::<32>().unwrap();
+        crate::vault::set_key(Some(key));
+        crate::vault::set_enabled(true);
+        let mut store = Store::load(path.clone());
+        store.create_folder("Production").unwrap();
+        let chiffre = fs::read(&path).unwrap();
+        // Redémarrage verrouillé : rien de chargé, rien d'écrit, rien de mis de côté.
+        crate::vault::set_key(None);
+        let mut store = Store::load(path.clone());
+        assert!(store.folders().is_empty());
+        assert!(store.create_folder("Autre").is_err());
+        assert_eq!(fs::read(&path).unwrap(), chiffre, "fichier intact");
+        assert!(!path.with_extension("json.illisible").exists());
+        // Déverrouillé : relu.
+        crate::vault::set_key(Some(key));
+        store.reload();
+        assert_eq!(store.folders(), vec!["Production".to_string()]);
+        crate::vault::set_key(None);
+        crate::vault::set_enabled(false);
+    }
+
     fn store_with(folders: &[&str], sessions: &[(&str, &str)]) -> (Store, PathBuf) {
         let dir = std::env::temp_dir().join(format!("termoria-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
@@ -419,6 +469,7 @@ mod tests {
 
     #[test]
     fn normalise_les_chemins() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(normalize_folder(" /Prod// Web /"), "Prod/Web");
         assert_eq!(normalize_folder(r"Prod\Web"), "Prod/Web");
         assert_eq!(normalize_folder("  "), "");
@@ -426,12 +477,14 @@ mod tests {
 
     #[test]
     fn liste_les_dossiers_et_leurs_parents() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (store, _) = store_with(&["Vide"], &[("a", "Prod/Web/Front")]);
         assert_eq!(store.folders(), vec!["Prod", "Prod/Web", "Prod/Web/Front", "Vide"]);
     }
 
     #[test]
     fn renomme_un_dossier_avec_son_contenu() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, _) = store_with(&["Prod/Vide"], &[("a", "Prod"), ("b", "Prod/Web"), ("c", "Production")]);
         store.rename_folder("Prod", "Clients/Prod").unwrap();
         assert_eq!(folder_of(&store, "a"), "Clients/Prod");
@@ -442,6 +495,7 @@ mod tests {
 
     #[test]
     fn refuse_un_dossier_dans_lui_meme_ou_un_doublon() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, _) = store_with(&[], &[("a", "Prod/Web"), ("b", "Lab")]);
         assert!(store.rename_folder("Prod", "Prod/Web/Prod").is_err());
         assert!(store.rename_folder("Prod", "Lab").is_err());
@@ -449,6 +503,7 @@ mod tests {
 
     #[test]
     fn supprimer_un_dossier_remonte_son_contenu() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, _) = store_with(&["Prod/Web/Vide"], &[("a", "Prod/Web"), ("b", "Prod/Web/Front"), ("c", "Prod")]);
         store.delete_folder("Prod/Web").unwrap();
         assert_eq!(folder_of(&store, "a"), "Prod");
@@ -460,6 +515,7 @@ mod tests {
 
     #[test]
     fn deplace_des_sessions_et_persiste() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, dir) = store_with(&[], &[("a", ""), ("b", "Lab")]);
         store.move_sessions(&["a".into(), "b".into()], "/Prod/").unwrap();
         let reloaded = Store::load(dir.join("sessions.json"));
@@ -487,6 +543,7 @@ mod tests {
 
     #[test]
     fn les_commandes_suivent_les_dossiers() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, _) = store_with(&[], &[("a", "Prod/Web")]);
         let web = snippet(&mut store, Scope::Folder { path: "/Prod/Web/".into() });
         let prod = snippet(&mut store, Scope::Folder { path: "Prod".into() });
@@ -503,6 +560,7 @@ mod tests {
 
     #[test]
     fn supprimer_une_session_supprime_ses_commandes() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, _) = store_with(&[], &[("a", ""), ("b", "")]);
         snippet(&mut store, Scope::Session { id: "a".into() });
         let keep = snippet(&mut store, Scope::Session { id: "b".into() });
@@ -513,6 +571,7 @@ mod tests {
 
     #[test]
     fn refuse_une_commande_vide() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, _) = store_with(&[], &[]);
         let empty = Snippet { id: String::new(), name: " ".into(), command: "ls".into(), scope: Scope::All, run: true };
         assert!(store.upsert_snippet(empty).is_err());
@@ -520,6 +579,7 @@ mod tests {
 
     #[test]
     fn les_couleurs_suivent_les_dossiers() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (mut store, _) = store_with(&["Prod/Web"], &[]);
         store.set_folder_color("Prod", Some("red".into())).unwrap();
         store.set_folder_color("Prod/Web", Some("orange".into())).unwrap();

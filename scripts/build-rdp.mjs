@@ -21,3 +21,15 @@ if (!existsSync(target) || statSync(source).mtimeMs > statSync(target).mtimeMs) 
   copyFileSync(source, target);
   console.log(`Moteur RDP copié vers ${target}`);
 }
+
+// Console de Windows Terminal (conpty.dll + OpenConsole.exe) : à côté de l'exécutable de
+// développement aussi (l'installateur les embarque via « resources »).
+if (process.platform === 'win32' && !release) {
+  const out = join(root, 'src-tauri', 'target', 'debug');
+  mkdirSync(out, { recursive: true });
+  for (const file of ['conpty.dll', 'OpenConsole.exe']) {
+    const from = join(root, 'src-tauri', 'conpty', file);
+    const to = join(out, file);
+    if (!existsSync(to) || statSync(from).mtimeMs > statSync(to).mtimeMs) copyFileSync(from, to);
+  }
+}

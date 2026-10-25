@@ -705,7 +705,7 @@ pub fn import_apply(state: State<'_, AppState>, sessions: Vec<Session>) -> CmdRe
 }
 
 #[tauri::command]
-pub fn export_backup(state: State<'_, AppState>, path: String) -> CmdResult<usize> {
+pub fn export_backup(state: State<'_, AppState>, path: String, passphrase: Option<String>) -> CmdResult<usize> {
     state.unlocked()?;
     let (sessions, folders, snippets) = state.store.lock().unwrap().export_parts();
     let count = sessions.len();
@@ -715,7 +715,7 @@ pub fn export_backup(state: State<'_, AppState>, path: String) -> CmdResult<usiz
     };
     let credentials = state.credentials.lock().unwrap().list().into_iter().map(|mut c| { c.secret_keys.clear(); c }).collect();
     let backup = importers::Backup { app: "termoria".into(), version: 1, sessions, folders, snippets, notes, credentials };
-    let text = serde_json::to_string_pretty(&backup).map_err(err)?;
+    let text = importers::backup_text(&backup, passphrase.as_deref()).map_err(full)?;
     std::fs::write(&path, text).map_err(|e| format!("Écriture impossible : {e}"))?;
     Ok(count)
 }
@@ -729,9 +729,9 @@ pub struct BackupReport {
 }
 
 #[tauri::command]
-pub fn import_backup(state: State<'_, AppState>, path: String) -> CmdResult<BackupReport> {
+pub fn import_backup(state: State<'_, AppState>, path: String, passphrase: Option<String>) -> CmdResult<BackupReport> {
     state.unlocked()?;
-    let backup = importers::read_backup(&PathBuf::from(path)).map_err(full)?;
+    let backup = importers::read_backup(&PathBuf::from(path), passphrase.as_deref()).map_err(full)?;
     let (added, skipped, snippets) = state
         .store
         .lock()
@@ -837,15 +837,23 @@ pub fn lock_status(state: State<'_, AppState>) -> lock::LockStatus {
 pub fn lock_set_password(state: State<'_, AppState>, current: String, new: String) -> CmdResult<lock::LockStatus> {
     let mut lock = state.lock.lock().unwrap();
     lock.ensure_unlocked().map_err(err)?;
-    lock.set_password(&current, &new).map_err(full)?;
-    Ok(lock.status())
+    let change = lock.set_password(&current, &new).map_err(full)?;
+    let status = lock.status();
+    drop(lock);
+    apply_data_change(&state, change)?;
+    Ok(status)
 }
 
 #[tauri::command]
 pub fn lock_disable(state: State<'_, AppState>, password: String) -> CmdResult<lock::LockStatus> {
     let mut lock = state.lock.lock().unwrap();
-    lock.disable(&password).map_err(full)?;
-    Ok(lock.status())
+    // Les fichiers doivent être lus pour être remis en clair.
+    lock.ensure_unlocked().map_err(err)?;
+    let change = lock.disable(&password).map_err(full)?;
+    let status = lock.status();
+    drop(lock);
+    apply_data_change(&state, change)?;
+    Ok(status)
 }
 
 #[tauri::command]
@@ -863,7 +871,29 @@ pub fn lock_now(state: State<'_, AppState>) -> CmdResult<()> {
 
 #[tauri::command]
 pub fn unlock(state: State<'_, AppState>, password: String) -> CmdResult<()> {
-    state.lock.lock().unwrap().unlock_with_password(&password).map_err(full)
+    let change = state.lock.lock().unwrap().unlock_with_password(&password).map_err(full)?;
+    apply_data_change(&state, change)
+}
+
+/// Après un déverrouillage, relit les fichiers chiffrés ; après un changement du chiffrement
+/// (mot de passe maître défini, migré ou retiré), les réécrit dans le nouveau mode.
+fn apply_data_change(state: &AppState, change: lock::DataChange) -> CmdResult<()> {
+    state.store.lock().unwrap().reload();
+    state.notes.lock().unwrap().reload();
+    state.credentials.lock().unwrap().reload();
+    if change != lock::DataChange::None {
+        state.store.lock().unwrap().rewrite().map_err(full)?;
+        state.notes.lock().unwrap().rewrite().map_err(full)?;
+        state.credentials.lock().unwrap().rewrite().map_err(full)?;
+        let known = state.data_dir.join("known_hosts.json");
+        if let Ok(crate::vault::Content::Text(text)) = crate::vault::read(&known) {
+            crate::vault::write(&known, &text).map_err(full)?;
+        }
+    }
+    if change == lock::DataChange::Decrypt {
+        crate::vault::set_key(None);
+    }
+    Ok(())
 }
 
 /// Déverrouillage par Windows Hello (visage, empreinte, PIN).
@@ -885,6 +915,7 @@ pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResu
     .map_err(full)?;
     if verified {
         state.lock.lock().unwrap().unlock_with_hello().map_err(full)?;
+        apply_data_change(&state, lock::DataChange::None)?;
     }
     Ok(verified)
 }

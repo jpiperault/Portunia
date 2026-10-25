@@ -1,0 +1,282 @@
+//! Chiffrement au repos des données de Termoria quand un mot de passe maître est défini.
+//!
+//! Schéma :
+//! - une **clé de données** aléatoire (256 bits) chiffre les fichiers sessions.json,
+//!   notes.json, credentials.json et known_hosts.json en AES-256-GCM (nonce aléatoire de
+//!   96 bits à chaque écriture ; le nom du fichier sert de donnée associée, un fichier ne peut
+//!   donc pas être échangé contre un autre) ;
+//! - cette clé est **enveloppée** (AES-256-GCM) par une clé dérivée du mot de passe maître
+//!   (PBKDF2-HMAC-SHA256, 600 000 itérations, sel propre) et rangée dans lock.json ;
+//! - pour Windows Hello, une seconde copie est protégée par **DPAPI** (liée au compte Windows) ;
+//! - les mots de passe des sessions restent dans le Gestionnaire d'identifiants Windows.
+//!
+//! Sans mot de passe maître, les fichiers restent en clair (comportement d'origine).
+//! Mot de passe oublié et Windows Hello indisponible : les données chiffrées sont perdues.
+
+use std::{
+    fs,
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        RwLock,
+    },
+};
+
+use anyhow::{anyhow, bail, Context, Result};
+use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use ring::{
+    aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN},
+    rand::{SecureRandom, SystemRandom},
+};
+
+/// En-tête d'un fichier chiffré.
+const MAGIC: &[u8] = b"TERMORIA-CHIFFRE-1\n";
+
+/// Clé de données en mémoire (présente une fois déverrouillé).
+static KEY: RwLock<Option<[u8; 32]>> = RwLock::new(None);
+/// Chiffrement actif : toute écriture doit être chiffrée.
+static ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_enabled(on: bool) {
+    ENABLED.store(on, Ordering::SeqCst);
+}
+
+pub fn enabled() -> bool {
+    ENABLED.load(Ordering::SeqCst)
+}
+
+pub fn set_key(key: Option<[u8; 32]>) {
+    *KEY.write().unwrap() = key;
+}
+
+pub fn key() -> Option<[u8; 32]> {
+    *KEY.read().unwrap()
+}
+
+pub fn random_bytes<const N: usize>() -> Result<[u8; N]> {
+    let mut out = [0u8; N];
+    SystemRandom::new().fill(&mut out).map_err(|_| anyhow!("Générateur aléatoire indisponible"))?;
+    Ok(out)
+}
+
+/// nonce ‖ texte chiffré ‖ étiquette.
+pub fn seal(key: &[u8; 32], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
+    let sealing = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!("Clé invalide"))?);
+    let nonce_bytes = random_bytes::<NONCE_LEN>()?;
+    let mut buf = plain.to_vec();
+    sealing
+        .seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce_bytes), Aad::from(aad), &mut buf)
+        .map_err(|_| anyhow!("Chiffrement impossible"))?;
+    let mut out = nonce_bytes.to_vec();
+    out.extend_from_slice(&buf);
+    Ok(out)
+}
+
+pub fn open(key: &[u8; 32], sealed: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
+    if sealed.len() < NONCE_LEN + 16 {
+        bail!("Données chiffrées tronquées");
+    }
+    let opening = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!("Clé invalide"))?);
+    let (nonce, rest) = sealed.split_at(NONCE_LEN);
+    let mut buf = rest.to_vec();
+    let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| anyhow!("Nonce invalide"))?;
+    let plain = opening
+        .open_in_place(nonce, Aad::from(aad), &mut buf)
+        .map_err(|_| anyhow!("Déchiffrement impossible : clé incorrecte ou fichier modifié"))?;
+    Ok(plain.to_vec())
+}
+
+/// Clé de 256 bits dérivée d'une phrase de passe (PBKDF2-HMAC-SHA256).
+pub fn derive_key(passphrase: &str, salt: &[u8], iterations: u32) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    ring::pbkdf2::derive(
+        ring::pbkdf2::PBKDF2_HMAC_SHA256,
+        std::num::NonZeroU32::new(iterations.max(1)).unwrap(),
+        salt,
+        passphrase.as_bytes(),
+        &mut out,
+    );
+    out
+}
+
+/// Contenu d'un fichier de données.
+#[derive(Debug, PartialEq)]
+pub enum Content {
+    Missing,
+    Text(String),
+    /// Chiffré, mais Termoria est verrouillé (clé absente).
+    Locked,
+}
+
+fn aad(path: &Path) -> Vec<u8> {
+    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default().into_bytes()
+}
+
+/// Lit un fichier, chiffré ou non.
+pub fn read(path: &Path) -> Result<Content> {
+    let bytes = match fs::read(path) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Content::Missing),
+        Err(e) => return Err(e).with_context(|| format!("Lecture impossible : {}", path.display())),
+    };
+    let Some(sealed) = bytes.strip_prefix(MAGIC) else {
+        return Ok(Content::Text(String::from_utf8(bytes).context("Fichier illisible (encodage)")?));
+    };
+    let Some(key) = key() else { return Ok(Content::Locked) };
+    let sealed = B64.decode(sealed.trim_ascii()).context("Fichier chiffré illisible")?;
+    let plain = open(&key, &sealed, &aad(path)).with_context(|| format!("{}", path.display()))?;
+    Ok(Content::Text(String::from_utf8(plain).context("Fichier illisible (encodage)")?))
+}
+
+/// Écrit un fichier (atomiquement), chiffré si le chiffrement est actif.
+pub fn write(path: &Path, text: &str) -> Result<()> {
+    let bytes = if enabled() {
+        let key = key().ok_or_else(|| anyhow!("Termoria est verrouillé : écriture refusée"))?;
+        let mut out = MAGIC.to_vec();
+        out.extend_from_slice(B64.encode(seal(&key, text.as_bytes(), &aad(path))?).as_bytes());
+        out.push(b'\n');
+        out
+    } else {
+        text.as_bytes().to_vec()
+    };
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, bytes).with_context(|| format!("Écriture impossible : {}", tmp.display()))?;
+    fs::rename(&tmp, path).with_context(|| format!("Écriture impossible : {}", path.display()))?;
+    Ok(())
+}
+
+/// Charge un fichier JSON. Renvoie aussi « verrouillé » : fichier chiffré non lisible pour
+/// l'instant, qu'il ne faut surtout pas écraser avant de l'avoir relu.
+pub fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -> (T, bool) {
+    match read(path) {
+        Ok(Content::Text(text)) => (serde_json::from_str(&text).unwrap_or_default(), false),
+        Ok(Content::Missing) => (T::default(), false),
+        Ok(Content::Locked) | Err(_) => (T::default(), true),
+    }
+}
+
+// ---------- Protection de la clé par le compte Windows (DPAPI), pour Windows Hello ----------
+
+#[cfg(windows)]
+pub mod dpapi {
+    use super::*;
+    use windows::Win32::{
+        Foundation::{LocalFree, HLOCAL},
+        Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB},
+    };
+
+    fn run(data: &[u8], protect: bool) -> Result<Vec<u8>> {
+        let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
+        let mut output = CRYPT_INTEGER_BLOB::default();
+        unsafe {
+            if protect {
+                CryptProtectData(&input, windows::core::w!("Termoria"), None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut output)?;
+            } else {
+                CryptUnprotectData(&input, None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut output)?;
+            }
+            let out = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
+            let _ = LocalFree(Some(HLOCAL(output.pbData as _)));
+            Ok(out)
+        }
+    }
+
+    pub fn protect(data: &[u8]) -> Result<Vec<u8>> {
+        run(data, true).map_err(|e| anyhow!("Protection Windows impossible : {e}"))
+    }
+
+    pub fn unprotect(data: &[u8]) -> Result<Vec<u8>> {
+        run(data, false).map_err(|e| anyhow!("Clé Windows Hello illisible (autre compte ou autre PC ?) : {e}"))
+    }
+}
+
+#[cfg(not(windows))]
+pub mod dpapi {
+    use super::*;
+    pub fn protect(_data: &[u8]) -> Result<Vec<u8>> {
+        bail!("Windows uniquement")
+    }
+    pub fn unprotect(_data: &[u8]) -> Result<Vec<u8>> {
+        bail!("Windows uniquement")
+    }
+}
+
+#[cfg(test)]
+pub(crate) static TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("termoria-vault-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir.join(name)
+    }
+
+    #[test]
+    fn aller_retour_et_verrouillage() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path = temp("sessions.json");
+        let key = random_bytes::<32>().unwrap();
+        set_key(Some(key));
+        set_enabled(true);
+        write(&path, "{\"secret\": \"srv-prod\"}").unwrap();
+        let raw = fs::read(&path).unwrap();
+        assert!(raw.starts_with(MAGIC));
+        assert!(!String::from_utf8_lossy(&raw).contains("srv-prod"), "rien en clair sur le disque");
+        assert_eq!(read(&path).unwrap(), Content::Text("{\"secret\": \"srv-prod\"}".into()));
+        // Verrouillé : lecture « Locked », écriture refusée (jamais de clair par accident).
+        set_key(None);
+        assert_eq!(read(&path).unwrap(), Content::Locked);
+        assert!(write(&path, "{}").is_err());
+        // Mauvaise clé : erreur, pas de données.
+        set_key(Some(random_bytes::<32>().unwrap()));
+        assert!(read(&path).is_err());
+        set_key(None);
+        set_enabled(false);
+    }
+
+    #[test]
+    fn fichier_modifie_ou_echange_detecte() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let key = random_bytes::<32>().unwrap();
+        set_key(Some(key));
+        set_enabled(true);
+        let a = temp("notes.json");
+        write(&a, "notes").unwrap();
+        // Un octet modifié : refusé.
+        let mut raw = fs::read(&a).unwrap();
+        let i = raw.len() - 5;
+        raw[i] = if raw[i] == b'A' { b'B' } else { b'A' };
+        fs::write(&a, &raw).unwrap();
+        assert!(read(&a).is_err());
+        // Fichier d'un autre nom copié à sa place : refusé (nom = donnée associée).
+        let b = a.with_file_name("sessions.json");
+        write(&b, "sessions").unwrap();
+        fs::copy(&b, &a).unwrap();
+        assert!(read(&a).is_err());
+        set_key(None);
+        set_enabled(false);
+    }
+
+    #[test]
+    fn sans_mot_de_passe_maitre_le_fichier_reste_lisible() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        set_key(None);
+        set_enabled(false);
+        let path = temp("sessions.json");
+        write(&path, "[]").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "[]");
+        assert_eq!(read(&path).unwrap(), Content::Text("[]".into()));
+        assert_eq!(read(&path.with_file_name("absent.json")).unwrap(), Content::Missing);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn protection_par_le_compte_windows() {
+        let secret = random_bytes::<32>().unwrap();
+        let protected = dpapi::protect(&secret).unwrap();
+        assert_ne!(&protected[..], &secret[..]);
+        assert_eq!(dpapi::unprotect(&protected).unwrap(), secret);
+    }
+}

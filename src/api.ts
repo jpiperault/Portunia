@@ -164,8 +164,8 @@ export const api = {
   importPreview: (source: ImportSource, path: string | null, folder: string) =>
     invoke<ImportCandidate[]>('import_preview', { source, path, folder }),
   importApply: (sessions: Session[]) => invoke<number>('import_apply', { sessions }),
-  exportBackup: (path: string) => invoke<number>('export_backup', { path }),
-  importBackup: (path: string) => invoke<{ added: number; skipped: number; snippets: number }>('import_backup', { path }),
+  exportBackup: (path: string, passphrase: string | null) => invoke<number>('export_backup', { path, passphrase }),
+  importBackup: (path: string, passphrase: string | null) => invoke<{ added: number; skipped: number; snippets: number }>('import_backup', { path, passphrase }),
 
   fieldSuggestions: (protocol: string, source: string) => invoke<ChoiceOption[]>('field_suggestions', { protocol, source }),
 
@@ -203,6 +203,8 @@ export interface LicenseStatus {
 
 export interface LockStatus {
   enabled: boolean;
+  /** Données chiffrées sur le disque (mot de passe maître défini). */
+  encrypted: boolean;
   locked: boolean;
   hello: boolean;
   helloAvailable: boolean;

@@ -446,8 +446,60 @@ pub struct Backup {
     pub credentials: Vec<crate::credentials::Credential>,
 }
 
-pub fn read_backup(path: &PathBuf) -> Result<Backup> {
-    let text = fs::read_to_string(path).with_context(|| format!("Lecture impossible : {}", path.display()))?;
+/// Sauvegarde chiffrée par une phrase de passe : enveloppe autour du JSON de `Backup`.
+#[derive(Serialize, Deserialize)]
+struct EncryptedBackup {
+    app: String,
+    /// Sel et itérations de PBKDF2 ; données = nonce ‖ JSON chiffré (AES-256-GCM) en base64.
+    chiffre: EncryptedPayload,
+}
+
+#[derive(Serialize, Deserialize)]
+struct EncryptedPayload {
+    sel: String,
+    iterations: u32,
+    donnees: String,
+}
+
+const BACKUP_AAD: &[u8] = b"termoria-sauvegarde";
+const BACKUP_ITERATIONS: u32 = if cfg!(test) { 1_000 } else { 600_000 };
+/// Début du message d'erreur quand la phrase de passe manque (l'interface la demande alors).
+pub const PASSPHRASE_REQUIRED: &str = "PHRASE_REQUISE";
+
+/// Texte du fichier de sauvegarde ; chiffré si une phrase de passe est donnée.
+pub fn backup_text(backup: &Backup, passphrase: Option<&str>) -> Result<String> {
+    let json = serde_json::to_string_pretty(backup)?;
+    let Some(passphrase) = passphrase.filter(|p| !p.is_empty()) else { return Ok(json) };
+    if passphrase.chars().count() < 8 {
+        bail!("La phrase de passe doit contenir au moins 8 caractères");
+    }
+    use base64::{engine::general_purpose::STANDARD as B64, Engine};
+    let salt = crate::vault::random_bytes::<16>()?;
+    let key = crate::vault::derive_key(passphrase, &salt, BACKUP_ITERATIONS);
+    let sealed = crate::vault::seal(&key, json.as_bytes(), BACKUP_AAD)?;
+    let wrapper = EncryptedBackup {
+        app: "termoria".into(),
+        chiffre: EncryptedPayload { sel: B64.encode(salt), iterations: BACKUP_ITERATIONS, donnees: B64.encode(sealed) },
+    };
+    Ok(serde_json::to_string_pretty(&wrapper)?)
+}
+
+pub fn read_backup(path: &PathBuf, passphrase: Option<&str>) -> Result<Backup> {
+    let raw = fs::read_to_string(path).with_context(|| format!("Lecture impossible : {}", path.display()))?;
+    let text = match serde_json::from_str::<EncryptedBackup>(&raw) {
+        Ok(wrapper) if wrapper.app == "termoria" => {
+            let Some(passphrase) = passphrase.filter(|p| !p.is_empty()) else {
+                bail!("{PASSPHRASE_REQUIRED} : cette sauvegarde est protégée par une phrase de passe");
+            };
+            use base64::{engine::general_purpose::STANDARD as B64, Engine};
+            let c = wrapper.chiffre;
+            let key = crate::vault::derive_key(passphrase, &B64.decode(&c.sel)?, c.iterations);
+            let plain = crate::vault::open(&key, &B64.decode(&c.donnees)?, BACKUP_AAD)
+                .map_err(|_| anyhow::anyhow!("Phrase de passe incorrecte (ou fichier modifié)"))?;
+            String::from_utf8(plain).context("Sauvegarde illisible")?
+        }
+        _ => raw,
+    };
     let backup: Backup = serde_json::from_str(&text).context("Ce fichier n'est pas une sauvegarde Termoria")?;
     if backup.app != "termoria" {
         bail!("Ce fichier n'est pas une sauvegarde Termoria");
@@ -458,6 +510,34 @@ pub fn read_backup(path: &PathBuf) -> Result<Backup> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sauvegarde_chiffree() {
+        let backup = Backup {
+            app: "termoria".into(),
+            version: 1,
+            sessions: parse_ssh_config("Host prod
+    HostName 10.9.8.7
+    User deploy
+", "Prod").into_iter().map(|c| c.session).collect(),
+            folders: vec!["Prod".into()],
+            snippets: vec![],
+            notes: Default::default(),
+            credentials: vec![],
+        };
+        let path = std::env::temp_dir().join(format!("termoria-sauvegarde-{}.json", uuid::Uuid::new_v4()));
+        fs::write(&path, backup_text(&backup, Some("une phrase de passe")).unwrap()).unwrap();
+        assert!(!fs::read_to_string(&path).unwrap().contains("10.9.8.7"), "rien en clair");
+        assert!(read_backup(&path, None).err().unwrap().to_string().starts_with(PASSPHRASE_REQUIRED));
+        assert!(read_backup(&path, Some("mauvaise phrase")).err().unwrap().to_string().contains("incorrecte"));
+        let back = read_backup(&path, Some("une phrase de passe")).unwrap();
+        assert_eq!(back.sessions[0].values["host"], json!("10.9.8.7"));
+        assert!(backup_text(&backup, Some("court")).is_err());
+        // Sans phrase de passe : JSON lisible, comme avant.
+        fs::write(&path, backup_text(&backup, None).unwrap()).unwrap();
+        assert_eq!(read_backup(&path, Some("ignorée")).unwrap().folders, vec!["Prod".to_string()]);
+        fs::remove_file(&path).unwrap();
+    }
 
     #[test]
     fn ssh_config_complet() {

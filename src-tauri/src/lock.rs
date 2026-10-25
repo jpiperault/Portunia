@@ -14,6 +14,8 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use ring::{pbkdf2, rand::{SecureRandom, SystemRandom}};
 use serde::{Deserialize, Serialize};
 
+use crate::vault;
+
 /// PBKDF2-HMAC-SHA256 : 600 000 itérations (recommandation OWASP 2023).
 const ITERATIONS: u32 = if cfg!(test) { 1_000 } else { 600_000 };
 
@@ -27,6 +29,39 @@ struct LockConfig {
     hello: bool,
     /// Verrouillage automatique après ce nombre de minutes d'inactivité (0 = jamais).
     timeout_minutes: u32,
+    /// Sel de la clé qui enveloppe la clé de données (distinct de celui du mot de passe).
+    #[serde(default)]
+    key_salt: String,
+    /// Clé de données (chiffrement des fichiers) enveloppée par le mot de passe maître.
+    #[serde(default)]
+    data_key: Option<String>,
+    /// Même clé protégée par le compte Windows (DPAPI), pour déverrouiller avec Windows Hello.
+    #[serde(default)]
+    hello_key: Option<String>,
+}
+
+/// Fichiers de données à réécrire après un changement du chiffrement.
+#[derive(Debug, PartialEq)]
+pub enum DataChange {
+    None,
+    /// Chiffrer les fichiers (mot de passe maître défini, ou ancienne configuration migrée).
+    Encrypt,
+    /// Les remettre en clair (mot de passe maître retiré).
+    Decrypt,
+}
+
+/// Donnée associée de l'enveloppe de la clé de données.
+const WRAP_AAD: &[u8] = b"termoria-cle-de-donnees";
+
+fn wrap(password: &str, salt: &[u8], iterations: u32, key: &[u8; 32]) -> Result<String> {
+    let kek: [u8; 32] = derive(password, salt, iterations).try_into().map_err(|_| anyhow!("Dérivation"))?;
+    Ok(B64.encode(vault::seal(&kek, key, WRAP_AAD)?))
+}
+
+fn unwrap_key(password: &str, salt: &[u8], iterations: u32, wrapped: &str) -> Result<[u8; 32]> {
+    let kek: [u8; 32] = derive(password, salt, iterations).try_into().map_err(|_| anyhow!("Dérivation"))?;
+    let plain = vault::open(&kek, &B64.decode(wrapped)?, WRAP_AAD)?;
+    plain.try_into().map_err(|_| anyhow!("Clé de données invalide"))
 }
 
 pub struct Lock {
@@ -41,6 +76,8 @@ pub struct Lock {
 #[serde(rename_all = "camelCase")]
 pub struct LockStatus {
     enabled: bool,
+    /// Données chiffrées sur le disque.
+    encrypted: bool,
     locked: bool,
     hello: bool,
     hello_available: bool,
@@ -65,6 +102,8 @@ impl Lock {
         let config: Option<LockConfig> = fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok());
         // Protégé par mot de passe : verrouillé au démarrage.
         let locked = AtomicBool::new(config.is_some());
+        // Fichiers chiffrés : toute écriture devra l'être aussi.
+        vault::set_enabled(config.as_ref().is_some_and(|c| c.data_key.is_some()));
         Self { path, config, locked, throttle: Default::default() }
     }
 
@@ -104,7 +143,7 @@ impl Lock {
     }
 
     /// Définit ou change le mot de passe maître (l'ancien est demandé s'il existe).
-    pub fn set_password(&mut self, current: &str, new: &str) -> Result<()> {
+    pub fn set_password(&mut self, current: &str, new: &str) -> Result<DataChange> {
         if self.config.is_some() {
             self.check_throttled(current).map_err(|e| anyhow!("Mot de passe actuel incorrect : {e}"))?;
         }
@@ -114,27 +153,51 @@ impl Lock {
         let mut salt = [0u8; 16];
         SystemRandom::new().fill(&mut salt).map_err(|_| anyhow!("Générateur aléatoire indisponible"))?;
         let previous = self.config.clone();
+        // Clé de données : celle en mémoire (déverrouillé), sinon une nouvelle (premier mot de passe).
+        let (key, change) = match (vault::key(), previous.as_ref().and_then(|c| c.data_key.as_ref())) {
+            (Some(key), Some(_)) => (key, DataChange::None),
+            _ => (vault::random_bytes::<32>()?, DataChange::Encrypt),
+        };
+        let key_salt = vault::random_bytes::<16>()?;
+        let hello = previous.as_ref().map(|c| c.hello).unwrap_or(false);
         self.config = Some(LockConfig {
             salt: B64.encode(salt),
             hash: B64.encode(derive(new, &salt, ITERATIONS)),
             iterations: ITERATIONS,
-            hello: previous.as_ref().map(|c| c.hello).unwrap_or(false),
+            hello,
             timeout_minutes: previous.as_ref().map(|c| c.timeout_minutes).unwrap_or(15),
+            key_salt: B64.encode(key_salt),
+            data_key: Some(wrap(new, &key_salt, ITERATIONS, &key)?),
+            hello_key: if hello { vault::dpapi::protect(&key).ok().map(|b| B64.encode(b)) } else { None },
         });
-        self.save()
+        self.save()?;
+        vault::set_key(Some(key));
+        vault::set_enabled(true);
+        Ok(change)
     }
 
-    pub fn disable(&mut self, password: &str) -> Result<()> {
+    /// Retire le mot de passe maître : les fichiers seront remis en clair (DataChange::Decrypt) ;
+    /// la clé reste en mémoire le temps de cette réécriture.
+    pub fn disable(&mut self, password: &str) -> Result<DataChange> {
         self.check_throttled(password)?;
+        let encrypted = self.config.as_ref().is_some_and(|c| c.data_key.is_some());
         self.config = None;
         self.locked.store(false, Ordering::SeqCst);
-        self.save()
+        self.save()?;
+        vault::set_enabled(false);
+        Ok(if encrypted { DataChange::Decrypt } else { DataChange::None })
     }
 
     pub fn set_options(&mut self, hello: bool, timeout_minutes: u32) -> Result<()> {
         let config = self.config.as_mut().ok_or_else(|| anyhow!("Définissez d'abord un mot de passe maître"))?;
         config.hello = hello;
         config.timeout_minutes = timeout_minutes.min(24 * 60);
+        // Windows Hello doit pouvoir rendre la clé de données : copie protégée par le compte Windows.
+        config.hello_key = match (hello, vault::key()) {
+            (true, Some(key)) if config.data_key.is_some() => Some(B64.encode(vault::dpapi::protect(&key)?)),
+            (true, _) => config.hello_key.clone(),
+            (false, _) => None,
+        };
         self.save()
     }
 
@@ -148,6 +211,11 @@ impl Lock {
 
     /// Vérifie le mot de passe ; après 5 échecs, attente croissante (5 s, 10 s, 20 s… jusqu'à 5 min).
     fn check_throttled(&self, password: &str) -> Result<()> {
+        self.throttled(|| self.check(password))
+    }
+
+    /// Applique la limite d'essais à une vérification quelconque du mot de passe.
+    fn throttled(&self, verify: impl FnOnce() -> bool) -> Result<()> {
         let mut t = self.throttle.lock().unwrap();
         if let Some(until) = t.1 {
             let now = std::time::Instant::now();
@@ -155,7 +223,7 @@ impl Lock {
                 bail!("Trop d'essais : réessayez dans {} s", (until - now).as_secs() + 1);
             }
         }
-        if self.check(password) {
+        if verify() {
             *t = (0, None);
             return Ok(());
         }
@@ -168,10 +236,45 @@ impl Lock {
         bail!("Mot de passe incorrect")
     }
 
-    pub fn unlock_with_password(&self, password: &str) -> Result<()> {
-        self.check_throttled(password)?;
+    /// Déverrouille et rend la clé de données. Une configuration d'avant le chiffrement
+    /// est migrée : clé créée, fichiers à chiffrer (DataChange::Encrypt).
+    pub fn unlock_with_password(&mut self, password: &str) -> Result<DataChange> {
+        let config = self.config.clone().ok_or_else(|| anyhow!("Aucun mot de passe maître"))?;
+        let change = match &config.data_key {
+            Some(wrapped) => {
+                // Ouvrir la clé de données vérifie le mot de passe (AES-GCM) : un seul calcul
+                // PBKDF2 au lieu de deux, le déverrouillage est deux fois plus rapide.
+                let salt = B64.decode(&config.key_salt)?;
+                let mut key = None;
+                self.throttled(|| {
+                    key = unwrap_key(password, &salt, config.iterations, wrapped).ok();
+                    key.is_some()
+                })?;
+                vault::set_key(key);
+                DataChange::None
+            }
+            None => {
+                self.check_throttled(password)?;
+                let key = vault::random_bytes::<32>()?;
+                let key_salt = vault::random_bytes::<16>()?;
+                let c = self.config.as_mut().unwrap();
+                c.key_salt = B64.encode(key_salt);
+                c.data_key = Some(wrap(password, &key_salt, c.iterations, &key)?);
+                vault::set_key(Some(key));
+                vault::set_enabled(true);
+                DataChange::Encrypt
+            }
+        };
+        // Windows Hello activé avant le chiffrement : sa copie de la clé est créée maintenant.
+        let c = self.config.as_mut().unwrap();
+        if c.hello && c.hello_key.is_none() {
+            if let Some(key) = vault::key() {
+                c.hello_key = vault::dpapi::protect(&key).ok().map(|b| B64.encode(b));
+            }
+        }
+        self.save()?;
         self.locked.store(false, Ordering::SeqCst);
-        Ok(())
+        Ok(change)
     }
 
     pub fn hello_enabled(&self) -> bool {
@@ -183,6 +286,15 @@ impl Lock {
         if !self.hello_enabled() {
             bail!("Windows Hello n'est pas activé pour Termoria");
         }
+        let config = self.config.as_ref().unwrap();
+        match (&config.hello_key, &config.data_key) {
+            (Some(protected), _) => {
+                let key = vault::dpapi::unprotect(&B64.decode(protected)?)?;
+                vault::set_key(Some(key.try_into().map_err(|_| anyhow!("Clé Windows Hello invalide"))?));
+            }
+            (None, Some(_)) => bail!("Déverrouillez une fois avec le mot de passe maître : Windows Hello sera ensuite prêt pour les données chiffrées."),
+            (None, None) => {}
+        }
         self.locked.store(false, Ordering::SeqCst);
         Ok(())
     }
@@ -190,6 +302,7 @@ impl Lock {
     pub fn status(&self) -> LockStatus {
         LockStatus {
             enabled: self.config.is_some(),
+            encrypted: self.config.as_ref().is_some_and(|c| c.data_key.is_some()),
             locked: self.is_locked(),
             hello: self.hello_enabled(),
             hello_available: hello::available(),
@@ -239,6 +352,102 @@ pub mod hello {
 mod tests {
     use super::*;
 
+    /// Remet l'état global du chiffrement à zéro (comme un redémarrage de Termoria).
+    fn restart(dir: &std::path::Path) -> Lock {
+        vault::set_key(None);
+        vault::set_enabled(false);
+        Lock::load(dir)
+    }
+
+    #[test]
+    fn chiffrement_des_donnees() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        vault::set_key(None);
+        vault::set_enabled(false);
+        let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let data = dir.join("sessions.json");
+        let mut lock = Lock::load(&dir);
+        // Premier mot de passe : clé créée, fichiers à chiffrer.
+        assert_eq!(lock.set_password("", "un bon mot de passe").unwrap(), DataChange::Encrypt);
+        vault::write(&data, "srv-prod-01").unwrap();
+        assert!(!fs::read_to_string(&data).unwrap().contains("srv-prod"), "rien en clair");
+        assert!(!fs::read_to_string(dir.join("lock.json")).unwrap().contains("srv-prod"));
+
+        // Redémarrage : verrouillé, fichier illisible, écriture refusée.
+        let mut lock = restart(&dir);
+        assert!(lock.is_locked() && vault::enabled());
+        assert_eq!(vault::read(&data).unwrap(), vault::Content::Locked);
+        assert!(vault::write(&data, "écrasé").is_err());
+        assert!(lock.unlock_with_password("faux mot de passe").is_err());
+        assert_eq!(lock.unlock_with_password("un bon mot de passe").unwrap(), DataChange::None);
+        assert_eq!(vault::read(&data).unwrap(), vault::Content::Text("srv-prod-01".into()));
+
+        // Changement de mot de passe : même clé, ré-enveloppée.
+        assert_eq!(lock.set_password("un bon mot de passe", "nouveau mot de passe").unwrap(), DataChange::None);
+        let mut lock = restart(&dir);
+        assert!(lock.unlock_with_password("un bon mot de passe").is_err(), "l'ancien ne marche plus");
+        lock.unlock_with_password("nouveau mot de passe").unwrap();
+        assert_eq!(vault::read(&data).unwrap(), vault::Content::Text("srv-prod-01".into()));
+
+        // Retrait : fichiers à remettre en clair, écritures en clair ensuite.
+        assert_eq!(lock.disable("nouveau mot de passe").unwrap(), DataChange::Decrypt);
+        assert!(!vault::enabled());
+        vault::write(&data, "srv-prod-01").unwrap();
+        assert_eq!(fs::read_to_string(&data).unwrap(), "srv-prod-01");
+        let lock = restart(&dir);
+        assert!(!lock.is_locked() && !vault::enabled());
+    }
+
+    #[test]
+    fn ancienne_configuration_migree() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        vault::set_key(None);
+        vault::set_enabled(false);
+        let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut lock = Lock::load(&dir);
+        lock.set_password("", "un bon mot de passe").unwrap();
+        // lock.json d'une version d'avant le chiffrement : pas de clé de données.
+        let path = dir.join("lock.json");
+        let mut json: serde_json::Value = serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let obj = json.as_object_mut().unwrap();
+        obj.remove("keySalt");
+        obj.remove("dataKey");
+        obj.remove("helloKey");
+        fs::write(&path, json.to_string()).unwrap();
+        fs::write(dir.join("notes.json"), "{\"a\": \"en clair\"}").unwrap();
+
+        let mut lock = restart(&dir);
+        assert!(!vault::enabled(), "rien n'est chiffré avant la migration");
+        assert_eq!(vault::read(&dir.join("notes.json")).unwrap(), vault::Content::Text("{\"a\": \"en clair\"}".into()));
+        assert_eq!(lock.unlock_with_password("un bon mot de passe").unwrap(), DataChange::Encrypt);
+        assert!(vault::enabled() && vault::key().is_some());
+        let mut lock = restart(&dir);
+        assert_eq!(lock.unlock_with_password("un bon mot de passe").unwrap(), DataChange::None, "migré une seule fois");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_hello_rend_la_cle() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        vault::set_key(None);
+        vault::set_enabled(false);
+        let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let mut lock = Lock::load(&dir);
+        lock.set_password("", "un bon mot de passe").unwrap();
+        let key = vault::key().unwrap();
+        lock.set_options(true, 15).unwrap();
+        let lock = restart(&dir);
+        assert!(vault::key().is_none());
+        // (La vérification du visage / de l'empreinte a lieu avant, dans la commande.)
+        lock.unlock_with_hello().unwrap();
+        assert_eq!(vault::key(), Some(key));
+        vault::set_key(None);
+        vault::set_enabled(false);
+    }
+
     fn temp_lock() -> Lock {
         let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
@@ -247,6 +456,7 @@ mod tests {
 
     #[test]
     fn essais_limites() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut lock = temp_lock();
         lock.set_password("", "un bon mot de passe").unwrap();
         lock.lock().unwrap();
@@ -265,6 +475,7 @@ mod tests {
 
     #[test]
     fn cycle_complet() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut lock = temp_lock();
         assert!(!lock.is_locked());
         assert!(lock.lock().is_err(), "sans mot de passe, pas de verrouillage");
@@ -284,6 +495,7 @@ mod tests {
 
     #[test]
     fn verrouille_au_redemarrage() {
+        let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let mut lock = temp_lock();
         lock.set_password("", "un bon mot de passe").unwrap();
         let reloaded = Lock::load(lock.path.parent().unwrap());
