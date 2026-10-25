@@ -57,6 +57,7 @@ Autres fonctions :
 - identifiants partagés : un compte (utilisateur, mot de passe, clé ou agent, domaine) choisi dans plusieurs sessions SSH, RDP ou VNC ; on change le mot de passe une fois, toutes suivent ;
 - palette globale (Ctrl+Maj+O) : aller à une session, un shell local ou une action en quelques lettres ;
 - arbre des sessions avec dossiers et sous-dossiers (dossiers vides possibles), glisser-déposer pour ranger, menu clic droit (dupliquer, ouvrir tout un dossier…), recherche (Ctrl+Maj+K), onglets ;
+- mise en évidence dans le terminal : erreurs en rouge, avertissements en orange, succès en vert, adresses IP en cyan ; règles modifiables (mot, expression régulière, couleur ou fond) dans Paramètres, sans effet sur vim, htop ni les enregistrements ;
 - terminal : recherche dans l'historique (Ctrl+Maj+F), police et taille réglables (Ctrl + molette), copier/coller au clic droit, liens ouverts par Ctrl+clic ;
 - écran partagé (jusqu'à 4 sessions côte à côte) et saisie multiple (Ctrl+Maj+B) pour taper la même chose sur plusieurs serveurs ;
 - commandes enregistrées (Ctrl+Maj+P) : par session, par dossier ou pour toutes, avec variables {{host}}, {{username}}… ;

@@ -1,4 +1,6 @@
 // Préférences de l'interface, enregistrées sur ce PC.
+import { DEFAULT_RULES, HighlightRule } from './highlight-rules';
+import { highlightSettings } from './highlight';
 import { h, icon } from './dom';
 import type { ShellSpec } from './api';
 import { checkForUpdates } from './updates';
@@ -36,6 +38,8 @@ export interface Settings {
   termTheme: string;
   /** Shells locaux : masqués, par défaut, personnalisés, ouverture au démarrage. */
   localShells: { hidden: string[]; defaultId: string; custom: ShellSpec[]; atStartup: boolean };
+  /** Mise en évidence de mots-clés dans les terminaux. */
+  highlight: { enabled: boolean; rules: HighlightRule[] };
 }
 
 export const DEFAULTS: Settings = {
@@ -56,6 +60,7 @@ export const DEFAULTS: Settings = {
   uiTheme: 'dark',
   termTheme: 'auto',
   localShells: { hidden: [], defaultId: '', custom: [], atStartup: false },
+  highlight: { enabled: true, rules: DEFAULT_RULES },
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
@@ -133,6 +138,8 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
             } }))),
         check('copyOnSelect', 'Copier automatiquement la sélection', 'Le texte sélectionné à la souris part dans le presse-papiers.'),
         check('rightClickPaste', 'Clic droit : copier ou coller', 'Avec une sélection, le clic droit copie ; sinon il colle (comme PuTTY).'),
+        h('h3', { class: 'label' }, 'Mise en évidence'),
+        highlightSettings(),
         h('h3', { class: 'label' }, 'Connexion'),
         check('autoReconnect', 'Reconnexion automatique', 'Après une coupure réseau ou une mise en veille, Termoria se reconnecte tout seul.'),
         h('h3', { class: 'label' }, 'Sécurité'),

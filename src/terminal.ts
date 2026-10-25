@@ -1,3 +1,4 @@
+import { Highlighter } from './highlight';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
@@ -39,6 +40,7 @@ export class TerminalView {
   readonly term: Terminal;
   private readonly fit = new FitAddon();
   private readonly search = new SearchAddon();
+  private readonly highlighter: Highlighter;
   private readonly observer: ResizeObserver;
   private readonly unsubscribe: () => void;
   private connectionId: string | null = null;
@@ -90,6 +92,7 @@ export class TerminalView {
       if (event.ctrlKey) openUrl(uri).catch(() => {});
     }));
     this.term.open(container);
+    this.highlighter = new Highlighter(this.term);
 
     // Ctrl+Maj+… est réservé à l'application : Ctrl+W, Ctrl+K… restent aux programmes du terminal.
     this.term.attachCustomKeyEventHandler((e) => {
@@ -346,6 +349,7 @@ export class TerminalView {
     this.unsubscribe();
     window.removeEventListener('termoria-theme', this.onTheme);
     this.observer.disconnect();
+    this.highlighter.dispose();
     this.term.dispose();
   }
 }
