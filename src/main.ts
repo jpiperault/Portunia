@@ -1,6 +1,7 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
 import { api, connectQuick, errorText, Manifest, Session, Snippet, TermEvent } from './api';
+import { openKeyManager } from './keys';
 import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
 import { badge, h, icon, viewIcon } from './dom';
 import { openSessionDialog } from './dialog';
@@ -299,6 +300,10 @@ function renderToolbar() {
         class: 'btn', title: 'Redirections de ports à travers cette session',
         onclick: () => { const id = tab.term?.connection; if (id) openTunnels(session, id, toast, () => reload()); },
       }, icon('tunnel', 14), 'Tunnels'),
+      tab.state === 'connected' && session.protocol === 'ssh' && h('button', {
+        class: 'btn', title: 'Créer une clé SSH et l’installer sur ce serveur (plus de mot de passe)',
+        onclick: () => openKeysFor(tab, session),
+      }, icon('lock', 14), 'Clé SSH'),
       tab.screen && h('button', { class: 'btn', title: 'Envoyer Ctrl+Alt+Suppr à l’écran distant', onclick: () => tab.screen?.sendCtrlAltDel() }, 'Ctrl+Alt+Suppr'),
       tab.screen && session.protocol !== 'rdp' && h('button', { class: 'btn', title: 'Copier le presse-papiers de Windows vers l’écran distant', onclick: () => tab.screen?.sendClipboard() }, icon('copy', 14), 'Presse-papiers'),
       tab.screen && h('button', { class: 'btn', title: 'Adapter l’image à l’onglet ou afficher en taille réelle', onclick: () => { tab.screen?.toggleFit(); renderToolbar(); } }, tab.screen.fit ? 'Taille réelle' : 'Ajuster à la fenêtre'),
@@ -832,6 +837,7 @@ function paletteEntries(): PaletteEntry[] {
     { label: 'Importer / exporter', group: 'Action', icon: 'upload', action: () => openImportExport((msg) => { toast(msg); reload(); }, toast) },
     { label: 'Extensions', group: 'Action', icon: 'puzzle', action: () => openExtensions() },
     { label: 'Supervision des serveurs', group: 'Action', icon: 'refresh', action: () => monitor.openOverview((s) => openSession(s)) },
+    { label: 'Clés SSH', group: 'Action', icon: 'lock', hint: 'Créer, copier, installer', keywords: 'ssh-keygen ed25519 rsa authorized_keys', action: () => { const t = activeTab(); const s = sessionOf(t?.sessionId) ?? (t?.quick && quickSession(t.quick)); if (t && s && s.protocol === 'ssh' && t.state === 'connected') openKeysFor(t, s); else openKeyManager({ toast }); } },
     { label: 'Paramètres', group: 'Action', icon: 'settings', action: () => openSettingsDialog(toast) },
     { label: 'Verrouiller Termoria', group: 'Action', icon: 'lock', hint: 'Ctrl+Maj+L', action: () => lockNow(toast, () => reload()) },
   ];
@@ -860,4 +866,26 @@ function withoutPassword(values: Record<string, unknown>): Record<string, unknow
   const { password: _password, ...rest } = values;
   if (rest.auth === 'auto') rest.auth = 'key';
   return rest;
+}
+
+// ---------- Clés SSH ----------
+
+/** Gestionnaire de clés ouvert depuis un onglet SSH : installation sur ce serveur. */
+function openKeysFor(tab: Tab, session: Session) {
+  const id = tab.term?.connection;
+  if (!id) return;
+  openKeyManager({
+    toast, connectionId: id, serverLabel: session.name,
+    // Session enregistrée : elle passe à l'authentification par clé.
+    onUseKey: tab.quick ? undefined : async (key, passphrase) => {
+      try {
+        const fresh = sessionOf(session.id) ?? session;
+        await api.saveSession({ ...fresh, values: { ...fresh.values, auth: 'key', keyPath: key.path } }, passphrase ? { passphrase } : {});
+        await reload();
+        toast(`« ${session.name} » utilisera la clé ${key.name}`);
+      } catch (e) {
+        toast(errorText(e), 'error');
+      }
+    },
+  });
 }

@@ -89,6 +89,7 @@ impl Connector for SshConnector {
         // L'explorateur de fichiers ouvre son propre canal SFTP sur la même connexion.
         let files: Arc<dyn RemoteFiles> = Arc::new(SftpFiles::new(handle.clone()));
         let forwarder: Arc<dyn PortForwarder> = Arc::new(SshForwarder::new(handle.clone()));
+        let exec: Arc<dyn RemoteExec> = Arc::new(SshExec { handle: handle.clone() });
 
         // Tunnels à ouvrir dès la connexion.
         let tunnels: Vec<TunnelSpec> = ctx
@@ -115,7 +116,7 @@ impl Connector for SshConnector {
             drop(hops);
             sink.closed(result.err().map(|e| format!("{e:#}")));
         });
-        Ok(Outcome::Terminal(Box::new(SshConnection { tx, files, forwarder })))
+        Ok(Outcome::Terminal(Box::new(SshConnection { tx, files, forwarder, exec })))
     }
 }
 
@@ -123,6 +124,7 @@ struct SshConnection {
     tx: UnboundedSender<Cmd>,
     files: Arc<dyn RemoteFiles>,
     forwarder: Arc<dyn PortForwarder>,
+    exec: Arc<dyn RemoteExec>,
 }
 
 impl TerminalConnection for SshConnection {
@@ -149,8 +151,45 @@ impl TerminalConnection for SshConnection {
     fn forwarder(&self) -> Option<Arc<dyn PortForwarder>> {
         Some(self.forwarder.clone())
     }
+
+    fn exec(&self) -> Option<Arc<dyn RemoteExec>> {
+        Some(self.exec.clone())
+    }
 }
 
+
+/// Commandes sur un canal séparé de la même connexion.
+struct SshExec {
+    handle: Arc<Handle>,
+}
+
+impl RemoteExec for SshExec {
+    fn run(&self, command: String) -> BoxFuture<'_, ExecOutput> {
+        Box::pin(async move {
+            let mut channel = self.handle.channel_open_session().await?;
+            channel.exec(true, command.as_bytes()).await?;
+            let (mut stdout, mut stderr, mut status) = (Vec::new(), Vec::new(), None);
+            let collect = async {
+                while let Some(msg) = channel.wait().await {
+                    match msg {
+                        ChannelMsg::Data { data } => stdout.extend_from_slice(&data),
+                        ChannelMsg::ExtendedData { data, .. } => stderr.extend_from_slice(&data),
+                        ChannelMsg::ExitStatus { exit_status } => status = Some(exit_status),
+                        _ => {}
+                    }
+                }
+            };
+            tokio::time::timeout(Duration::from_secs(30), collect)
+                .await
+                .map_err(|_| anyhow!("Le serveur n'a pas répondu à temps"))?;
+            Ok(ExecOutput {
+                status,
+                stdout: String::from_utf8_lossy(&stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            })
+        })
+    }
+}
 type Channel = russh::Channel<client::Msg>;
 
 type Handle = client::Handle<Handler>;

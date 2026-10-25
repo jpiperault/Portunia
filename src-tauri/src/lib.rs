@@ -2,6 +2,7 @@ mod commands;
 mod connector;
 mod connectors;
 mod importers;
+mod keys;
 mod license;
 mod lock;
 mod monitor;
@@ -102,6 +103,10 @@ pub fn run() {
             commands::shells_detect,
             commands::connect_local,
             commands::open_shell_elevated,
+            commands::ssh_keys_list,
+            commands::ssh_key_default_comment,
+            commands::ssh_key_generate,
+            commands::ssh_key_install,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

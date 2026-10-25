@@ -207,6 +207,10 @@ pub trait TerminalConnection: Send + Sync {
     fn forwarder(&self) -> Option<Arc<dyn PortForwarder>> {
         None
     }
+    /// Commandes lancées à côté du terminal (installation d'une clé…), si le protocole le permet.
+    fn exec(&self) -> Option<Arc<dyn RemoteExec>> {
+        None
+    }
     /// Clavier / souris pour un écran distant (vue `Screen`).
     fn input(&self, _event: InputEvent) -> Result<()> {
         Err(anyhow!("Cette session n'accepte pas ce type de saisie"))
@@ -396,4 +400,17 @@ impl TerminalConnection for WorkerConnection {
     fn close(&self) {
         let _ = self.tx.send(Cmd::Close);
     }
+}
+
+/// Résultat d'une commande lancée sur le serveur.
+#[derive(Debug, Clone)]
+pub struct ExecOutput {
+    pub status: Option<u32>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+/// Exécution de commandes sur le serveur, hors du terminal (canal séparé).
+pub trait RemoteExec: Send + Sync {
+    fn run(&self, command: String) -> BoxFuture<'_, ExecOutput>;
 }

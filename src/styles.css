@@ -454,3 +454,8 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .shell-add[open] { padding-bottom: 12px; }
 .shell-add summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
 .shell-add > *:not(summary) { margin-top: 10px; }
+
+/* Clés SSH */
+.key-list { display: flex; flex-direction: column; gap: 6px; }
+.key-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.key-title { display: flex; align-items: center; gap: 6px; }

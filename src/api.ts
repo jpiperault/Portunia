@@ -291,3 +291,24 @@ export function connectQuick(protocol: string, name: string, values: Record<stri
   channel.onmessage = onEvent;
   return invoke<ConnectResponse>('connect_quick', { protocol, name, values, cols, rows, onEvent: channel });
 }
+
+// ---------- Clés SSH ----------
+
+export interface KeyInfo {
+  name: string;
+  path: string;
+  algorithm: string;
+  fingerprint: string;
+  comment: string;
+  public: string;
+  encrypted: boolean;
+}
+
+export const sshKeys = {
+  list: () => invoke<KeyInfo[]>('ssh_keys_list'),
+  defaultComment: () => invoke<string>('ssh_key_default_comment'),
+  generate: (name: string, kind: 'ed25519' | 'rsa', comment: string, passphrase: string | null) =>
+    invoke<KeyInfo>('ssh_key_generate', { name, kind, comment, passphrase }),
+  install: (connectionId: string, publicKey: string) =>
+    invoke<'added' | 'alreadyThere'>('ssh_key_install', { connectionId, public: publicKey }),
+};

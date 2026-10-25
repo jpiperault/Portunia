@@ -51,6 +51,7 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 Autres fonctions :
 
 - connexion rapide sans créer de session : tapez `ssh deploy@10.0.1.12`, `rdp srv-01`, `vnc nas:5901`, `https://nas:5001` ou `COM3@9600` dans la recherche puis Entrée, ou dans la palette (Ctrl+Maj+O). En SSH, clé par défaut puis agent, sinon le mot de passe est demandé (et jamais enregistré). Historique des connexions récentes, bouton « Enregistrer comme session » ;
+- clés SSH : création Ed25519 ou RSA 4096 dans ~/.ssh (phrase secrète conseillée), copie de la clé publique, installation sur le serveur de l'onglet en un clic (authorized_keys et droits corrigés), puis la session passe à l'authentification par clé (bouton « Clé SSH » ou palette) ;
 - palette globale (Ctrl+Maj+O) : aller à une session, un shell local ou une action en quelques lettres ;
 - arbre des sessions avec dossiers et sous-dossiers (dossiers vides possibles), glisser-déposer pour ranger, menu clic droit (dupliquer, ouvrir tout un dossier…), recherche (Ctrl+Maj+K), onglets ;
 - terminal : recherche dans l'historique (Ctrl+Maj+F), police et taille réglables (Ctrl + molette), copier/coller au clic droit, liens ouverts par Ctrl+clic ;

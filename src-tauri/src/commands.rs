@@ -17,6 +17,7 @@ use crate::connector::{
     ViewKind,
 };
 use crate::importers::{self, Candidate};
+use crate::keys;
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
 use crate::transfer;
@@ -1016,4 +1017,47 @@ fn jump_values(state: &AppState, hop: &str, visited: &mut Vec<String>) -> CmdRes
         ("username".into(), Value::String(user.into())),
         ("auth".into(), Value::String("auto".into())),
     ]))
+}
+
+// ---------- Clés SSH ----------
+
+#[tauri::command]
+pub fn ssh_keys_list() -> CmdResult<Vec<keys::KeyInfo>> {
+    keys::list().map_err(full)
+}
+
+/// Commentaire proposé : utilisateur@ordinateur.
+#[tauri::command]
+pub fn ssh_key_default_comment() -> String {
+    let user = std::env::var("USERNAME").unwrap_or_default();
+    let host = std::env::var("COMPUTERNAME").unwrap_or_default();
+    format!("{user}@{host}").to_lowercase()
+}
+
+#[tauri::command]
+pub async fn ssh_key_generate(
+    state: State<'_, AppState>,
+    name: String,
+    kind: String,
+    comment: String,
+    passphrase: Option<String>,
+) -> CmdResult<keys::KeyInfo> {
+    state.unlocked()?;
+    // Une clé RSA prend quelques secondes : hors du thread de l'interface.
+    tauri::async_runtime::spawn_blocking(move || keys::generate(&name, &kind, &comment, passphrase.as_deref()))
+        .await
+        .map_err(err)?
+        .map_err(full)
+}
+
+/// Ajoute la clé publique au fichier authorized_keys du serveur de la connexion.
+#[tauri::command]
+pub async fn ssh_key_install(state: State<'_, AppState>, connection_id: String, public: String) -> CmdResult<keys::Installed> {
+    state.unlocked()?;
+    let exec = {
+        let connections = state.connections.lock().unwrap();
+        let connection = connections.get(&connection_id).ok_or("Session fermée")?;
+        connection.exec().ok_or("Ce protocole ne permet pas d'installer une clé")?
+    };
+    keys::install(exec.as_ref(), &public).await.map_err(full)
 }
