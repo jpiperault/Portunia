@@ -21,6 +21,8 @@ export interface TreeActions {
   netTools(s: Session): void;
   /** Wake-on-LAN (adresse MAC de la session). */
   wake(s: Session): void;
+  /** Commande sur toutes les sessions SSH du dossier (Pro). */
+  multiExec(folder: string): void;
   openSession(s: Session): void;
   editSession(s: Session): void;
   duplicateSession(s: Session): void;
@@ -95,6 +97,7 @@ export class SessionTree {
       { label: 'Nouvelle session ici', icon: 'plus', action: () => a.newSession(folder.path) },
       { label: 'Nouveau sous-dossier', icon: 'folderPlus', action: () => a.newFolder(folder.path) },
       ...(folder.total ? [{ label: `Ouvrir les ${folder.total} session(s)`, icon: 'play', action: () => a.openAll(folder.path) }] : []),
+      ...(folder.total ? [{ label: 'Lancer une commande sur ce dossier…', icon: 'commands', action: () => a.multiExec(folder.path) }] : []),
       'separator',
       { label: 'Renommer', icon: 'edit', action: () => a.renameFolder(folder.path) },
       { label: 'Couleur…', icon: 'palette', action: () => showColorPicker(x, y, a.colorKey(folder.path), FOLDER_COLORS, (c) => a.setFolderColor(folder.path, c)) },

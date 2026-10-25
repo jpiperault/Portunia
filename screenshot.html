@@ -94,6 +94,16 @@
           case 'fs_home': return '/home/deploy';
           case 'fs_list': return [E('releases', true, 0, 3600), E('scripts', true, 0, 86400), E('site', true, 0, 7200), E('.bashrc', false, 3771, 864000), E('backup-2026-10-23.tar.gz', false, 48234112, 50000), E('deploy.sh', false, 2048, 3600), E('notes.md', false, 1210, 600)];
           case 'tunnel_list': return [];
+          case 'multi_exec': {
+            const id = chId(args.onEvent);
+            const outs = { s1: [0, 'uptime: 14:02 up 14 days, load 0.42\n/dev/sda2  40G  18G  20G  48% /'], s2: [0, 'uptime: 14:02 up 3 days, load 1.10\n/dev/sda2  40G  31G  7G  82% /'], s3: [1, '', 'df: /data: No such file or directory'] };
+            args.sessionIds.forEach((sid, i) => setTimeout(() => {
+              const o = outs[sid];
+              send(id, o ? { type: 'result', sessionId: sid, status: o[0], stdout: o[1], stderr: o[2] || '', ms: 400 + i * 230 } : { type: 'failed', sessionId: sid, error: 'Pas de réponse de 10.0.2.40:22 (délai dépassé)', ms: 15000 });
+            }, 300 + i * 250));
+            setTimeout(() => send(id, { type: 'done', ok: 2, failed: args.sessionIds.length - 2 }), 400 + args.sessionIds.length * 250);
+            return 'job';
+          }
           case 'server_stats': {
             const t = Date.now() / 1000;
             return { os: 'Debian GNU/Linux 13 (trixie)', kernel: '6.12.48-amd64', hostname: 'srv-web-01', uptimeSecs: 51322 + Math.round(t % 1000), load: [0.42, 0.31, 0.25], cpus: 4,

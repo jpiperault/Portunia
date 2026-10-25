@@ -394,3 +394,16 @@ export interface ServerStats {
 }
 
 export const serverStats = (connectionId: string) => invoke<ServerStats>('server_stats', { connectionId });
+
+// ---------- Commande sur plusieurs serveurs ----------
+
+export type MultiEvent =
+  | { type: 'result'; sessionId: string; status: number | null; stdout: string; stderr: string; ms: number }
+  | { type: 'failed'; sessionId: string; error: string; ms: number }
+  | { type: 'done'; ok: number; failed: number };
+
+export function multiExec(sessionIds: string[], command: string, timeoutSecs: number, onEvent: (e: MultiEvent) => void) {
+  const channel = new Channel<MultiEvent>();
+  channel.onmessage = onEvent;
+  return invoke<string>('multi_exec', { sessionIds, command, timeoutSecs, onEvent: channel });
+}

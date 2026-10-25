@@ -124,6 +124,7 @@ pub fn run() {
             commands::credential_save,
             commands::credential_delete,
             commands::server_stats,
+            commands::multi_exec,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

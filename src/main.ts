@@ -4,6 +4,7 @@ import { api, connectQuick, errorText, Manifest, notes, Session, Snippet, TermEv
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
+import { createMultiExec, MultiExecView } from './multiexec';
 import { openCredentialManager } from './credentials';
 import { createNetTools, NetToolsView, wakeSession } from './nettools';
 import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
@@ -30,7 +31,7 @@ import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
 
 interface Tab {
   id: string;
-  kind: 'session' | 'local' | 'extensions' | 'replay' | 'tools';
+  kind: 'session' | 'local' | 'extensions' | 'replay' | 'tools' | 'multi';
   /** Shell local (onglet « local »). */
   shell?: ShellSpec;
   title: string;
@@ -56,6 +57,8 @@ interface Tab {
   player?: Player;
   /** Outils réseau (onglet « tools »). */
   netTools?: NetToolsView;
+  /** Commande sur plusieurs serveurs (onglet « multi »). */
+  multi?: MultiExecView;
   /** Tableau de bord du serveur (panneau de droite, Pro). */
   server?: ServerPanel;
 }
@@ -121,6 +124,7 @@ const sessionTree = new SessionTree(tree, {
   hasNote: (id) => state.noteIds.has(id),
   netTools: (s) => openNetTools(typeof s.values.host === 'string' ? s.values.host : '', s),
   wake: (s) => wakeSession(s, toast),
+  multiExec: (folder) => openMultiExec(folder),
   openSession: (s) => openSession(s),
   editSession: (s) => editSession(s),
   duplicateSession: (s) => act(async () => {
@@ -513,6 +517,7 @@ function closeTab(id: string) {
   tab.server?.dispose();
   tab.player?.dispose();
   tab.netTools?.dispose();
+  tab.multi?.dispose();
   tab.view.remove();
   const wasSplit = state.split.includes(id);
   state.split = state.split.filter((s) => s !== id);
@@ -930,6 +935,7 @@ function paletteEntries(): PaletteEntry[] {
     { label: 'Supervision des serveurs', group: 'Action', icon: 'refresh', action: () => monitor.openOverview((s) => openSession(s)) },
     { label: 'Clés SSH', group: 'Action', icon: 'lock', hint: 'Créer, copier, installer', keywords: 'ssh-keygen ed25519 rsa authorized_keys', action: () => { const t = activeTab(); const s = sessionOf(t?.sessionId) ?? (t?.quick && quickSession(t.quick)); if (t && s && s.protocol === 'ssh' && t.state === 'connected') openKeysFor(t, s); else openKeyManager({ toast }); } },
     { label: 'Identifiants partagés', group: 'Action', icon: 'user', hint: 'Un compte pour plusieurs sessions', keywords: 'mot de passe compte login credentials', action: () => openCredentialManager(toast, () => reload()) },
+    { label: 'Commande sur plusieurs serveurs', group: 'Action', icon: 'commands', hint: 'Pro', keywords: 'multi exec lancer tous serveurs parallèle ansible', action: () => openMultiExec() },
     { label: 'Outils réseau', group: 'Action', icon: 'broadcast', hint: 'Ping, traceroute, ports, DNS, Wake-on-LAN', keywords: 'ping tracert traceroute port scan dns nslookup wol wake', action: () => openNetTools() },
     { label: 'Paramètres', group: 'Action', icon: 'settings', action: () => openSettingsDialog(toast) },
     { label: 'Verrouiller Termoria', group: 'Action', icon: 'lock', hint: 'Ctrl+Maj+L', action: () => lockNow(toast, () => reload()) },
@@ -997,4 +1003,30 @@ function openNetTools(host = '', session?: Session) {
   }
   activate(tab.id);
   if (host) tab.netTools?.target(host, typeof session?.values.mac === 'string' ? session.values.mac : undefined, 'ping');
+}
+
+// ---------- Commande sur plusieurs serveurs (Pro) ----------
+
+/** Session rangée dans un dossier rouge (production…) : confirmation renforcée. */
+function isSensitive(s: Session): boolean {
+  let path = s.folder;
+  while (path) {
+    if (state.folderColors[path]) return state.folderColors[path] === 'red';
+    path = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+  }
+  return false;
+}
+
+function openMultiExec(folder: string | null = null, ids?: string[]) {
+  if (!allows('multiExec')) return toast('La commande sur plusieurs serveurs fait partie de Termoria Pro (Paramètres › Licence)', 'error');
+  let tab = state.tabs.find((t) => t.kind === 'multi');
+  if (!tab?.multi) {
+    const multi = createMultiExec(() => state.sessions, () => state.snippets, isSensitive, toast);
+    const view = h('div', { class: 'page-view' }, multi.el);
+    views.append(view);
+    tab = { id: crypto.randomUUID(), kind: 'multi', title: 'Commande multiple', view, state: 'connected', receive: false, multi };
+    state.tabs.push(tab);
+  }
+  activate(tab.id);
+  tab.multi?.select(folder, ids);
 }

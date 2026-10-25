@@ -215,6 +215,45 @@ async fn open(ctx: &ConnectContext) -> Result<(Handle, Channel, Hops)> {
     Ok((handle, channel, hops))
 }
 
+
+/// Sortie gardée par serveur pour une commande lancée sur plusieurs serveurs.
+const MAX_OUTPUT: usize = 64 * 1024;
+
+/// Lance une commande sans terminal (connexion dédiée, fermée ensuite).
+/// Les messages de la connexion (clé du serveur, rebonds) sont ignorés.
+pub async fn run_command(ctx: &ConnectContext, command: &str, timeout: Duration) -> Result<ExecOutput> {
+    let (handle, hops) = session(ctx, 0).await?;
+    let result = tokio::time::timeout(timeout, async {
+        let mut channel = handle.channel_open_session().await?;
+        channel.exec(true, command.as_bytes()).await?;
+        let (mut stdout, mut stderr, mut status) = (Vec::new(), Vec::new(), None);
+        while let Some(msg) = channel.wait().await {
+            match msg {
+                ChannelMsg::Data { data } if stdout.len() < MAX_OUTPUT => stdout.extend_from_slice(&data),
+                ChannelMsg::ExtendedData { data, .. } if stderr.len() < MAX_OUTPUT => stderr.extend_from_slice(&data),
+                ChannelMsg::ExitStatus { exit_status } => status = Some(exit_status),
+                _ => {}
+            }
+        }
+        Ok::<_, anyhow::Error>(ExecOutput {
+            status,
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+        })
+    })
+    .await;
+    let _ = handle.disconnect(Disconnect::ByApplication, "", "fr").await;
+    drop(hops);
+    result.map_err(|_| anyhow!("Pas de fin de la commande après {} s", timeout.as_secs()))?
+}
+
+/// Destination des messages d'une connexion sans terminal : rien n'est affiché.
+pub struct QuietSink;
+
+impl Sink for QuietSink {
+    fn data(&self, _bytes: &[u8]) {}
+    fn closed(&self, _reason: Option<String>) {}
+}
 /// Rebonds enchaînés au plus (bastion → bastion → serveur).
 const MAX_HOPS: usize = 3;
 
