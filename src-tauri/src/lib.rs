@@ -15,6 +15,7 @@ mod registry;
 mod secrets;
 mod serverstats;
 mod store;
+mod tls;
 mod transfer;
 
 use tauri::Manager;

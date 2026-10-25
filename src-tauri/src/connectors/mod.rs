@@ -4,6 +4,7 @@ pub mod forward;
 pub mod ftp;
 pub mod local;
 pub mod rdp;
+pub mod s3;
 pub mod serial;
 pub mod sftp;
 pub mod ssh;

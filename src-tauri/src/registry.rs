@@ -20,6 +20,7 @@ impl Registry {
         registry.register(Arc::new(connectors::vnc::VncConnector));
         registry.register(Arc::new(connectors::serial::SerialConnector));
         registry.register(Arc::new(connectors::ftp::FtpConnector));
+        registry.register(Arc::new(connectors::s3::S3Connector));
         registry.register(Arc::new(connectors::local::LocalShellConnector));
         registry
     }

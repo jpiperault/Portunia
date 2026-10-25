@@ -47,6 +47,7 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
 | Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console Windows (ConPTY). Section « Ce PC », menu « + », Ctrl+Maj+T. |
 | FTP / FTPS | Onglet fichiers | Explorateur en pleine largeur (envoi, téléchargement, glisser-déposer, renommage, suppression). FTPS explicite par défaut, avec reprise de session TLS (exigée par FileZilla Server et vsftpd) et certificats vérifiés par Windows ; certificat auto-signé accepté sur demande. Connexion rouverte d'elle-même après inactivité. `ftps://user@hôte` en connexion rapide. |
+| Stockage S3 (Pro) | Onglet fichiers | Amazon S3 et services compatibles (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…) : compartiments, dossiers, envoi et téléchargement (jusqu'à 5 Go par fichier), renommage et suppression de dossiers entiers. Adressage par chemin pour MinIO / Ceph. Client intégré (signature AWS SigV4), sans le SDK d'Amazon. |
 | Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
 
 Autres fonctions :

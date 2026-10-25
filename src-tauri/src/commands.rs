@@ -264,6 +264,9 @@ async fn start_connection(
         .registry
         .get(protocol)
         .ok_or_else(|| format!("Extension « {protocol} » non installée"))?;
+    if let Some(feature) = connector.required_feature() {
+        state.license.lock().unwrap().require(feature).map_err(full)?;
+    }
     if protocol == "ssh" {
         resolve_jump(state, &mut values, &mut Vec::new())?;
     }

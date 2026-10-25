@@ -368,6 +368,10 @@ impl ConnectContext {
 
 pub trait Connector: Send + Sync {
     fn manifest(&self) -> Manifest;
+    /// Fonction payante requise (vérifiée par le cœur avant la connexion).
+    fn required_feature(&self) -> Option<crate::license::Feature> {
+        None
+    }
     /// Appelé hors du thread de l'interface : peut bloquer (réseau).
     fn connect(&self, ctx: ConnectContext) -> Result<Outcome>;
     /// Suggestions pour un champ `Suggest` (appelé à l'ouverture du formulaire).
