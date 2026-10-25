@@ -21,15 +21,18 @@ mod transfer;
 use tauri::Manager;
 
 pub fn run() {
-    tauri::Builder::default()
-        // Relancer Termoria ramène la fenêtre déjà ouverte au lieu d'en ouvrir une seconde.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }))
+    let builder = tauri::Builder::default();
+    // Relancer Termoria ramène la fenêtre déjà ouverte au lieu d'en ouvrir une seconde.
+    // Versions publiées seulement : une version de développement peut tourner à côté.
+    #[cfg(not(debug_assertions))]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.unminimize();
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }));
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

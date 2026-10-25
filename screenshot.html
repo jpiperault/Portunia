@@ -21,7 +21,9 @@
         callbacks[channelId]({ message, index: ch.index++ });
       };
       const b64 = (text) => btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+      const bytes = (text) => new TextEncoder().encode(text).buffer;
       const chId = (v) => (typeof v === 'string' && v.startsWith('__CHANNEL__:') ? Number(v.slice(12)) : v && v.id);
+      window.__mock = { send: (...a) => send(...a), b64: (t) => b64(t), bytes: (t) => bytes(t), channels: [] };
 
       const field = (key, label, type, extra) => Object.assign({ key, label, kind: { type }, required: false }, extra || {});
       const protocols = [
@@ -89,8 +91,9 @@
           case 'monitor_alerts_allowed': return true;
           case 'connect': {
             const s = sessions.find((x) => x.id === args.sessionId);
+            window.__mock.channels.push(chId(args.onEvent));
             const id = chId(args.onEvent);
-            setTimeout(() => send(id, { event: 'data', data: b64(terminalText(s.name)) }), 200);
+            setTimeout(() => send(id, bytes(terminalText(s.name))), 200);
             return { connectionId: 'c-' + args.sessionId, view: 'terminal', message: null };
           }
           case 'fs_home': return '/home/deploy';
@@ -111,7 +114,7 @@
           case 'container_action': return '';
           case 'connect_with': {
             const id = chId(args.onEvent);
-            setTimeout(() => send(id, { event: 'data', data: b64('\x1b[1;32mroot@ab12cd34ef56\x1b[0m:/# ') }), 200);
+            setTimeout(() => send(id, bytes('\x1b[1;32mroot@ab12cd34ef56\x1b[0m:/# ')), 200);
             return { connectionId: 'cw-' + Date.now(), view: 'terminal', message: null };
           }
           case 'multi_exec': {

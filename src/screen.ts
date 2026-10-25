@@ -122,6 +122,7 @@ export class ScreenView {
   }
 
   private onEvent(e: TermEvent) {
+    if (e instanceof ArrayBuffer) return;
     if (e.event === 'screen') this.draw(e.data);
     else if (e.event === 'closed') {
       this.connectionId = null;

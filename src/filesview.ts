@@ -52,7 +52,7 @@ export class FilesView {
   }
 
   private onEvent(e: TermEvent) {
-    if (e.event !== 'closed') return;
+    if (e instanceof ArrayBuffer || e.event !== 'closed') return;
     this.connectionId = null;
     this.panel.detach();
     if (this.disposed) return;

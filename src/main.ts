@@ -15,8 +15,8 @@ import { openSessionDialog } from './dialog';
 import { renderExtensions } from './extensions';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { FilePanel } from './files';
-import { Opener, TerminalView, TermState } from './terminal';
-import { ScreenView } from './screen';
+import type { Opener, TerminalView, TermState } from './terminal';
+import type { ScreenView } from './screen';
 import { leafOf, parentOf, SessionTree } from './tree';
 import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
@@ -26,7 +26,8 @@ import { onSettingsChange, openSettingsDialog, settings } from './settings';
 import { Monitor } from './monitoring';
 import { checkForUpdates } from './updates';
 import { allows, currentEdition, EDITION_LABEL, initLock, loadLicense, lockNow } from './security';
-import { openRecordings, Player, setPlayerHandler, stamp } from './recordings';
+import { openRecordings, setPlayerHandler, stamp } from './recordings';
+import type { Player } from './player';
 import { folderColors, recordings, shells, ShellSpec } from './api';
 import { defaultShell, hideShell, loadShells, setDefaultShell, shellIcon, shellsLoaded, visibleShells } from './localshells';
 import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
@@ -633,13 +634,13 @@ async function openSession(session: Session, quick?: QuickTarget) {
     return;
   }
   if (proto.view === 'screen') {
-    tab.screen = new ScreenView(termEl, onState);
+    tab.screen = new (await import('./screen')).ScreenView(termEl, onState);
     tab.screen.onDetached = (message) => { toast(message); closeTab(tab.id); };
     activate(tab.id);
     await tab.screen.connectWith(opener, session.name);
     return;
   }
-  tab.term = new TerminalView(termEl, onState);
+  tab.term = new (await import('./terminal')).TerminalView(termEl, onState);
   activate(tab.id);
   tab.term.inputHook = (data) => broadcastFrom(tab, data);
   await tab.term.connectWith(opener, session.name);
@@ -672,7 +673,8 @@ async function stopRecording(tab: Tab) {
 }
 
 /** Ouvre un enregistrement dans un onglet de lecture. */
-function openReplay(title: string, cast: string) {
+async function openReplay(title: string, cast: string) {
+  const { Player } = await import('./player');
   const view = h('div', { class: 'pane' });
   views.append(view);
   const tab: Tab = { id: crypto.randomUUID(), kind: 'replay', title: `▶ ${title}`, view, state: 'connected', receive: false };
@@ -852,7 +854,7 @@ async function openLocalShell(shell: ShellSpec) {
   view.addEventListener('pointerdown', (e) => {
     if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
   }, true);
-  tab.term = new TerminalView(termEl, (s, reason) => {
+  tab.term = new (await import('./terminal')).TerminalView(termEl, (s, reason) => {
     tab.state = s;
     if (s === 'closed') tab.recording = undefined;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${shell.name} : ${reason}`, 'error');
@@ -1087,7 +1089,7 @@ async function openRemoteTerminal(parent: Tab, label: string, command: string) {
   view.addEventListener('pointerdown', (e) => {
     if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
   }, true);
-  tab.term = new TerminalView(termEl, (s, reason) => {
+  tab.term = new (await import('./terminal')).TerminalView(termEl, (s, reason) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${label} : ${reason}`, 'error');
     renderAll();

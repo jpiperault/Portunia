@@ -346,3 +346,51 @@ mod tests {
         shell.close();
     }
 }
+
+#[cfg(all(test, windows))]
+mod debit {
+    use super::*;
+    use std::sync::Mutex;
+
+    /// Débit de la console Windows seule (sans interface) :
+    /// TERMORIA_BENCH_FILE=chemin cargo test --lib debit_console -- --ignored --nocapture
+    #[test]
+    #[ignore = "mesure à la demande"]
+    fn debit_console() {
+        let Ok(file) = std::env::var("TERMORIA_BENCH_FILE") else { return };
+        struct Count(Mutex<(usize, usize, Vec<u8>)>);
+        impl Sink for Count {
+            fn data(&self, bytes: &[u8]) {
+                let mut g = self.0.lock().unwrap();
+                g.0 += bytes.len();
+                g.1 += 1;
+                g.2.extend_from_slice(bytes);
+                let len = g.2.len();
+                if len > 4096 {
+                    g.2.drain(..len - 4096);
+                }
+            }
+            fn closed(&self, _: Option<String>) {}
+        }
+        let sink = Arc::new(Count(Mutex::new((0, 0, Vec::new()))));
+        let cmd = detect().into_iter().find(|s| s.id == "cmd").unwrap();
+        let shell = open(&cmd, 120, 40, sink.clone()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(800));
+        shell.write(b"\x1b[1;1R").unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        sink.0.lock().unwrap().0 = 0;
+        let start = std::time::Instant::now();
+        shell.write(format!("type \"{file}\"\r").as_bytes()).unwrap();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            let g = sink.0.lock().unwrap();
+            if String::from_utf8_lossy(&g.2).contains("FIN-BENCH") {
+                let s = start.elapsed().as_secs_f64();
+                println!("console seule : {:.1} Mo en {s:.1} s = {:.1} Mo/s, {} lectures de {} octets en moyenne", g.0 as f64 / 1e6, g.0 as f64 / 1e6 / s, g.1, g.0 / g.1.max(1));
+                break;
+            }
+            assert!(start.elapsed().as_secs() < 300, "trop long");
+        }
+        shell.close();
+    }
+}

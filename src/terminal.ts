@@ -26,13 +26,6 @@ const SEARCH_DECORATIONS = {
   activeMatchColorOverviewRuler: '#FFD08A',
 };
 
-function decode(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes;
-}
-
 const copy = (text: string) => navigator.clipboard.writeText(text).catch(() => {});
 
 /** Vue terminal d'un onglet : xterm.js relié à une connexion du cœur Rust. */
@@ -92,7 +85,10 @@ export class TerminalView {
       if (event.ctrlKey) openUrl(uri).catch(() => {});
     }));
     this.term.open(container);
+    this.useGpu();
     this.highlighter = new Highlighter(this.term);
+    // Mesures de performance (page de démonstration, développement seulement).
+    if (import.meta.env.DEV) ((window as unknown as { __terms?: Terminal[] }).__terms ??= []).push(this.term);
 
     // Ctrl+Maj+… est réservé à l'application : Ctrl+W, Ctrl+K… restent aux programmes du terminal.
     this.term.attachCustomKeyEventHandler((e) => {
@@ -172,6 +168,22 @@ export class TerminalView {
 
   private readonly onTheme = () => { this.term.options.theme = terminalTheme(); };
 
+  /** Rendu par la carte graphique (bien plus rapide) ; repli sur le rendu DOM si WebGL manque ou se perd. */
+  private async useGpu() {
+    const mode = settings().gpu;
+    if (mode === 'off' || (mode === 'auto' && !hasRealGpu())) return;
+    try {
+      // Module chargé seulement quand il sert (≈ 100 Ko).
+      const { WebglAddon } = await import('@xterm/addon-webgl');
+      if (this.disposed) return;
+      const webgl = new WebglAddon();
+      webgl.onContextLoss(() => webgl.dispose());
+      this.term.loadAddon(webgl);
+    } catch {
+      // Pas de WebGL (pilote, bureau à distance) : le rendu DOM reste en place.
+    }
+  }
+
   /** Identifiant de la connexion en cours côté Rust, ou null. */
   get connection(): string | null {
     return this.connectionId;
@@ -230,8 +242,8 @@ export class TerminalView {
   }
 
   private onEvent(e: TermEvent) {
-    if (e.event === 'data') {
-      this.term.write(decode(e.data));
+    if (e instanceof ArrayBuffer) {
+      this.term.write(new Uint8Array(e));
       return;
     }
     if (e.event !== 'closed') return;
@@ -356,3 +368,23 @@ export class TerminalView {
 
 const END_SESSION = '\r\n\x1b[90mSession terminée. Appuyez sur Entrée pour vous reconnecter.\x1b[0m\r\n';
 const END_SHELL = '\r\n\x1b[90mShell terminé. Appuyez sur Entrée pour le relancer.\x1b[0m\r\n';
+
+let gpuChecked: boolean | null = null;
+
+/**
+ * Vraie carte graphique ? Sans elle (machine virtuelle, bureau à distance), WebGL est
+ * émulé par le processeur et plus lent que le rendu DOM : mesuré 4,2 contre 5,8 Mo/s.
+ */
+export function hasRealGpu(): boolean {
+  if (gpuChecked !== null) return gpuChecked;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const info = gl?.getExtension('WEBGL_debug_renderer_info');
+    const renderer = gl ? String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) : '';
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    gpuChecked = !!renderer && !/swiftshader|basic render|llvmpipe|software|warp/i.test(renderer);
+  } catch {
+    gpuChecked = false;
+  }
+  return gpuChecked;
+}

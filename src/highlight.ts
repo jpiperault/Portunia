@@ -1,7 +1,7 @@
 // Mise en évidence dans le terminal : mots-clés colorés (erreurs, avertissements, adresses IP…).
 // Le flux reçu n'est pas modifié : les couleurs sont des « décorations » xterm posées après coup,
 // donc elles n'abîment ni les séquences d'échappement ni les enregistrements.
-import type { IDisposable, Terminal } from '@xterm/xterm';
+import type { IDisposable, IMarker, Terminal } from '@xterm/xterm';
 import { h, icon } from './dom';
 import { onSettingsChange, settings, updateSettings } from './settings';
 import { DEFAULT_RULES, HighlightRule } from './highlight-rules';
@@ -42,22 +42,40 @@ export function matches(line: string, rules: { re: RegExp; rule: HighlightRule }
   return out;
 }
 
-/** Lignes de terminal analysées au plus par écriture (sorties énormes : on ne colore que la fin). */
-const MAX_LINES = 400;
+/** Lignes colorées en plus de l'écran visible (défilement fluide). */
+const MARGIN = 20;
 
+interface Painted {
+  /** Suit la ligne quand le contenu défile. */
+  marker: IMarker;
+  /** Texte au moment de la coloration : s'il change (ligne réécrite), on recolore. */
+  text: string;
+  decorations: IDisposable[];
+}
+
+/**
+ * Seules les lignes affichées (et une marge) sont colorées, au plus une fois par image :
+ * le coût dépend de la taille de la fenêtre, pas de la quantité de texte reçue.
+ */
 export class Highlighter {
   private compiled: { re: RegExp; rule: HighlightRule }[] = [];
-  /** Prochaine ligne absolue (dans le tampon) à analyser. */
-  private next = 0;
-  /** Décorations de la ligne courante (incomplète), refaites à chaque passage. */
-  private pending: IDisposable[] = [];
+  private painted: Painted[] = [];
+  private frame = 0;
+  private timer = 0;
+  /** Dernière écriture : pendant un flot de texte, on recolore moins souvent. */
+  private lastWrite = 0;
   private readonly subs: IDisposable[] = [];
   private readonly unsubscribe: () => void;
 
   constructor(private readonly term: Terminal) {
     this.load();
-    this.subs.push(term.onWriteParsed(() => this.scan()));
-    this.unsubscribe = onSettingsChange(() => this.load());
+    const schedule = () => this.schedule();
+    this.subs.push(
+      term.onWriteParsed(() => { this.lastWrite = performance.now(); this.schedule(); }),
+      term.onScroll(schedule),
+      term.onResize(schedule),
+    );
+    this.unsubscribe = onSettingsChange(() => { this.load(); this.clear(); this.schedule(); });
   }
 
   private load() {
@@ -67,40 +85,72 @@ export class Highlighter {
       : [];
   }
 
-  private scan() {
-    if (!this.compiled.length) return;
+  private schedule() {
+    if (this.frame || this.timer) return;
+    // Flot de texte en cours : le contenu défile trop vite pour être lu, on recolore toutes les 200 ms.
+    if (performance.now() - this.lastWrite < 100) {
+      this.timer = window.setTimeout(() => { this.timer = 0; this.paint(); }, 200);
+    } else {
+      this.frame = requestAnimationFrame(() => { this.frame = 0; this.paint(); });
+    }
+  }
+
+  private clear() {
+    for (const p of this.painted) this.drop(p);
+    this.painted = [];
+  }
+
+  private drop(p: Painted) {
+    for (const d of p.decorations) d.dispose();
+    p.marker.dispose();
+  }
+
+  private paint() {
     const buffer = this.term.buffer.active;
-    // Plein écran (vim, htop…) : pas de coloration, le programme gère ses couleurs.
-    if (buffer.type === 'alternate') return;
+    // Plein écran (vim, htop…) ou rien à colorer : pas de décoration.
+    if (!this.compiled.length || buffer.type === 'alternate') return this.clear();
+    const first = Math.max(0, buffer.viewportY - MARGIN);
+    const last = buffer.viewportY + this.term.rows + MARGIN;
     const cursor = buffer.baseY + buffer.cursorY;
-    if (this.next > cursor + 1 || this.next < buffer.baseY - this.term.options.scrollback!) this.next = Math.max(0, cursor - 1);
-    this.next = Math.max(this.next, cursor - MAX_LINES);
-    for (const d of this.pending) d.dispose();
-    this.pending = [];
-    for (let y = this.next; y <= cursor; y++) {
-      const line = buffer.getLine(y);
-      if (!line) continue;
-      const text = line.translateToString(true);
+    const byLine = new Map<number, Painted>();
+    const keep: Painted[] = [];
+    for (const p of this.painted) {
+      const y = p.marker.line;
+      if (p.marker.isDisposed || y < first || y > last || byLine.has(y)) this.drop(p);
+      else { byLine.set(y, p); keep.push(p); }
+    }
+    this.painted = keep;
+    for (let y = first; y <= Math.min(last, buffer.length - 1); y++) {
+      const text = buffer.getLine(y)?.translateToString(true) ?? '';
+      const existing = byLine.get(y);
+      if (existing && existing.text === text) continue;
+      if (existing) {
+        this.drop(existing);
+        this.painted = this.painted.filter((p) => p !== existing);
+      }
       if (!text) continue;
-      for (const m of matches(text, this.compiled)) {
-        const marker = this.term.registerMarker(y - cursor);
-        if (!marker) continue;
+      const found = matches(text, this.compiled);
+      if (!found.length) continue;
+      const marker = this.term.registerMarker(y - cursor);
+      if (!marker) continue;
+      const decorations: IDisposable[] = [];
+      for (const m of found) {
         const deco = this.term.registerDecoration({
           marker, x: m.start, width: m.end - m.start, layer: 'top',
           ...(m.rule.background ? { backgroundColor: m.rule.color, foregroundColor: '#000000' } : { foregroundColor: m.rule.color }),
         });
-        // La ligne du curseur peut encore changer : ses décorations seront refaites.
-        if (y === cursor) this.pending.push(deco ?? marker, marker);
-        else if (!deco) marker.dispose();
+        if (deco) decorations.push(deco);
       }
+      this.painted.push({ marker, text, decorations });
     }
-    this.next = cursor;
   }
 
   dispose() {
+    cancelAnimationFrame(this.frame);
+    window.clearTimeout(this.timer);
     this.unsubscribe();
     for (const s of this.subs) s.dispose();
-    for (const d of this.pending) d.dispose();
+    this.clear();
   }
 }
 

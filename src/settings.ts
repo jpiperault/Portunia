@@ -38,6 +38,8 @@ export interface Settings {
   termTheme: string;
   /** Shells locaux : masqués, par défaut, personnalisés, ouverture au démarrage. */
   localShells: { hidden: string[]; defaultId: string; custom: ShellSpec[]; atStartup: boolean };
+  /** Rendu des terminaux : carte graphique (WebGL) si elle existe, toujours, ou jamais. */
+  gpu: 'auto' | 'on' | 'off';
   /** Mise en évidence de mots-clés dans les terminaux. */
   highlight: { enabled: boolean; rules: HighlightRule[] };
 }
@@ -60,6 +62,7 @@ export const DEFAULTS: Settings = {
   uiTheme: 'dark',
   termTheme: 'auto',
   localShells: { hidden: [], defaultId: '', custom: [], atStartup: false },
+  gpu: 'auto',
   highlight: { enabled: true, rules: DEFAULT_RULES },
 };
 
@@ -136,6 +139,10 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
               const v = Number((e.target as HTMLInputElement).value);
               if (v >= 500 && v <= 100000) updateSettings({ scrollback: v });
             } }))),
+        h('label', { class: 'fld' }, 'Rendu des terminaux',
+          h('select', { onchange: (e: Event) => updateSettings({ gpu: (e.target as HTMLSelectElement).value as Settings['gpu'] }) },
+            ...([['auto', 'Automatique (carte graphique si disponible)'], ['on', 'Toujours la carte graphique (WebGL)'], ['off', 'Jamais (rendu classique)']] as const).map(([v, l]) => h('option', { value: v, selected: v === s.gpu }, l)))),
+        h('p', { class: 'muted small', style: 'margin: 0' }, 'S’applique aux nouveaux onglets. Sans carte graphique (machine virtuelle, bureau à distance), le rendu classique est plus rapide.'),
         check('copyOnSelect', 'Copier automatiquement la sélection', 'Le texte sélectionné à la souris part dans le presse-papiers.'),
         check('rightClickPaste', 'Clic droit : copier ou coller', 'Avec une sélection, le clic droit copie ; sinon il colle (comme PuTTY).'),
         h('h3', { class: 'label' }, 'Mise en évidence'),

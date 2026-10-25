@@ -105,8 +105,9 @@ export interface Session {
   secretKeys: string[];
 }
 
+/** Octets du terminal (binaire brut, regroupés côté cœur), ou événement. */
 export type TermEvent =
-  | { event: 'data'; data: string }
+  | ArrayBuffer
   | { event: 'closed'; data: string | null }
   | { event: 'screen'; data: ScreenEvent };
 

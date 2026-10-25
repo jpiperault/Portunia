@@ -79,6 +79,8 @@ Autres fonctions :
 - mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
 - sessions enregistrées dans `%APPDATA%\fr.termoria.app\sessions.json`.
 
+Performances : la sortie des terminaux est regroupée côté cœur et envoyée en binaire (7 fois plus de débit avec une source réseau), le rendu passe par la carte graphique quand elle existe (Paramètres › Terminal), seules les lignes visibles sont colorées, et le code des écrans peu utilisés n'est chargé qu'à la demande. Scripts de mesure : `tools/bench`.
+
 Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F rechercher, Ctrl+Maj+C / Ctrl+Maj+V copier / coller dans le terminal, F2 renommer, Suppr supprimer.
 
 ## Architecture
