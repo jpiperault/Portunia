@@ -320,3 +320,36 @@ export const notes = {
   set: (sessionId: string, text: string) => invoke<void>('note_set', { sessionId, text }),
   list: () => invoke<string[]>('notes_list'),
 };
+
+// ---------- Outils réseau ----------
+
+export type Echo =
+  | { kind: 'reply'; from: string; rtt: number; ttl: number }
+  | { kind: 'ttlExpired'; from: string; rtt: number }
+  | { kind: 'timeout' }
+  | { kind: 'unreachable'; from: string; reason: string };
+
+export interface PortResult { port: number; state: 'open' | 'closed' | 'filtered'; ms: number | null; service: string }
+
+export type NetEvent =
+  | { type: 'start'; ip: string }
+  | { type: 'ping'; seq: number; echo: Echo }
+  | { type: 'hop'; hop: number; from: string; rtts: (number | null)[] }
+  | ({ type: 'port' } & PortResult)
+  | { type: 'done'; message: string }
+  | { type: 'error'; message: string };
+
+function netChannel(onEvent: (e: NetEvent) => void) {
+  const channel = new Channel<NetEvent>();
+  channel.onmessage = onEvent;
+  return channel;
+}
+
+export const net = {
+  resolve: (host: string) => invoke<string[]>('net_resolve', { host }),
+  ping: (host: string, count: number, onEvent: (e: NetEvent) => void) => invoke<string>('net_ping', { host, count, onEvent: netChannel(onEvent) }),
+  traceroute: (host: string, onEvent: (e: NetEvent) => void) => invoke<string>('net_traceroute', { host, onEvent: netChannel(onEvent) }),
+  ports: (host: string, ports: string, onEvent: (e: NetEvent) => void) => invoke<string>('net_ports', { host, ports, onEvent: netChannel(onEvent) }),
+  cancel: (id: string) => invoke<void>('net_cancel', { id }),
+  wake: (mac: string, broadcast: string | null) => invoke<string>('net_wake', { mac, broadcast }),
+};

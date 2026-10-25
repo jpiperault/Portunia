@@ -46,6 +46,8 @@ impl Connector for RdpConnector {
                 Field::new("multimon", "Utiliser tous les écrans", FieldKind::Bool)
                     .default(false)
                     .show_if("client", "mstsc"),
+                Field::new("mac", "Adresse MAC (Wake-on-LAN)", FieldKind::Text)
+                    .placeholder("Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine"),
             ],
         }
     }

@@ -482,3 +482,26 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .md a { color: var(--accent); }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 .note-mark { display: inline-flex; color: var(--muted); }
+
+/* Outils réseau */
+.net-tools { max-width: 860px; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 14px; min-height: 100%; box-sizing: border-box; }
+.net-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.net-head h2 { margin: 0; font-size: 18px; }
+.net-form { display: flex; flex-direction: column; gap: 10px; }
+.net-row { display: flex; gap: 8px; }
+.net-row input { flex: 1; }
+.net-options { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.net-options:empty { display: none; }
+.net-options .fld.inline { flex-direction: row; align-items: center; gap: 8px; }
+.net-output { flex: 1; min-height: 240px; overflow-y: auto; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12.5px; }
+.net-line { display: flex; align-items: center; gap: 10px; padding: 2px 0; white-space: pre; }
+.net-line.bad { color: var(--danger, #e5534b); }
+.net-line.muted { color: var(--muted); }
+.net-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
+.net-dot.up { background: #3fb950; }
+.net-dot.down { background: #e5534b; }
+.net-hop { width: 24px; text-align: right; color: var(--muted); }
+.net-rtts { width: 190px; }
+.net-port { width: 52px; text-align: right; }
+.net-state { width: 56px; }
+.net-summary { margin: 0; min-height: 1.2em; }

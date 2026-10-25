@@ -3,6 +3,7 @@ import './styles.css';
 import { api, connectQuick, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
+import { createNetTools, NetToolsView, wakeSession } from './nettools';
 import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
 import { badge, h, icon, viewIcon } from './dom';
 import { openSessionDialog } from './dialog';
@@ -27,7 +28,7 @@ import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
 
 interface Tab {
   id: string;
-  kind: 'session' | 'local' | 'extensions' | 'replay';
+  kind: 'session' | 'local' | 'extensions' | 'replay' | 'tools';
   /** Shell local (onglet « local »). */
   shell?: ShellSpec;
   title: string;
@@ -51,6 +52,8 @@ interface Tab {
   notes?: NotesPanel;
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
+  /** Outils réseau (onglet « tools »). */
+  netTools?: NetToolsView;
 }
 
 const state = {
@@ -113,6 +116,8 @@ const sessionTree = new SessionTree(tree, {
   setFolderColor: (path, color) => act(() => folderColors.set(path, color)),
   activeSessionId: () => activeTab()?.sessionId,
   hasNote: (id) => state.noteIds.has(id),
+  netTools: (s) => openNetTools(typeof s.values.host === 'string' ? s.values.host : '', s),
+  wake: (s) => wakeSession(s, toast),
   openSession: (s) => openSession(s),
   editSession: (s) => editSession(s),
   duplicateSession: (s) => act(async () => {
@@ -463,6 +468,7 @@ function closeTab(id: string) {
   viewOf(tab)?.dispose();
   tab.notes?.flush();
   tab.player?.dispose();
+  tab.netTools?.dispose();
   tab.view.remove();
   const wasSplit = state.split.includes(id);
   state.split = state.split.filter((s) => s !== id);
@@ -682,6 +688,8 @@ $('open-snippets').append(icon('commands'), h('span', { class: 'grow' }, 'Comman
 $('open-snippets').addEventListener('click', () => openSnippetManager(snippetContext()));
 $('open-recordings').append(icon('play'), h('span', { class: 'grow' }, 'Enregistrements'));
 $('open-recordings').addEventListener('click', () => openRecordings(toast));
+$('open-nettools').append(icon('broadcast'), h('span', { class: 'grow' }, 'Outils réseau'));
+$('open-nettools').addEventListener('click', () => openNetTools());
 setPlayerHandler(openReplay);
 $('open-import').append(icon('upload'), h('span', { class: 'grow' }, 'Importer / exporter'));
 $('open-import').addEventListener('click', () => openImportExport((msg) => { toast(msg); reload(); }, toast));
@@ -875,6 +883,7 @@ function paletteEntries(): PaletteEntry[] {
     { label: 'Extensions', group: 'Action', icon: 'puzzle', action: () => openExtensions() },
     { label: 'Supervision des serveurs', group: 'Action', icon: 'refresh', action: () => monitor.openOverview((s) => openSession(s)) },
     { label: 'Clés SSH', group: 'Action', icon: 'lock', hint: 'Créer, copier, installer', keywords: 'ssh-keygen ed25519 rsa authorized_keys', action: () => { const t = activeTab(); const s = sessionOf(t?.sessionId) ?? (t?.quick && quickSession(t.quick)); if (t && s && s.protocol === 'ssh' && t.state === 'connected') openKeysFor(t, s); else openKeyManager({ toast }); } },
+    { label: 'Outils réseau', group: 'Action', icon: 'broadcast', hint: 'Ping, traceroute, ports, DNS, Wake-on-LAN', keywords: 'ping tracert traceroute port scan dns nslookup wol wake', action: () => openNetTools() },
     { label: 'Paramètres', group: 'Action', icon: 'settings', action: () => openSettingsDialog(toast) },
     { label: 'Verrouiller Termoria', group: 'Action', icon: 'lock', hint: 'Ctrl+Maj+L', action: () => lockNow(toast, () => reload()) },
   ];
@@ -925,4 +934,20 @@ function openKeysFor(tab: Tab, session: Session) {
       }
     },
   });
+}
+
+// ---------- Outils réseau ----------
+
+/** Onglet unique « Outils réseau », éventuellement visé sur une session. */
+function openNetTools(host = '', session?: Session) {
+  let tab = state.tabs.find((t) => t.kind === 'tools');
+  if (!tab?.netTools) {
+    const tools = createNetTools(() => state.sessions);
+    const view = h('div', { class: 'page-view' }, tools.el);
+    views.append(view);
+    tab = { id: crypto.randomUUID(), kind: 'tools', title: 'Outils réseau', view, state: 'connected', receive: false, netTools: tools };
+    state.tabs.push(tab);
+  }
+  activate(tab.id);
+  if (host) tab.netTools?.target(host, typeof session?.values.mac === 'string' ? session.values.mac : undefined, 'ping');
 }

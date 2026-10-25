@@ -30,6 +30,8 @@ impl Connector for VncConnector {
                 Field::new("port", "Port", FieldKind::Number).default(5900),
                 Field::new("password", "Mot de passe VNC", FieldKind::Secret),
                 Field::new("viewOnly", "Lecture seule (ni clavier ni souris)", FieldKind::Bool).default(false),
+                Field::new("mac", "Adresse MAC (Wake-on-LAN)", FieldKind::Text)
+                    .placeholder("Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine"),
             ],
         }
     }

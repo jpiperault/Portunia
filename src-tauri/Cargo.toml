@@ -1,6 +1,6 @@
 [package]
 name = "termoria"
-version = "0.24.0"
+version = "0.25.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 
@@ -38,7 +38,7 @@ rand = { version = "0.10", features = ["thread_rng"] }
 
 # Windows Hello (verrouillage de l'application).
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Security_Credentials_UI", "Win32_System_WinRT", "Win32_Foundation"] }
+windows = { version = "0.62", features = ["Security_Credentials_UI", "Win32_System_WinRT", "Win32_Foundation", "Win32_NetworkManagement_IpHelper"] }
 windows-future = "0.3"
 
 # Exécutable le plus petit possible en release.

@@ -17,6 +17,10 @@ export interface TreeActions {
   activeSessionId(): string | undefined;
   /** La session a une note. */
   hasNote(sessionId: string): boolean;
+  /** Outils réseau sur l'hôte de la session. */
+  netTools(s: Session): void;
+  /** Wake-on-LAN (adresse MAC de la session). */
+  wake(s: Session): void;
   openSession(s: Session): void;
   editSession(s: Session): void;
   duplicateSession(s: Session): void;
@@ -127,6 +131,8 @@ export class SessionTree {
       { label: 'Ouvrir', icon: 'play', action: () => a.openSession(s) },
       { label: 'Modifier', icon: 'edit', action: () => a.editSession(s) },
       { label: 'Dupliquer', icon: 'copy', action: () => a.duplicateSession(s) },
+      { label: 'Ping, traceroute, ports…', icon: 'broadcast', action: () => a.netTools(s) },
+      ...(typeof s.values.mac === 'string' && s.values.mac.trim() ? [{ label: 'Réveiller (Wake-on-LAN)', icon: 'power', action: () => a.wake(s) }] : []),
       { label: a.health(s.id).cls === 'off' ? 'Surveiller ce serveur' : 'Ne pas surveiller ce serveur', icon: 'broadcast', action: () => a.toggleMonitor(s) },
       ...(s.folder ? [{ label: 'Sortir du dossier', icon: 'up', action: () => a.moveSessions([s.id], '') }] : []),
       'separator',

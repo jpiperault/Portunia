@@ -19,6 +19,7 @@ use crate::connector::{
 use crate::importers::{self, Candidate};
 use crate::keys;
 use crate::notes::Notes;
+use crate::nettools;
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
 use crate::transfer;
@@ -1095,4 +1096,175 @@ pub fn note_set(state: State<'_, AppState>, session_id: String, text: String) ->
 #[tauri::command]
 pub fn notes_list(state: State<'_, AppState>) -> Vec<String> {
     state.notes.lock().unwrap().ids()
+}
+
+// ---------- Outils réseau ----------
+
+#[derive(Serialize, Clone)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum NetEvent {
+    /// Adresse résolue de la cible.
+    Start { ip: String },
+    Ping { seq: u32, echo: nettools::Echo },
+    /// Saut de traceroute : adresse et temps des 3 essais (None = pas de réponse).
+    Hop { hop: u8, from: String, rtts: Vec<Option<u32>> },
+    Port(nettools::PortResult),
+    Done { message: String },
+    Error { message: String },
+}
+
+/// Opérations réseau en cours, interrompues par net_cancel.
+static NET_JOBS: std::sync::LazyLock<Mutex<HashMap<String, Arc<std::sync::atomic::AtomicBool>>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+
+fn net_job() -> (String, Arc<std::sync::atomic::AtomicBool>) {
+    let id = uuid::Uuid::new_v4().to_string();
+    let flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    NET_JOBS.lock().unwrap().insert(id.clone(), flag.clone());
+    (id, flag)
+}
+
+fn net_finish(id: &str, channel: &Channel<NetEvent>, result: anyhow::Result<String>) {
+    NET_JOBS.lock().unwrap().remove(id);
+    let _ = channel.send(match result {
+        Ok(message) => NetEvent::Done { message },
+        Err(e) => NetEvent::Error { message: format!("{e:#}") },
+    });
+}
+
+#[tauri::command]
+pub fn net_cancel(id: String) {
+    if let Some(flag) = NET_JOBS.lock().unwrap().get(&id) {
+        flag.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+#[tauri::command]
+pub async fn net_resolve(host: String) -> CmdResult<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(move || nettools::resolve(&host))
+        .await
+        .map_err(err)?
+        .map(|ips| ips.into_iter().map(|ip| ip.to_string()).collect())
+        .map_err(full)
+}
+
+/// Ping : `count` requêtes (0 = jusqu'à l'arrêt), une par seconde.
+#[tauri::command]
+pub fn net_ping(host: String, count: u32, on_event: Channel<NetEvent>) -> String {
+    let (id, stop) = net_job();
+    let job = id.clone();
+    std::thread::spawn(move || {
+        let result = (|| -> anyhow::Result<String> {
+            let ip = nettools::resolve_v4(&host)?;
+            let _ = on_event.send(NetEvent::Start { ip: ip.to_string() });
+            let (mut sent, mut received, mut times) = (0u32, 0u32, Vec::new());
+            while (count == 0 || sent < count) && !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let started = std::time::Instant::now();
+                sent += 1;
+                let echo = nettools::echo(ip, 128, std::time::Duration::from_secs(2))?;
+                if let nettools::Echo::Reply { rtt, .. } = &echo {
+                    received += 1;
+                    times.push(*rtt);
+                }
+                let _ = on_event.send(NetEvent::Ping { seq: sent, echo });
+                if let Some(rest) = std::time::Duration::from_secs(1).checked_sub(started.elapsed()) {
+                    std::thread::sleep(rest);
+                }
+            }
+            let loss = if sent == 0 { 0 } else { (sent - received) * 100 / sent };
+            let stats = if times.is_empty() {
+                String::new()
+            } else {
+                let avg = times.iter().sum::<u32>() / times.len() as u32;
+                format!(" · min {} ms, moy {avg} ms, max {} ms", times.iter().min().unwrap(), times.iter().max().unwrap())
+            };
+            Ok(format!("{sent} envoyés, {received} reçus, {loss} % de perte{stats}"))
+        })();
+        net_finish(&job, &on_event, result);
+    });
+    id
+}
+
+#[tauri::command]
+pub fn net_traceroute(host: String, on_event: Channel<NetEvent>) -> String {
+    let (id, stop) = net_job();
+    let job = id.clone();
+    std::thread::spawn(move || {
+        let result = (|| -> anyhow::Result<String> {
+            let ip = nettools::resolve_v4(&host)?;
+            let _ = on_event.send(NetEvent::Start { ip: ip.to_string() });
+            for hop in 1..=30u8 {
+                if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    return Ok("Interrompu".into());
+                }
+                let (mut from, mut rtts, mut arrived) = (String::new(), Vec::new(), false);
+                for _ in 0..3 {
+                    match nettools::echo(ip, hop, std::time::Duration::from_millis(1500))? {
+                        nettools::Echo::Reply { from: f, rtt, .. } => { from = f; rtts.push(Some(rtt)); arrived = true; }
+                        nettools::Echo::TtlExpired { from: f, rtt } => { from = f; rtts.push(Some(rtt)); }
+                        nettools::Echo::Unreachable { from: f, .. } => { if !f.is_empty() { from = f; } rtts.push(None); arrived = true; }
+                        nettools::Echo::Timeout => rtts.push(None),
+                    }
+                }
+                let _ = on_event.send(NetEvent::Hop { hop, from, rtts });
+                if arrived {
+                    return Ok(format!("{ip} atteint en {hop} saut{}", if hop > 1 { "s" } else { "" }));
+                }
+            }
+            Ok(format!("{ip} non atteint après 30 sauts"))
+        })();
+        net_finish(&job, &on_event, result);
+    });
+    id
+}
+
+/// Test de ports TCP, 64 à la fois ; résultats envoyés au fil de l'eau.
+#[tauri::command]
+pub fn net_ports(host: String, ports: String, on_event: Channel<NetEvent>) -> CmdResult<String> {
+    let list = nettools::parse_ports(&ports).map_err(full)?;
+    let (id, stop) = net_job();
+    let job = id.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = async {
+            let host2 = host.clone();
+            let ips = tauri::async_runtime::spawn_blocking(move || nettools::resolve(&host2)).await??;
+            let ip = ips[0];
+            let _ = on_event.send(NetEvent::Start { ip: ip.to_string() });
+            let mut open = 0;
+            for chunk in list.chunks(64) {
+                if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    return Ok("Interrompu".to_string());
+                }
+                let checks = chunk.iter().map(|&p| nettools::check_port(ip, p, std::time::Duration::from_secs(3)));
+                let mut set = tokio::task::JoinSet::new();
+                for check in checks {
+                    set.spawn(check);
+                }
+                let mut results = Vec::new();
+                while let Some(r) = set.join_next().await {
+                    results.push(r?);
+                }
+                results.sort_by_key(|r| r.port);
+                for r in results {
+                    if r.state == "open" {
+                        open += 1;
+                    }
+                    let _ = on_event.send(NetEvent::Port(r));
+                }
+            }
+            Ok::<_, anyhow::Error>(format!("{} port{} testé{}, {open} ouvert{}", list.len(), s(list.len()), s(list.len()), s(open)))
+        }
+        .await;
+        net_finish(&job, &on_event, result);
+    });
+    Ok(id)
+}
+
+fn s(n: usize) -> &'static str {
+    if n > 1 { "s" } else { "" }
+}
+
+#[tauri::command]
+pub fn net_wake(mac: String, broadcast: Option<String>) -> CmdResult<String> {
+    nettools::wake(&mac, broadcast.as_deref()).map_err(full)
 }

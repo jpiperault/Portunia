@@ -6,6 +6,7 @@ mod keys;
 mod license;
 mod lock;
 mod monitor;
+mod nettools;
 mod notes;
 mod recording;
 mod registry;
@@ -111,6 +112,12 @@ pub fn run() {
             commands::note_get,
             commands::note_set,
             commands::notes_list,
+            commands::net_cancel,
+            commands::net_resolve,
+            commands::net_ping,
+            commands::net_traceroute,
+            commands::net_ports,
+            commands::net_wake,
         ])
         .run(tauri::generate_context!())
         .expect("erreur au démarrage de Termoria");

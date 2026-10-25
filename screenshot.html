@@ -94,6 +94,40 @@
           case 'fs_home': return '/home/deploy';
           case 'fs_list': return [E('releases', true, 0, 3600), E('scripts', true, 0, 86400), E('site', true, 0, 7200), E('.bashrc', false, 3771, 864000), E('backup-2026-10-23.tar.gz', false, 48234112, 50000), E('deploy.sh', false, 2048, 3600), E('notes.md', false, 1210, 600)];
           case 'tunnel_list': return [];
+          case 'shells_detect': return [
+            { id: 'pwsh', name: 'PowerShell 7', command: 'pwsh.exe', args: ['-NoLogo'], cwd: '', icon: 'pwsh' },
+            { id: 'cmd', name: 'Invite de commandes', command: 'cmd.exe', args: [], cwd: '', icon: 'cmd' },
+            { id: 'wsl:Ubuntu', name: 'Ubuntu (WSL)', command: 'wsl.exe', args: ['-d', 'Ubuntu'], cwd: '', icon: 'wsl' },
+          ];
+          case 'notes_list': return ['s1'];
+          case 'note_get': return args.sessionId === 's1' ? '# srv-web-01\nServeur **nginx** de production.\n\n- [x] Certificat renouvelé\n- [ ] Passer en PHP 8.4\n\n```\nsudo systemctl reload nginx\n```\nContact : https://wiki.local/web' : '';
+          case 'note_set': return null;
+          case 'ssh_keys_list': return [{ name: 'id_ed25519', path: 'C:\Users\julien\.ssh\id_ed25519', algorithm: 'Ed25519', fingerprint: 'SHA256:q8m5Yc0f3nV6l0yQx2rE4c1q9u2y8H7Kf0dXo3P1aZ4', comment: 'julien@pc-julien', public: 'ssh-ed25519 AAAA julien@pc-julien', encrypted: true }];
+          case 'ssh_key_default_comment': return 'julien@pc-julien';
+          case 'net_resolve': return ['10.0.1.12', 'fd00::12'];
+          case 'net_cancel': return null;
+          case 'net_wake': return '255.255.255.255';
+          case 'net_ping': {
+            const id = chId(args.onEvent);
+            send(id, { type: 'start', ip: '10.0.1.12' });
+            [12, 9, null, 11].forEach((rtt, i) => setTimeout(() => send(id, { type: 'ping', seq: i + 1, echo: rtt === null ? { kind: 'timeout' } : { kind: 'reply', from: '10.0.1.12', rtt, ttl: 63 } }), 150 * (i + 1)));
+            setTimeout(() => send(id, { type: 'done', message: '4 envoyés, 3 reçus, 25 % de perte · min 9 ms, moy 10 ms, max 12 ms' }), 800);
+            return 'job';
+          }
+          case 'net_traceroute': {
+            const id = chId(args.onEvent);
+            send(id, { type: 'start', ip: '10.0.1.12' });
+            [['192.168.1.1', [1, 1, 2]], ['', [null, null, null]], ['10.0.0.1', [8, 7, 9]], ['10.0.1.12', [11, 10, 12]]].forEach(([from, rtts], i) => setTimeout(() => send(id, { type: 'hop', hop: i + 1, from, rtts }), 150 * (i + 1)));
+            setTimeout(() => send(id, { type: 'done', message: '10.0.1.12 atteint en 4 sauts' }), 800);
+            return 'job';
+          }
+          case 'net_ports': {
+            const id = chId(args.onEvent);
+            send(id, { type: 'start', ip: '10.0.1.12' });
+            [[22, 'open', 'SSH'], [80, 'open', 'HTTP'], [443, 'open', 'HTTPS'], [3389, 'filtered', 'RDP']].forEach(([port, st, service], i) => setTimeout(() => send(id, { type: 'port', port, state: st, ms: st === 'open' ? 6 + i : null, service }), 100 * (i + 1)));
+            setTimeout(() => send(id, { type: 'done', message: '4 ports testés, 3 ouverts' }), 600);
+            return 'job';
+          }
           case 'plugin:event|listen': return next++;
           case 'plugin:notification|is_permission_granted': return true;
           case 'plugin:updater|check': return null;
@@ -135,19 +169,27 @@
     <nav class="sidebar" aria-label="Sessions">
       <label class="search">
         <span class="sr-only">Rechercher une session</span>
-        <input id="search" type="search" placeholder="Rechercher…  (Ctrl Maj K)" autocomplete="off">
+        <input id="search" type="search" placeholder="Rechercher, ou ssh user@hôte…" title="Rechercher une session (Ctrl Maj K). Entrée sur « user@hôte », « rdp hôte »… : connexion rapide. Palette : Ctrl Maj O" autocomplete="off">
       </label>
+      <div class="sidebar-head">
+        <span class="label">Ce PC</span>
+        <div class="head-actions">
+          <button id="manage-shells" class="icon-btn" aria-label="Gérer les shells locaux" title="Gérer les shells locaux"></button>
+        </div>
+      </div>
+      <div id="local-shells" class="local-shells"></div>
       <div class="sidebar-head">
         <span class="label">Sessions</span>
         <div class="head-actions">
-          <button id="new-folder" class="icon-btn" aria-label="Nouveau dossier"></button>
-          <button id="new-session" class="icon-btn" aria-label="Nouvelle session"></button>
+          <button id="new-folder" class="icon-btn" aria-label="Nouveau dossier" title="Nouveau dossier"></button>
+          <button id="new-session" class="icon-btn" aria-label="Nouvelle session" title="Nouvelle session (Ctrl Maj N)"></button>
         </div>
       </div>
       <div id="tree" class="tree"></div>
       <div class="sidebar-foot">
         <button id="open-snippets" class="tree-item"></button>
         <button id="open-recordings" class="tree-item"></button>
+        <button id="open-nettools" class="tree-item"></button>
         <button id="open-import" class="tree-item"></button>
         <button id="open-extensions" class="tree-item"></button>
         <button id="open-settings" class="tree-item"></button>
@@ -158,7 +200,7 @@
       <div id="toolbar" class="toolbar"></div>
       <div class="content">
         <div id="views" class="views"></div>
-        <aside id="details" class="details" aria-label="Fichiers"></aside>
+        <aside id="details" class="details" aria-label="Détails de la session"></aside>
       </div>
     </main>
   </div>
