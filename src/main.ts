@@ -22,7 +22,7 @@ import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
 import { openTunnels } from './tunnels';
 import { openImportExport } from './importexport';
-import { onSettingsChange, openSettingsDialog, settings } from './settings';
+import { onSettingsChange, openSettingsDialog, settings, updateSettings } from './settings';
 import { Monitor } from './monitoring';
 import { checkForUpdates } from './updates';
 import { allows, currentEdition, EDITION_LABEL, initLock, isLocked, loadLicense, lockNow } from './security';
@@ -101,6 +101,13 @@ const statusBar = $('status');
 const search = $<HTMLInputElement>('search');
 
 const protocolOf = (id?: string) => state.protocols.find((p) => p.id === id);
+/** Extension activée (Paramètres › Extensions). */
+const extensionEnabled = (id: string) => !settings().disabledExtensions.includes(id);
+const enabledProtocols = () => state.protocols.filter((p) => extensionEnabled(p.id));
+function setExtension(id: string, on: boolean) {
+  const others = settings().disabledExtensions.filter((x) => x !== id);
+  updateSettings({ disabledExtensions: on ? others : [...others, id] });
+}
 const sessionOf = (id?: string) => state.sessions.find((s) => s.id === id);
 const activeTab = () => state.tabs.find((t) => t.id === state.active);
 const folders = () => state.folders;
@@ -114,12 +121,15 @@ function toast(message: string, kind: 'info' | 'error' = 'info') {
 
 // ---------- Arbre des sessions ----------
 
-const monitor = new Monitor(() => state.sessions, () => { renderTree(); renderStatus(); });
+// Les sessions d'une extension désactivée ne sont pas supervisées.
+const monitor = new Monitor(() => state.sessions.filter((s) => extensionEnabled(s.protocol)), () => { renderTree(); renderStatus(); });
 
 const sessionTree = new SessionTree(tree, {
   isConnected,
+  protocolEnabled: extensionEnabled,
+  enableProtocol: (id) => setExtension(id, true),
   health: (id) => {
-    if (!settings().monitoring) return { cls: '', title: '' };
+    if (!settings().monitoring || !extensionEnabled(sessionOf(id)?.protocol ?? '')) return { cls: '', title: '' };
     if (monitor.isExcluded(id)) return { cls: 'off', title: 'Non surveillé' };
     const hl = monitor.get(id);
     if (!hl) return { cls: 'unknown', title: '' };
@@ -451,12 +461,13 @@ function renderStatus() {
   statusBar.replaceChildren(
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), `${open} session(s) connectée(s)${localCount ? ` · ${localCount} shell(s) local(aux)` : ''}`),
     h('span', {}, `${state.sessions.length} enregistrée(s)`),
-    h('span', { class: 'push' }, `${state.protocols.length} extensions`),
+    h('span', { class: 'push' }, enabledProtocols().length < state.protocols.length
+      ? `${enabledProtocols().length}/${state.protocols.length} extensions` : `${state.protocols.length} extensions`),
     ...(settings().monitoring && monitor.summary().total ? [h('button', {
       class: `status-btn${monitor.summary().up < monitor.summary().total ? ' warn' : ''}`, title: 'Supervision des serveurs',
       onclick: () => monitor.openOverview((s) => openSession(s)),
     }, h('span', { class: `health ${monitor.summary().up < monitor.summary().total ? 'down' : 'up'}` }), `${monitor.summary().up}/${monitor.summary().total} en ligne`)] : []),
-    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ' · v0.20.0'),
+    h('span', { title: 'Édition et licence : Paramètres › Licence' }, EDITION_LABEL[(currentEdition())], ` · v${__APP_VERSION__}`),
   );
 }
 
@@ -562,7 +573,7 @@ function openQuick(target: QuickTarget) {
 /** Propose d'enregistrer une connexion rapide comme session (formulaire prérempli). */
 async function saveQuick(target: QuickTarget) {
   const result = await openSessionDialog({
-    protocols: state.protocols, folders: folders(), title: 'Enregistrer comme session',
+    protocols: dialogProtocols(target.protocol), folders: folders(), title: 'Enregistrer comme session',
     // Le mot de passe saisi pour la connexion rapide n'est pas repris.
     existing: quickSession({ ...target, values: { ...withoutPassword(target.values) } }),
   });
@@ -575,6 +586,10 @@ async function saveQuick(target: QuickTarget) {
 async function openSession(session: Session, quick?: QuickTarget) {
   const proto = protocolOf(session.protocol);
   if (!proto) return toast(`Extension « ${session.protocol} » non installée`, 'error');
+  if (!extensionEnabled(proto.id)) {
+    if (!confirm(`L'extension « ${proto.name} » est désactivée. L'activer et ouvrir « ${session.name} » ?`)) return;
+    setExtension(proto.id, true);
+  }
   const opener = (cols: number, rows: number, onEvent: (e: TermEvent) => void) => quick
     ? connectQuick(quick.protocol, quick.name, quick.values, cols, rows, onEvent)
     : api.connect(session.id, cols, rows, onEvent);
@@ -706,13 +721,16 @@ async function reload() {
   renderAll();
 }
 
+/** Protocoles du formulaire : ceux activés, plus celui de la session modifiée. */
+const dialogProtocols = (current: string) => state.protocols.filter((p) => extensionEnabled(p.id) || p.id === current);
+
 async function newSession(folder = '') {
-  const result = await openSessionDialog({ protocols: state.protocols, folders: folders(), defaultFolder: folder });
+  const result = await openSessionDialog({ protocols: enabledProtocols(), folders: folders(), defaultFolder: folder });
   await afterDialog(result);
 }
 
 async function editSession(session: Session) {
-  const result = await openSessionDialog({ protocols: state.protocols, folders: folders(), existing: session });
+  const result = await openSessionDialog({ protocols: dialogProtocols(session.protocol), folders: folders(), existing: session });
   await afterDialog(result);
 }
 
@@ -733,17 +751,23 @@ async function removeSession(session: Session) {
   }
 }
 
-function openExtensions() {
-  const existing = state.tabs.find((t) => t.kind === 'extensions');
-  if (existing) existing.view.remove();
+function extensionsPage(): HTMLElement {
   const usage: Record<string, number> = {};
   for (const s of state.sessions) usage[s.protocol] = (usage[s.protocol] ?? 0) + 1;
-  const view = h('div', { class: 'page-view' }, renderExtensions(state.protocols, usage));
-  views.append(view);
+  return renderExtensions(state.protocols, usage, extensionEnabled, (id, on) => {
+    setExtension(id, on);
+    toast(`Extension « ${protocolOf(id)?.name ?? id} » ${on ? 'activée' : 'désactivée'}`);
+  });
+}
+
+function openExtensions() {
+  const existing = state.tabs.find((t) => t.kind === 'extensions');
   if (existing) {
-    existing.view = view;
+    existing.view.replaceChildren(extensionsPage());
     return activate(existing.id);
   }
+  const view = h('div', { class: 'page-view' }, extensionsPage());
+  views.append(view);
   const tab: Tab = { id: crypto.randomUUID(), kind: 'extensions', title: 'Extensions', view, state: 'connected', receive: false };
   state.tabs.push(tab);
   activate(tab.id);
@@ -815,6 +839,15 @@ loadShells().then(() => {
   if (settings().localShells.atStartup && def) openLocalShell(def);
 });
 onSettingsChange(() => renderShells());
+// Extension activée ou désactivée : menus, arborescence et page Extensions.
+let extensionsKey = settings().disabledExtensions.join(',');
+onSettingsChange((s) => {
+  const key = s.disabledExtensions.join(',');
+  if (key === extensionsKey) return;
+  extensionsKey = key;
+  state.tabs.find((t) => t.kind === 'extensions')?.view.replaceChildren(extensionsPage());
+  renderAll();
+});
 monitor.start();
 // Première vérification une fois les sessions chargées.
 setTimeout(() => monitor.check(), 2000);
@@ -944,7 +977,7 @@ function paletteEntries(): PaletteEntry[] {
     const proto = protocolOf(s.protocol);
     return {
       label: s.name, group: proto?.name ?? s.protocol, icon: proto ? viewIcon(proto.view) : 'terminal',
-      hint: [s.folder, target].filter(Boolean).join(' · '), keywords: `${String(target)} ${s.tags.join(' ')} ${s.protocol}`,
+      hint: [extensionEnabled(s.protocol) ? '' : 'extension désactivée', s.folder, target].filter(Boolean).join(' · '), keywords: `${String(target)} ${s.tags.join(' ')} ${s.protocol}`,
       action: () => openSession(s),
     };
   });

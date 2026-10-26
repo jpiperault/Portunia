@@ -6,6 +6,10 @@ import { FOLDER_COLORS, paint } from './theme';
 
 export interface TreeActions {
   isConnected(sessionId: string): boolean;
+  /** L'extension du protocole est activée. */
+  protocolEnabled(protocol: string): boolean;
+  /** Réactive l'extension d'un protocole. */
+  enableProtocol(protocol: string): void;
   /** État de supervision : classe CSS (up, down, unknown, off) et infobulle. */
   health(sessionId: string): { cls: string; title: string };
   toggleMonitor(s: Session): void;
@@ -130,7 +134,9 @@ export class SessionTree {
 
   private renderSession(s: Session, depth: number): HTMLElement {
     const a = this.actions;
+    const enabled = a.protocolEnabled(s.protocol);
     const menu = (): (MenuItem | 'separator')[] => [
+      ...(enabled ? [] : [{ label: 'Activer l’extension', icon: 'puzzle', action: () => a.enableProtocol(s.protocol) }, 'separator' as const]),
       { label: 'Ouvrir', icon: 'play', action: () => a.openSession(s) },
       { label: 'Modifier', icon: 'edit', action: () => a.editSession(s) },
       { label: 'Dupliquer', icon: 'copy', action: () => a.duplicateSession(s) },
@@ -143,9 +149,9 @@ export class SessionTree {
     ];
     const active = a.activeSessionId() === s.id;
     // Déposer sur une session = déposer dans son dossier.
-    const row = h('div', { class: `tree-row${active ? ' active' : ''}`, 'data-drop': s.folder },
+    const row = h('div', { class: `tree-row${active ? ' active' : ''}${enabled ? '' : ' disabled'}`, 'data-drop': s.folder },
       h('button', {
-        class: 'tree-item session', title: 'Ouvrir', style: `padding-left: ${28 + depth * INDENT}px`,
+        class: 'tree-item session', title: enabled ? 'Ouvrir' : 'Extension désactivée (clic droit › Activer l’extension)', style: `padding-left: ${28 + depth * INDENT}px`,
         onclick: () => { if (!this.justDragged) a.openSession(s); },
         onkeydown: (e: KeyboardEvent) => {
           if (e.key === 'F2') a.editSession(s);

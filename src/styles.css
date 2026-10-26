@@ -29,6 +29,7 @@
   --tree-text: #d6d8dd;
   --dot-ring: #6b6f78;
   --shadow: rgb(0 0 0 / .45);
+  --warn-soft: #3a2a14;
   color-scheme: dark;
 }
 
@@ -205,11 +206,30 @@ button { cursor: pointer; }
 .ext-page header p, .ext-page > p { margin: 0; line-height: 1.55; }
 .ext-page h3 { margin: 12px 0 0; }
 .ext-page code { font-family: 'Cascadia Mono', Consolas, monospace; color: var(--text); }
-.ext-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-.ext-card { display: flex; flex-direction: column; gap: 10px; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
-.ext-card p { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.5; }
-.ext-card-head { display: flex; align-items: center; gap: 12px; }
-.ext-card-head h4 { margin: 0; font-size: 15px; }
+.ext-list { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.ext-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--line); }
+.ext-row:first-child { border-top: 0; }
+.ext-row.off .ext-ico, .ext-row.off .ext-meta { opacity: .5; }
+.ext-meta { min-width: 0; }
+.ext-meta h4 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ext-meta p { margin: 2px 0 0; font-size: 13px; color: var(--text-2); line-height: 1.45; }
+.ext-meta p.small { font-size: 12px; color: var(--muted); }
+.ext-tag { font-size: 10px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: var(--chip-bg); color: var(--muted); }
+.ext-side { display: flex; align-items: center; gap: 12px; }
+.ext-count { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ext-confirm { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft, #3a2a14); font-size: 13px; }
+.ext-confirm p { margin: 0; max-width: 64ch; }
+.ext-confirm-actions { display: flex; gap: 8px; }
+.btn.danger { color: var(--danger); }
+.switch { position: relative; width: 38px; height: 22px; flex: none; padding: 0; border: 0; border-radius: 999px; background: var(--chip-bg); transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--accent-ink); }
+.switch:disabled { opacity: .5; cursor: not-allowed; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+/* Session d'une extension désactivée */
+.tree-row.disabled .session { color: var(--muted); }
+.tree-row.disabled .badge { opacity: .5; }
 .ext-ico { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
 
 /* Dossiers de sessions */
@@ -415,6 +435,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
   --tree-text: #262a31;
   --dot-ring: #9aa1ab;
   --shadow: rgb(20 30 50 / .18);
+  --warn-soft: #fbe9d6;
   color-scheme: light;
 }
 :root[data-theme='light'] .badge-ssh { background: #d7f2e4; color: #17633f; }

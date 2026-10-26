@@ -1,0 +1,284 @@
+<title>Termoria Extensions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette fidèle à l'application : tokens repris de src/styles.css (sombre par défaut, clair en option). */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #1f3b2e; --warn: #f0a35b; --warn-soft: #3d2e1c; --danger: #ff7b7b;
+  --chip-bg: #2b2d33; --card: #191a1f; --pop: #26282e; --shadow: rgb(0 0 0 / .45);
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --b-rdp: #1e2f4d; --f-rdp: #8ab6ff; --b-web: #33284d; --f-web: #c7b2ff;
+  --b-tel: #3d2e1c; --f-tel: #f5be85; --b-ser: #2b3540; --f-ser: #a9c7e0; --b-ftp: #12343b; --f-ftp: #7fd4e0;
+  --b-s3: #3b2a12; --f-s3: #f0c674;
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #d7f2e4; --warn: #b5650f; --warn-soft: #fbe9d6; --danger: #c23b3b;
+  --chip-bg: #eceef2; --card: #f7f8fa; --pop: #ffffff; --shadow: rgb(20 30 50 / .18);
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1d4fa8; --b-web: #ebe3fb; --f-web: #5b3aa8;
+  --b-tel: #fbe9d6; --f-tel: #8a4a0a; --b-ser: #dde8f1; --f-ser: #2c5677; --b-ftp: #d6eff3; --f-ftp: #0f5d69;
+  --b-s3: #f6e8cf; --f-s3: #7a4d0b; color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #d7f2e4; --warn: #b5650f; --warn-soft: #fbe9d6; --danger: #c23b3b;
+  --chip-bg: #eceef2; --card: #f7f8fa; --pop: #ffffff; --shadow: rgb(20 30 50 / .18);
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1d4fa8; --b-web: #ebe3fb; --f-web: #5b3aa8;
+  --b-tel: #fbe9d6; --f-tel: #8a4a0a; --b-ser: #dde8f1; --f-ser: #2c5677; --b-ftp: #d6eff3; --f-ftp: #0f5d69;
+  --b-s3: #f6e8cf; --f-s3: #7a4d0b; color-scheme: light; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.note { max-width: 1100px; margin: 0 auto 14px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.note strong { color: var(--text-2); }
+.pill { font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+
+/* Fenêtre de l'application */
+.win { max-width: 1100px; margin: 0 auto; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+.tabs { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.wtab { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 13px; color: var(--muted); border-radius: 6px 6px 0 0; white-space: nowrap; }
+.wtab.on { background: var(--work); color: var(--text); border: 1px solid var(--line); border-bottom-color: var(--work); margin-bottom: -1px; }
+.page { padding: 24px clamp(14px, 3vw, 28px) 32px; display: flex; flex-direction: column; gap: 16px; }
+.page-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.page-head h2 { margin: 0 0 4px; font-size: 20px; }
+.page-head p { margin: 0; max-width: 62ch; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line-soft); background: var(--panel); font-size: 13px; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--danger); }
+.btn[disabled] { opacity: .55; cursor: default; }
+
+.seg { display: flex; gap: 2px; padding: 3px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; width: fit-content; max-width: 100%; overflow-x: auto; }
+.seg button { border: 0; background: transparent; padding: 6px 14px; border-radius: 6px; font-size: 13px; color: var(--text-2); white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+.seg button[aria-selected="true"] { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px var(--shadow); }
+.count { font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--chip-bg); color: var(--muted); font-variant-numeric: tabular-nums; }
+.count.hot { background: var(--accent); color: var(--accent-ink); }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* Liste des extensions installées */
+.list { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px 16px; border-top: 1px solid var(--line); }
+.row:first-child { border-top: 0; }
+.row.off .ico, .row.off .meta { opacity: .5; }
+.ico { width: 40px; height: 40px; border-radius: 9px; display: grid; place-items: center; font: 700 12px var(--mono); }
+.ssh { background: var(--b-ssh); color: var(--f-ssh); } .rdp { background: var(--b-rdp); color: var(--f-rdp); }
+.web { background: var(--b-web); color: var(--f-web); } .tel { background: var(--b-tel); color: var(--f-tel); }
+.ser { background: var(--b-ser); color: var(--f-ser); } .ftp { background: var(--b-ftp); color: var(--f-ftp); }
+.s3 { background: var(--b-s3); color: var(--f-s3); }
+.meta { min-width: 0; }
+.meta h4 { margin: 0; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.meta p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.tag { font-size: 10px; font-weight: 700; letter-spacing: .05em; padding: 1px 6px; border-radius: 4px; background: var(--chip-bg); color: var(--muted); text-transform: uppercase; }
+.tag.pro { background: var(--accent-soft); color: var(--accent); }
+.tag.new { background: var(--ok-soft); color: var(--ok); }
+.tag.team { background: var(--warn-soft); color: var(--warn); }
+.right { display: flex; align-items: center; gap: 12px; }
+.sess { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.switch { position: relative; width: 38px; height: 22px; flex: none; border-radius: 999px; border: 0; background: var(--chip-bg); padding: 0; transition: background .15s; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); background: var(--accent-ink); }
+.switch[disabled] { opacity: .5; cursor: not-allowed; }
+
+.confirm { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 10px 12px; background: var(--warn-soft); border-radius: 8px; font-size: 13px; }
+.confirm p { margin: 0; max-width: 60ch; color: var(--text); }
+
+/* Catalogue */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.card { display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+.card-head { display: flex; gap: 12px; align-items: center; }
+.card p { margin: 0; font-size: 13px; color: var(--text-2); }
+.card .foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.signed { font-size: 12px; color: var(--ok); display: flex; gap: 5px; align-items: center; }
+.ex-ico { background: var(--chip-bg); color: var(--text-2); }
+.search { width: 100%; max-width: 340px; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line-soft); background: var(--field); color: var(--text); font: inherit; font-size: 13px; }
+.toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+
+/* Panneau d'effet : ce que voit la fenêtre « Nouvelle session » */
+.side { display: flex; flex-direction: column; gap: 10px; padding: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.side p { margin: 0; font-size: 12px; color: var(--muted); }
+.protos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.proto { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 8px; background: var(--field); border: 1px solid var(--line-soft); font-size: 11px; color: var(--text-2); text-align: center; }
+.proto .ico { width: 26px; height: 26px; border-radius: 6px; font-size: 9px; }
+
+/* Fenêtre d'installation */
+.sheet-back { position: fixed; inset: 0; background: rgb(0 0 0 / .5); display: grid; place-items: center; padding: 16px; z-index: 10; }
+.sheet { width: min(480px, 100%); background: var(--pop); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 20px 60px var(--shadow); }
+.sheet h3 { margin: 0; font-size: 16px; }
+.perm { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 12px; list-style: none; background: var(--card); border-radius: 8px; font-size: 13px; }
+.perm li { display: flex; gap: 8px; }
+.perm li::before { content: "•"; color: var(--accent); }
+.sheet .actions { display: flex; justify-content: flex-end; gap: 8px; }
+.toast { position: fixed; bottom: max(20px, env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); background: var(--pop); border: 1px solid var(--line); padding: 8px 14px; border-radius: 8px; font-size: 13px; box-shadow: 0 8px 24px var(--shadow); z-index: 20; }
+@media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
+</style>
+
+<div class="note"><span class="pill">Maquette</span><span><strong>Page Extensions de Termoria.</strong> Tout est cliquable : interrupteurs, onglets, installation. Les extensions du catalogue sont des exemples.</span></div>
+
+<div class="win">
+  <div class="tabs" aria-hidden="true">
+    <span class="wtab">prod-web-01</span><span class="wtab">Shell local</span><span class="wtab on">Extensions</span>
+  </div>
+  <div class="page">
+    <div class="page-head">
+      <div>
+        <h2>Extensions</h2>
+        <p class="muted">Chaque protocole est une extension. Désactivez celles qui ne vous servent pas : elles disparaissent des menus, vos sessions sont conservées.</p>
+      </div>
+      <button class="btn" id="from-file" type="button">Installer depuis un fichier…</button>
+    </div>
+
+    <div class="seg" role="tablist">
+      <button role="tab" id="t-inst" aria-selected="true" type="button">Installées <span class="count" id="n-inst">9</span></button>
+      <button role="tab" id="t-cat" aria-selected="false" type="button">Catalogue <span class="count" id="n-cat">6</span></button>
+      <button role="tab" id="t-upd" aria-selected="false" type="button">Mises à jour <span class="count hot" id="n-upd">1</span></button>
+    </div>
+
+    <div class="layout">
+      <div id="main"></div>
+      <aside class="side">
+        <p class="label">Fenêtre « Nouvelle session »</p>
+        <p>Protocoles proposés, d'après les extensions activées.</p>
+        <div class="protos" id="protos"></div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<div id="overlay"></div>
+
+<script>
+const installed = [
+  { id: 'ssh', code: 'SSH', cls: 'ssh', name: 'SSH', desc: 'Terminal sécurisé, clés, agents, rebonds, tunnels, X11.', ver: '0.36.1', sessions: 42, on: true },
+  { id: 'rdp', code: 'RDP', cls: 'rdp', name: 'Bureau à distance', desc: 'Bureau Windows dans un onglet.', ver: '0.36.1', sessions: 8, on: true },
+  { id: 'web', code: 'WEB', cls: 'web', name: 'Interface web', desc: 'Pages d\'administration (routeurs, NAS, hyperviseurs).', ver: '0.36.1', sessions: 5, on: true },
+  { id: 'ftp', code: 'FTP', cls: 'ftp', name: 'FTP / FTPS', desc: 'Transferts de fichiers, chiffrés ou non.', ver: '0.36.1', sessions: 2, on: true },
+  { id: 's3', code: 'S3', cls: 's3', name: 'Stockage S3', desc: 'AWS, MinIO, Scaleway, OVH, Wasabi…', ver: '0.36.1', sessions: 0, on: true },
+  { id: 'vnc', code: 'VNC', cls: 'tel', name: 'VNC', desc: 'Écran distant Linux et macOS.', ver: '0.36.1', sessions: 0, on: true },
+  { id: 'telnet', code: 'TEL', cls: 'tel', name: 'Telnet', desc: 'Anciens équipements réseau.', ver: '0.36.1', sessions: 3, on: true },
+  { id: 'serial', code: 'COM', cls: 'ser', name: 'Port série', desc: 'Consoles de switchs et de routeurs.', ver: '0.36.1', sessions: 0, on: false },
+  { id: 'local', code: '>_', cls: 'ser', name: 'Shell local', desc: 'PowerShell, CMD, WSL, Git Bash.', ver: '0.36.1', sessions: 0, on: true, core: true },
+];
+const catalog = [
+  { id: 'mosh', code: 'MSH', name: 'Mosh', desc: 'Terminal qui survit aux changements de réseau et à la veille.', size: '1,2 Mo', perms: ['Connexions réseau vers les serveurs de vos sessions', 'Utilise l\'extension SSH pour démarrer'], plan: 'free' },
+  { id: 'winrm', code: 'PS', name: 'PowerShell distant', desc: 'WinRM : un terminal PowerShell sur vos serveurs Windows.', size: '2,4 Mo', perms: ['Connexions réseau vers les serveurs de vos sessions', 'Lit l\'identifiant choisi dans la session'], plan: 'free' },
+  { id: 'smb', code: 'SMB', name: 'Partages Windows', desc: 'Parcourir et transférer des fichiers sur des partages SMB.', size: '1,8 Mo', perms: ['Connexions réseau vers les serveurs de vos sessions', 'Écrit dans le dossier de téléchargement choisi'], plan: 'free' },
+  { id: 'proxmox', code: 'PVE', name: 'Proxmox VE', desc: 'Liste des machines virtuelles, console et démarrage en un clic.', size: '3,1 Mo', perms: ['Connexions réseau vers l\'adresse du serveur Proxmox', 'Lit l\'identifiant choisi dans la session'], plan: 'pro', isNew: true },
+  { id: 'ssm', code: 'AWS', name: 'AWS Session Manager', desc: 'Terminal sur vos instances EC2 sans port SSH ouvert.', size: '4,0 Mo', perms: ['Connexions réseau vers les services AWS', 'Lit les clés d\'accès choisies dans la session'], plan: 'pro' },
+  { id: 'pg', code: 'PG', name: 'PostgreSQL', desc: 'Console psql intégrée, à travers vos tunnels SSH.', size: '2,7 Mo', perms: ['Connexions réseau vers les serveurs de vos sessions'], plan: 'pro' },
+];
+let tab = 'inst', pending = null, updated = false, search = '';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.append(t);
+  setTimeout(() => t.remove(), 2600);
+}
+
+function rowInstalled(x) {
+  const conf = pending === x.id ? `<div class="confirm" role="alert">
+      <p>${x.sessions} session(s) ${esc(x.name)} resteront dans l'arborescence, grisées, avec un bouton « Activer l'extension ».</p>
+      <span class="right"><button class="btn" data-cancel type="button">Annuler</button><button class="btn danger" data-off="${x.id}" type="button">Désactiver</button></span></div>` : '';
+  const tags = (x.core ? '<span class="tag">Intégrée au cœur</span>' : '<span class="tag">Officielle</span>') + (x.plan === 'pro' ? ' <span class="tag pro">Pro</span>' : '') + (x.isNew ? ' <span class="tag new">Installée</span>' : '');
+  return `<div class="row ${x.on ? '' : 'off'}">
+    <div class="ico ${x.cls || 'ex-ico'}">${esc(x.code)}</div>
+    <div class="meta"><h4>${esc(x.name)} ${tags}</h4><p>${esc(x.desc)} · v${x.ver}</p></div>
+    <div class="right"><span class="sess">${x.sessions} session${x.sessions > 1 ? 's' : ''}</span>
+      <button class="switch" role="switch" aria-checked="${x.on}" aria-label="Activer ${esc(x.name)}" data-sw="${x.id}" type="button" ${x.core ? 'disabled title="Le shell local fait partie du cœur"' : ''}></button></div>
+    ${conf}</div>`;
+}
+
+function renderInstalled() {
+  const active = installed.filter((x) => x.on).length;
+  return `<div class="toolbar" style="margin-bottom:10px"><p class="label">${active} activée${active > 1 ? 's' : ''} sur ${installed.length}</p></div>
+    <div class="list">${installed.map(rowInstalled).join('')}</div>`;
+}
+
+function renderCatalog() {
+  const items = catalog.filter((x) => !search || (x.name + x.desc).toLowerCase().includes(search.toLowerCase()));
+  return `<div class="toolbar" style="margin-bottom:12px"><input class="search" id="q" type="search" placeholder="Rechercher une extension" value="${esc(search)}" aria-label="Rechercher une extension"><span class="muted" style="font-size:12px">Publiées et signées par Termoria</span></div>
+  <div class="cards">${items.map((x) => {
+    const done = installed.some((i) => i.id === x.id);
+    return `<article class="card">
+      <div class="card-head"><div class="ico ex-ico">${esc(x.code)}</div><div class="meta"><h4>${esc(x.name)} ${x.plan === 'pro' ? '<span class="tag pro">Pro</span>' : ''}</h4><p>${x.size}</p></div></div>
+      <p>${esc(x.desc)}</p>
+      <div class="foot"><span class="signed">✓ Signée</span>
+        ${done ? '<button class="btn" disabled type="button">Installée</button>' : `<button class="btn primary" data-install="${x.id}" type="button">Installer</button>`}</div>
+    </article>`; }).join('') || '<p class="muted">Aucune extension ne correspond.</p>'}</div>`;
+}
+
+function renderUpdates() {
+  if (updated) return '<div class="list"><div class="row"><div class="meta" style="grid-column:1/-1"><h4>Tout est à jour</h4><p>Les extensions se mettent à jour avec Termoria ou séparément, selon leur éditeur.</p></div></div></div>';
+  return `<div class="list"><div class="row">
+    <div class="ico ftp">FTP</div>
+    <div class="meta"><h4>FTP / FTPS <span class="tag">0.36.1 → 0.36.2</span></h4><p>Corrige la reprise d'un transfert interrompu sur certains serveurs IIS.</p></div>
+    <div class="right"><button class="btn primary" id="do-update" type="button">Mettre à jour</button></div></div></div>`;
+}
+
+function renderProtos() {
+  $('protos').innerHTML = installed.filter((x) => x.on).map((x) => `<div class="proto"><div class="ico ${x.cls || 'ex-ico'}">${esc(x.code)}</div>${esc(x.name)}</div>`).join('');
+}
+
+function render() {
+  for (const [id, key] of [['t-inst', 'inst'], ['t-cat', 'cat'], ['t-upd', 'upd']]) $(id).setAttribute('aria-selected', String(tab === key));
+  $('n-inst').textContent = installed.length;
+  $('n-cat').textContent = catalog.filter((x) => !installed.some((i) => i.id === x.id)).length;
+  $('n-upd').textContent = updated ? 0 : 1; $('n-upd').className = updated ? 'count' : 'count hot';
+  $('main').innerHTML = tab === 'inst' ? renderInstalled() : tab === 'cat' ? renderCatalog() : renderUpdates();
+  renderProtos();
+  const q = $('q'); if (q) q.addEventListener('input', (e) => { search = e.target.value; const pos = e.target.selectionStart; render(); const n = $('q'); n.focus(); n.setSelectionRange(pos, pos); });
+}
+
+function openInstall(x) {
+  $('overlay').innerHTML = `<div class="sheet-back" id="back"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t">
+    <div class="card-head"><div class="ico ex-ico">${esc(x.code)}</div><div class="meta"><h3 id="sh-t">Installer ${esc(x.name)} ?</h3><p>Éditeur : Termoria · signature vérifiée · ${x.size}</p></div></div>
+    <div><p class="label" style="margin-bottom:6px">Cette extension pourra</p><ul class="perm">${x.perms.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>
+    ${x.plan === 'pro' ? '<p class="muted" style="margin:0;font-size:13px">Extension de Termoria Pro : elle s\'installe, et s\'utilise avec une licence Pro ou Équipes.</p>' : ''}
+    <div class="actions"><button class="btn" id="sh-no" type="button">Annuler</button><button class="btn primary" id="sh-yes" type="button">Installer</button></div>
+  </div></div>`;
+  $('sh-yes').focus();
+  const close = () => { $('overlay').innerHTML = ''; };
+  $('sh-no').onclick = close;
+  $('back').onclick = (e) => { if (e.target.id === 'back') close(); };
+  $('sh-yes').onclick = () => {
+    installed.push({ id: x.id, code: x.code, name: x.name, desc: x.desc, ver: '1.0.0', sessions: 0, on: true, plan: x.plan, isNew: true });
+    close(); render(); toast(`${x.name} installée et activée`);
+  };
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.id === 't-inst') { tab = 'inst'; pending = null; render(); }
+  else if (t.id === 't-cat') { tab = 'cat'; render(); }
+  else if (t.id === 't-upd') { tab = 'upd'; render(); }
+  else if (t.id === 'from-file') toast('Choix d\'un fichier .termoria-ext : signature vérifiée avant installation');
+  else if (t.id === 'do-update') { updated = true; render(); toast('FTP / FTPS mise à jour en 0.36.2'); }
+  else if (t.dataset.sw) {
+    const x = installed.find((i) => i.id === t.dataset.sw);
+    if (x.on && x.sessions > 0) { pending = x.id; render(); return; }
+    x.on = !x.on; pending = null; render(); toast(`${x.name} ${x.on ? 'activée' : 'désactivée'}`);
+  }
+  else if (t.dataset.off) { const x = installed.find((i) => i.id === t.dataset.off); x.on = false; pending = null; render(); toast(`${x.name} désactivée`); }
+  else if ('cancel' in t.dataset) { pending = null; render(); }
+  else if (t.dataset.install) openInstall(catalog.find((c) => c.id === t.dataset.install));
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('overlay').innerHTML = ''; });
+render();
+</script>

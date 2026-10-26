@@ -70,7 +70,9 @@ export class Monitor {
 
   /** Résumé pour la barre d'état. */
   summary() {
-    const all = [...this.health.values()];
+    // Seulement les sessions encore supervisées (une extension a pu être désactivée).
+    const ids = new Set(this.sessions().map((s) => s.id));
+    const all = [...this.health].filter(([id]) => ids.has(id)).map(([, x]) => x);
     return { total: all.length, up: all.filter((x) => x.up).length };
   }
 

@@ -44,6 +44,8 @@ export interface Settings {
   confirmMultilinePaste: boolean;
   /** Mise en évidence de mots-clés dans les terminaux. */
   highlight: { enabled: boolean; rules: HighlightRule[] };
+  /** Extensions désactivées : absentes des menus, leurs sessions restent (grisées). */
+  disabledExtensions: string[];
 }
 
 export const DEFAULTS: Settings = {
@@ -67,6 +69,7 @@ export const DEFAULTS: Settings = {
   gpu: 'auto',
   confirmMultilinePaste: true,
   highlight: { enabled: true, rules: DEFAULT_RULES },
+  disabledExtensions: [],
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
