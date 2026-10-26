@@ -622,3 +622,38 @@ Host *
         assert!(parse_mremoteng(xml, "").is_err());
     }
 }
+
+#[cfg(test)]
+mod labo {
+    use super::*;
+
+    /// Le fichier de sessions du labo (tools/labo) s'importe et n'utilise que des champs connus.
+    #[test]
+    fn sessions_du_labo() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tools/labo/sessions-labo.json");
+        let backup = read_backup(&path, None).expect("sessions-labo.json lisible");
+        assert_eq!(backup.credentials.len(), 1);
+        // Connecteurs pris un à un : le registre complet ferait embarquer au test le code des
+        // fenêtres de Tauri, qui ne se charge pas sans le manifeste de l'application.
+        use crate::connector::Connector;
+        use crate::connectors::{ftp::FtpConnector, s3::S3Connector, ssh::SshConnector, telnet::TelnetConnector, vnc::VncConnector};
+        for s in backup.sessions.iter().filter(|s| s.protocol != "web") {
+            let manifest = match s.protocol.as_str() {
+                "ssh" => SshConnector.manifest(),
+                "ftp" => FtpConnector.manifest(),
+                "s3" => S3Connector.manifest(),
+                "vnc" => VncConnector.manifest(),
+                "telnet" => TelnetConnector.manifest(),
+                other => panic!("protocole inconnu : {other}"),
+            };
+            for key in s.values.keys() {
+                assert!(manifest.fields.iter().any(|f| f.key == *key), "{} : champ inconnu « {key} » (serait retiré à l'import)", s.name);
+            }
+            if let Some(t) = s.values.get("tunnels") {
+                let tunnels: Vec<TunnelSpec> = serde_json::from_value(t.clone()).expect("tunnels valides");
+                assert_eq!(tunnels.len(), 3);
+            }
+        }
+        assert_eq!(backup.sessions.len(), 13);
+    }
+}

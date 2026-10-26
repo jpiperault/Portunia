@@ -1,0 +1,358 @@
+<title>Recette Termoria</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Mise en page : un cahier de recette — synthèse en tête, puis une liste par domaine, chaque test se coche sur place. */
+:root {
+  --bg: #f4f6f7; --surface: #ffffff; --line: #dde3e6; --text: #182227; --muted: #5d6b72;
+  --accent: #0f7b74; --accent-soft: #e2f2f0;
+  --ok: #1f8a4c; --ok-soft: #e3f4ea; --ko: #c2372d; --ko-soft: #fbe7e5; --na: #7a8790; --na-soft: #eef1f3;
+  --block: #b4452f; --important: #a36a00; --comfort: #5d6b72;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1518; --surface: #161f23; --line: #26333a; --text: #e3eaed; --muted: #93a3ab;
+  --accent: #3fc1b6; --accent-soft: #123532;
+  --ok: #4cc47e; --ok-soft: #13301f; --ko: #f07167; --ko-soft: #3a1a17; --na: #8e9ba3; --na-soft: #1d272c;
+  --block: #f08a6e; --important: #e3ad4a; --comfort: #93a3ab; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1518; --surface: #161f23; --line: #26333a; --text: #e3eaed; --muted: #93a3ab;
+  --accent: #3fc1b6; --accent-soft: #123532;
+  --ok: #4cc47e; --ok-soft: #13301f; --ko: #f07167; --ko-soft: #3a1a17; --na: #8e9ba3; --na-soft: #1d272c;
+  --block: #f08a6e; --important: #e3ad4a; --comfort: #93a3ab; color-scheme: dark }
+
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+.page { max-width: 980px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 22px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 17px; margin: 0; text-wrap: balance; }
+.lead { margin: 6px 0 0; color: var(--muted); max-width: 68ch; }
+.lead code { font-family: var(--mono); font-size: 13px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.summary-top { display: flex; flex-wrap: wrap; gap: 14px 28px; align-items: flex-end; justify-content: space-between; }
+.counts { display: flex; flex-wrap: wrap; gap: 18px; }
+.count { display: flex; flex-direction: column; min-width: 70px; }
+.count b { font-size: 26px; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.count span { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.count.ok b { color: var(--ok); } .count.ko b { color: var(--ko); } .count.block b { color: var(--block); }
+.bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--na-soft); }
+.bar i { display: block; height: 100%; transition: width .3s; }
+.bar .s-ok { background: var(--ok); } .bar .s-ko { background: var(--ko); } .bar .s-na { background: var(--na); }
+.version { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.version input { font-family: var(--mono); font-size: 13px; width: 110px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+.sync { font-size: 12px; color: var(--muted); }
+.sync.warn { color: var(--ko); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-btn { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+.chip-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.chip-btn:focus-visible, .st button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.section { display: flex; flex-direction: column; gap: 8px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.section-head small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tests { display: flex; flex-direction: column; gap: 6px; }
+.test { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; align-items: start; }
+.test.s-ok { border-left-color: var(--ok); } .test.s-ko { border-left-color: var(--ko); } .test.s-na { border-left-color: var(--na); }
+.test .main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.test .title { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-weight: 600; }
+.test .id { font-family: var(--mono); font-size: 12px; color: var(--muted); font-weight: 400; }
+.prio { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.prio.bloquant { color: var(--block); } .prio.important { color: var(--important); } .prio.confort { color: var(--comfort); }
+.how { margin: 0; color: var(--muted); font-size: 14px; }
+.how code { font-family: var(--mono); font-size: 12.5px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.expect { margin: 0; font-size: 14px; }
+.expect::before { content: "Attendu : "; color: var(--muted); }
+.where { margin: 2px 0 0; font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.where-tag { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; background: var(--na-soft); color: var(--muted); }
+.where-tag.labo { background: var(--accent-soft); color: var(--accent); }
+.st { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.st button { font: inherit; font-size: 13px; padding: 6px 10px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.st button + button { border-left: 1px solid var(--line); }
+.st button[aria-pressed="true"].ok { background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.st button[aria-pressed="true"].ko { background: var(--ko-soft); color: var(--ko); font-weight: 600; }
+.st button[aria-pressed="true"].na { background: var(--na-soft); color: var(--na); font-weight: 600; }
+.note { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; }
+.note textarea { font: inherit; font-size: 14px; min-height: 58px; resize: vertical; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+.note .meta { font-size: 12px; color: var(--muted); }
+.add-note { grid-column: 1 / -1; justify-self: start; font: inherit; font-size: 13px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+
+@media (max-width: 640px) {
+  .test { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { .bar i { transition: none; } }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">Avant la mise en vente</div>
+    <h1>Recette Termoria</h1>
+    <p class="lead">Les tests à passer avant de vendre Termoria. Marquez chaque test, et décrivez ce qui coince : Claude lit ces résultats pour corriger. La plupart se font avec le labo du projet (<code>tools/labo</code>, mode d’emploi dans son LISEZMOI) : des serveurs de test sur votre PC, lancés par Docker Desktop.</p>
+  </header>
+
+  <section class="summary" aria-label="Avancement">
+    <div class="summary-top">
+      <div class="counts" id="counts"></div>
+      <label class="version" for="version">Version testée <input id="version" type="text" placeholder="0.36.0" autocomplete="off"></label>
+    </div>
+    <div class="bar" id="bar" role="img" aria-label="Avancement des tests"></div>
+    <div class="sync" id="sync">Chargement des résultats…</div>
+  </section>
+
+  <nav class="filters" aria-label="Filtres" id="filters"></nav>
+
+  <main id="sections"></main>
+</div>
+
+<script>
+// Liste des tests : contenu fixe de la page. Les résultats (statut, note) vivent dans la base.
+const SECTIONS = [
+  { id: 'inst', title: 'Installation et mises à jour', tests: [
+    ['inst-1', 'bloquant', 'Installer sur un PC propre', 'Télécharger <code>setup.exe</code> depuis Termoria-releases sur un PC (ou une machine virtuelle) qui n’a jamais eu Termoria. Noter ce que dit Windows SmartScreen.', 'Installation sans droits administrateur, Termoria démarre.'],
+    ['inst-2', 'bloquant', 'Mise à jour automatique', 'Depuis une version plus ancienne, attendre ou demander la vérification des mises à jour.', 'La nouvelle version est proposée, s’installe et relance Termoria.'],
+    ['inst-3', 'bloquant', 'Données conservées à la mise à jour', 'Avant la mise à jour : quelques sessions avec mot de passe enregistré, une note, une commande enregistrée.', 'Tout est là après la mise à jour, connexions comprises.'],
+    ['inst-4', 'important', 'Console de Windows Terminal installée', 'Ouvrir le dossier <code>%LOCALAPPDATA%\\Termoria</code>.', '<code>conpty.dll</code> et <code>OpenConsole.exe</code> sont à côté de <code>termoria.exe</code>.'],
+    ['inst-5', 'important', 'Désinstallation', 'Désinstaller depuis les Paramètres Windows.', 'Plus de raccourci ni de programme ; décider si les données dans <code>%APPDATA%\\fr.termoria.app</code> doivent rester.'],
+    ['inst-6', 'important', 'Windows 10 et compte standard', 'Installer et utiliser sur Windows 10, avec un compte sans droits administrateur.', 'Tout fonctionne comme sur Windows 11.'],
+    ['inst-7', 'important', 'Antivirus', 'Avec Defender (et si possible un autre antivirus) actif.', 'Ni <code>termoria.exe</code>, ni <code>OpenConsole.exe</code>, ni <code>termoria-rdp.exe</code> ne sont bloqués ou mis en quarantaine.'],
+  ]},
+  { id: 'ssh', title: 'SSH', tests: [
+    ['ssh-1', 'bloquant', 'Mot de passe', 'Se connecter à un Linux récent (OpenSSH 9 ou 10) par mot de passe.', 'Terminal ouvert, saisie et affichage normaux.'],
+    ['ssh-2', 'bloquant', 'Clé privée', 'Clé ed25519, clé RSA, et une clé protégée par phrase secrète.', 'Connexion sans mot de passe dans les trois cas.'],
+    ['ssh-3', 'important', 'Agent SSH', 'Clé chargée dans Pageant ou dans l’agent OpenSSH de Windows.', 'Connexion par l’agent.'],
+    ['ssh-4', 'bloquant', 'Nouveau serveur', 'Premier contact avec un serveur inconnu, puis avec un serveur déjà présent dans <code>~/.ssh/known_hosts</code>.', 'Empreinte demandée la première fois ; serveur connu d’OpenSSH accepté sans question.'],
+    ['ssh-5', 'bloquant', 'Clé de serveur changée', 'Réinstaller la clé d’hôte d’un serveur de test (ou se connecter à une autre machine sous la même adresse).', 'Connexion refusée avec un message clair.'],
+    ['ssh-6', 'important', 'Ancien équipement', 'Switch, routeur ou vieux Linux, avec « Compatibilité anciens équipements ».', 'Connexion, avec l’avertissement sur les algorithmes faibles.'],
+    ['ssh-7', 'bloquant', 'Bastion', 'Session passant par un bastion, puis par deux bastions (<code>bastion1,bastion2</code>).', 'Connexion au serveur final, fichiers SFTP compris.'],
+    ['ssh-8', 'important', 'Coupure et veille', 'Couper le Wi-Fi 30 s pendant une session, puis mettre le PC en veille.', 'Reconnexion automatique.'],
+    ['ssh-9', 'bloquant', 'Assistant de clé', 'Depuis une session par mot de passe : « Clé SSH », créer une clé, l’installer, accepter « utiliser cette clé ».', 'Reconnexion suivante sans mot de passe.'],
+    ['ssh-10', 'important', 'Identifiants partagés', 'Un identifiant utilisé par deux sessions ; changer son mot de passe.', 'Les deux sessions se connectent avec le nouveau.'],
+    ['ssh-12', 'bloquant', 'Double authentification', 'Se connecter à un serveur qui demande un code à 6 chiffres après le mot de passe.', 'Termoria affiche la question du serveur et laisse saisir le code. Défaut connu : aujourd’hui le mot de passe est renvoyé à la place du code.'],
+    ['ssh-11', 'important', 'Connexion rapide', 'Taper <code>ssh user@hôte</code> dans la recherche puis Entrée, avec et sans clé.', 'Connexion ; mot de passe demandé s’il n’y a pas de clé ; « Enregistrer comme session » fonctionne.'],
+  ]},
+  { id: 'fichiers', title: 'Fichiers', tests: [
+    ['sftp-1', 'bloquant', 'Explorateur SFTP', 'Naviguer, envoyer et télécharger un fichier puis un dossier entier, glisser-déposer depuis l’Explorateur Windows.', 'Transferts complets, progression affichée.'],
+    ['sftp-2', 'important', 'Modifier un fichier distant', 'Modifier un fichier texte, l’enregistrer dans l’éditeur.', 'Le fichier est renvoyé sur le serveur à chaque enregistrement.'],
+    ['sftp-3', 'important', 'Fichier exécutable', 'Déposer un <code>.bat</code> sur le serveur et cliquer « Modifier ».', 'Refusé avec une explication, rien ne s’exécute.'],
+    ['ftp-1', 'important', 'FTP et FTPS', 'Un vrai serveur FTPS (FileZilla Server, hébergeur web), puis un FTP non chiffré.', 'Liste, envoi, téléchargement, renommage, suppression.'],
+    ['s3-1', 'important', 'Stockage S3 (Pro)', 'AWS S3 ou MinIO : lister les compartiments, envoyer, renommer un dossier, supprimer.', 'Opérations réussies ; message clair si la région ou la clé est fausse.'],
+  ]},
+  { id: 'bureau', title: 'Bureau à distance et VNC', tests: [
+    ['rdp-1', 'bloquant', 'RDP dans un onglet', 'Windows 10/11 et Windows Server, authentification NLA, compte de domaine.', 'Bureau affiché, clavier et souris réactifs.'],
+    ['rdp-2', 'important', 'Presse-papiers et taille', 'Copier dans les deux sens ; redimensionner l’onglet.', 'Presse-papiers partagé ; le bureau s’adapte.'],
+    ['rdp-3', 'important', 'Client Bureau à distance de Windows', 'Choisir « client Windows » dans la session.', 'mstsc s’ouvre sur le bon serveur.'],
+    ['vnc-1', 'important', 'VNC', 'TightVNC, RealVNC ou x11vnc : clavier, souris, molette, presse-papiers, Ctrl+Alt+Suppr.', 'Tout répond.'],
+  ]},
+  { id: 'local', title: 'Shells locaux et autres protocoles', tests: [
+    ['local-1', 'bloquant', 'Shells locaux', 'PowerShell 7, Windows PowerShell, Invite de commandes, WSL, Git Bash ; <code>vim</code> et <code>htop</code> dans WSL ; « Ouvrir en administrateur ».', 'Tout s’affiche correctement, couleurs et plein écran compris.'],
+    ['local-2', 'confort', 'Vitesse', '<code>git log</code> sur un gros dépôt, une compilation, de la frappe rapide.', 'Fluide, pas de retard à la frappe.'],
+    ['proto-1', 'confort', 'Telnet, port série, interface web', 'Selon le matériel disponible.', 'Connexion et affichage corrects.'],
+  ]},
+  { id: 'pro', title: 'Fonctions Pro', tests: [
+    ['pro-1', 'important', 'Tableau de bord du serveur', 'Bouton « Serveur » sur un Linux.', 'Processeur, mémoire, disques, processus, services en échec ; « Voir » ouvre le journal.'],
+    ['pro-2', 'important', 'Commande sur plusieurs serveurs', 'Lancer <code>uptime</code> sur un dossier entier, dont un serveur éteint.', 'Résultats par serveur ; le serveur éteint en échec sans bloquer les autres.'],
+    ['pro-3', 'important', 'Docker et Kubernetes', 'Bouton « Conteneurs » : shell, journaux, redémarrer.', 'Listes correctes ; message clair si l’utilisateur n’a pas les droits Docker.'],
+    ['pro-4', 'important', 'Enregistrement de session', 'Enregistrer une session, la rejouer.', 'Relecture fidèle, vitesse réglable.'],
+    ['pro-5', 'confort', 'Alertes de supervision', 'Éteindre puis rallumer un serveur supervisé.', 'Notification à la chute et au retour.'],
+  ]},
+  { id: 'reseau', title: 'Tunnels et outils réseau', tests: [
+    ['tun-1', 'important', 'Tunnels local et SOCKS', 'Tunnel <code>-L</code> vers une base interne ; proxy SOCKS réglé dans un navigateur.', 'La base et les sites internes répondent.'],
+    ['tun-2', 'confort', 'Tunnel inverse et X11', 'Tunnel <code>-R</code> vers une appli de ce PC ; <code>xclock</code> avec VcXsrv.', 'L’appli est joignable depuis le serveur ; la fenêtre X s’affiche.'],
+    ['net-1', 'confort', 'Outils réseau', 'Ping, traceroute, test de ports ; Wake-on-LAN sur une vraie machine.', 'Résultats cohérents ; la machine se réveille.'],
+  ]},
+  { id: 'securite', title: 'Sécurité et données', tests: [
+    ['sec-1', 'bloquant', 'Mot de passe maître', 'L’activer, redémarrer Termoria, déverrouiller ; puis avec Windows Hello.', 'Verrouillé au démarrage ; déverrouillage par mot de passe et par Windows Hello.'],
+    ['sec-2', 'bloquant', 'Verrouillage étanche', 'Verrouiller avec une session ouverte, essayer Tab, Ctrl+Maj+P, cliquer derrière.', 'Rien n’est accessible ni envoyé au serveur.'],
+    ['sec-3', 'bloquant', 'Données chiffrées', 'Mot de passe maître actif : ouvrir <code>sessions.json</code> et <code>notes.json</code> dans <code>%APPDATA%\\fr.termoria.app</code> avec le Bloc-notes.', 'Contenu illisible (commence par <code>TERMORIA-CHIFFRE-1</code>).'],
+    ['sec-4', 'bloquant', 'Sauvegarde protégée', 'Exporter avec une phrase de passe, importer sur un autre PC.', 'Phrase demandée ; sessions, notes et commandes restaurées.'],
+    ['sec-5', 'important', 'Ancien mot de passe maître', 'Sur un PC qui avait un mot de passe maître avant la 0.36 : mettre à jour, déverrouiller.', 'Données chiffrées ensuite, rien de perdu.'],
+    ['sec-6', 'important', 'Collage de plusieurs lignes', 'Coller trois lignes dans un terminal.', 'Confirmation avec l’aperçu ; rien n’est envoyé si on annule.'],
+  ]},
+  { id: 'ux', title: 'Import et confort', tests: [
+    ['imp-1', 'important', 'Imports réels', 'Votre <code>~/.ssh/config</code>, vos sessions PuTTY, un fichier mRemoteNG.', 'Sessions, tunnels et bastions repris ; doublons signalés.'],
+    ['ux-1', 'confort', 'Interface', 'Thème clair et sombre, écran partagé, saisie multiple, palette Ctrl+Maj+O, notes, mise en évidence.', 'Rien de cassé ni d’illisible.'],
+    ['ux-2', 'confort', 'Écrans', 'Mise à l’échelle 150 % et 200 %, deux écrans de tailles différentes.', 'Texte net, fenêtres correctes en changeant d’écran.'],
+  ]},
+  { id: 'vente', title: 'Prêt à vendre', tests: [
+    ['vente-1', 'bloquant', 'Licences', 'Générer une vraie licence Pro, l’activer ; vérifier qu’en version vendue (aperçu coupé) les fonctions Pro sont bloquées sans licence.', 'Pro débloqué avec la licence, bloqué sans.'],
+    ['vente-2', 'bloquant', 'Installateur signé', 'Après achat du certificat de signature de code : installer depuis un téléchargement.', 'Éditeur « Termoria » affiché, pas d’alerte SmartScreen bloquante.'],
+    ['vente-3', 'important', 'Premier lancement', 'Faire installer Termoria par quelqu’un qui ne le connaît pas, sans aide.', 'Il crée une session et s’y connecte seul ; noter où il hésite.'],
+  ]},
+];
+
+const STATUS = [['ok', 'OK'], ['ko', 'Problème'], ['na', 'Non applicable']];
+const PRIO = { bloquant: 'Bloquant', important: 'Important', confort: 'Confort' };
+const WHERE = { labo: 'Labo', vm: 'Machine virtuelle', pc: 'Votre PC', vente: 'Vente' };
+// Où passer chaque test : labo (tools/labo), machine virtuelle Windows, votre PC, préparation à la vente.
+const OU = {"inst-1":["vm","Machine virtuelle Windows (PC propre)"],"inst-2":["pc","Votre PC"],"inst-3":["pc","Votre PC"],"inst-4":["pc","Votre PC"],"inst-5":["vm","Machine virtuelle Windows"],"inst-6":["vm","Machine virtuelle Windows 10 (Hyper-V, version d’évaluation)"],"inst-7":["pc","Votre PC (Defender) ; autres antivirus : non applicable"],"ssh-1":["labo","Labo — serveur"],"ssh-2":["labo","Labo — serveur (clés publiques dans tools/labo/cles)"],"ssh-3":["labo","Labo — serveur + Pageant ou agent OpenSSH"],"ssh-4":["labo","Labo — serveur (première connexion)"],"ssh-5":["labo","Labo — serveur, recréé avec docker compose up -d --force-recreate serveur"],"ssh-6":["labo","Labo — ancien équipement"],"ssh-7":["labo","Labo — interne (via bastion) puis Labo — interne (2 bastions)"],"ssh-8":["labo","Labo — serveur (docker compose restart serveur, puis veille du PC)"],"ssh-9":["labo","Labo — serveur"],"ssh-10":["labo","Identifiant partagé « Labo » (utilisé par toutes les sessions du labo)"],"ssh-11":["labo","ssh test@127.0.0.1:2201 dans la recherche"],"ssh-12":["labo","Labo — double authentification (code : voir LISEZMOI du labo)"],"sftp-1":["labo","Labo — serveur"],"sftp-2":["labo","Labo — serveur"],"sftp-3":["labo","Labo — serveur (créer un fichier test.bat)"],"ftp-1":["labo","Labo — FTPS et Labo — FTP non chiffré"],"s3-1":["labo","Labo — S3"],"rdp-1":["vm","Machine virtuelle Windows (Hyper-V)"],"rdp-2":["vm","Machine virtuelle Windows (Hyper-V)"],"rdp-3":["vm","Machine virtuelle Windows (Hyper-V)"],"vnc-1":["labo","Labo — bureau VNC"],"local-1":["pc","Votre PC"],"local-2":["pc","Votre PC"],"proto-1":["labo","Labo — telnet, Labo — web ; port série : com0com ou non applicable"],"pro-1":["labo","Labo — serveur"],"pro-2":["labo","Dossier « Labo » (arrêter ancien avant : docker compose stop ancien)"],"pro-3":["labo","Labo — serveur (Docker du labo) ; Kubernetes : non applicable ou vrai cluster"],"pro-4":["labo","Labo — serveur"],"pro-5":["labo","docker compose stop web, puis start web"],"tun-1":["labo","Labo — serveur (tunnels déjà préparés : 8081 → web, SOCKS 1080)"],"tun-2":["labo","Labo — serveur (tunnel inverse 9090) + VcXsrv"],"net-1":["labo","Sessions du labo ; Wake-on-LAN : vraie machine ou non applicable"],"sec-1":["pc","Votre PC"],"sec-2":["labo","Votre PC, avec une session du labo ouverte"],"sec-3":["pc","Votre PC"],"sec-4":["vm","Votre PC puis machine virtuelle (ou un second PC)"],"sec-5":["pc","Votre PC (Termoria installée avec mot de passe maître)"],"sec-6":["labo","Labo — serveur"],"imp-1":["pc","Votre PC (vos vrais fichiers)"],"ux-1":["pc","Votre PC"],"ux-2":["pc","Votre PC (et un second écran si possible)"],"vente-1":["vente","Préparation à la vente"],"vente-2":["vente","Préparation à la vente (certificat à acheter)"],"vente-3":["pc","Un proche, sur son PC"]};
+const ALL = SECTIONS.flatMap((s) => s.tests.map((t) => ({ section: s.id, id: t[0], prio: t[1], title: t[2], how: t[3], expect: t[4], ou: OU[t[0]] || ['pc', 'Votre PC'] })));
+
+let results = {};      // id du test → { statut, note, maj }
+let infos = {};        // version testée
+let filter = 'tous';
+const openNotes = new Set();
+let db = null;
+let local = false;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const fmtDate = (iso) => { try { return new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }); } catch { return ''; } };
+
+function renderSummary() {
+  const n = ALL.length;
+  const by = { ok: 0, ko: 0, na: 0 };
+  for (const t of ALL) { const s = results[t.id]?.statut; if (by[s] !== undefined) by[s]++; }
+  const todo = n - by.ok - by.ko - by.na;
+  const blockLeft = ALL.filter((t) => t.prio === 'bloquant' && results[t.id]?.statut !== 'ok' && results[t.id]?.statut !== 'na').length;
+  $('counts').innerHTML = `
+    <div class="count"><b>${n - todo}/${n}</b><span>Passés</span></div>
+    <div class="count ok"><b>${by.ok}</b><span>OK</span></div>
+    <div class="count ko"><b>${by.ko}</b><span>Problèmes</span></div>
+    <div class="count block"><b>${blockLeft}</b><span>Bloquants restants</span></div>`;
+  const pct = (v) => (100 * v / n).toFixed(2) + '%';
+  $('bar').innerHTML = `<i class="s-ok" style="width:${pct(by.ok)}"></i><i class="s-ko" style="width:${pct(by.ko)}"></i><i class="s-na" style="width:${pct(by.na)}"></i>`;
+  $('bar').setAttribute('aria-label', `${by.ok} OK, ${by.ko} problèmes, ${by.na} non applicables sur ${n} tests`);
+}
+
+function renderFilters() {
+  const opts = [['tous', 'Tous'], ['afaire', 'À faire'], ['ko', 'Problèmes'], ['bloquant', 'Bloquants'], ['labo', 'Avec le labo']];
+  $('filters').innerHTML = opts.map(([v, l]) => `<button type="button" class="chip-btn" data-filter="${v}" aria-pressed="${filter === v}">${l}</button>`).join('');
+}
+
+function visible(t) {
+  const s = results[t.id]?.statut;
+  if (filter === 'afaire') return !s;
+  if (filter === 'ko') return s === 'ko';
+  if (filter === 'bloquant') return t.prio === 'bloquant';
+  if (filter === 'labo') return t.ou[0] === 'labo';
+  return true;
+}
+
+function renderSections() {
+  const html = SECTIONS.map((s) => {
+    const tests = ALL.filter((t) => t.section === s.id);
+    const shown = tests.filter(visible);
+    if (!shown.length && filter !== 'tous') return '';
+    const done = tests.filter((t) => results[t.id]?.statut).length;
+    return `<section class="section" aria-labelledby="h-${s.id}">
+      <div class="section-head"><h2 id="h-${s.id}">${s.title}</h2><small>${done}/${tests.length}</small></div>
+      <div class="tests">${shown.map(renderTest).join('') || '<p class="empty">Rien à afficher avec ce filtre.</p>'}</div>
+    </section>`;
+  }).join('');
+  $('sections').innerHTML = html || '<p class="empty">Aucun test ne correspond à ce filtre.</p>';
+}
+
+function renderTest(t) {
+  const r = results[t.id] || {};
+  const showNote = r.statut === 'ko' || r.note || openNotes.has(t.id);
+  return `<article class="test ${r.statut ? 's-' + r.statut : ''}" data-id="${t.id}">
+    <div class="main">
+      <div class="title"><span class="id">${t.id}</span><span>${t.title}</span><span class="prio ${t.prio}">${PRIO[t.prio]}</span></div>
+      <p class="how">${t.how}</p>
+      <p class="expect">${t.expect}</p>
+      <p class="where"><span class="where-tag ${t.ou[0]}">${WHERE[t.ou[0]]}</span> ${esc(t.ou[1])}</p>
+    </div>
+    <div class="st" role="group" aria-label="Résultat de ${esc(t.title)}">
+      ${STATUS.map(([v, l]) => `<button type="button" class="${v}" data-status="${v}" aria-pressed="${r.statut === v}">${l}</button>`).join('')}
+    </div>
+    ${showNote ? `<div class="note">
+      <textarea id="note-${t.id}" data-note="${t.id}" placeholder="${r.statut === 'ko' ? 'Ce qui s’est passé, le message affiché, le serveur concerné…' : 'Remarque'}">${esc(r.note)}</textarea>
+      ${r.maj ? `<span class="meta">Mis à jour le ${fmtDate(r.maj)}${r.version ? ` · version ${esc(r.version)}` : ''}</span>` : ''}
+    </div>` : `<button type="button" class="add-note" data-addnote="${t.id}">Ajouter une note</button>`}
+  </article>`;
+}
+
+function renderAll() {
+  // Garde le focus et la saisie d'une note pendant un rafraîchissement.
+  const active = document.activeElement;
+  const focusNote = active?.dataset?.note;
+  const caret = focusNote ? [active.selectionStart, active.selectionEnd, active.value] : null;
+  renderSummary(); renderFilters(); renderSections();
+  if (focusNote) {
+    const el = document.querySelector(`[data-note="${focusNote}"]`);
+    if (el) { el.value = caret[2]; el.focus(); el.setSelectionRange(caret[0], caret[1]); }
+  }
+  const v = $('version');
+  if (document.activeElement !== v) v.value = infos.version || '';
+}
+
+// ---------- Enregistrement ----------
+const LS = 'recette-termoria';
+function saveLocal() { try { localStorage.setItem(LS, JSON.stringify({ results, infos })); } catch {} }
+
+async function saveResult(id, patch) {
+  const next = { ...(results[id] || {}), ...patch, maj: new Date().toISOString(), version: infos.version || '' };
+  if (!next.statut && !next.note) { delete results[id]; } else { results[id] = next; }
+  renderAll();
+  if (local || !db) { saveLocal(); return; }
+  try {
+    if (results[id]) await db.doc('resultats/' + id).set(results[id]);
+    else await db.doc('resultats/' + id).delete();
+    setSync('Enregistré');
+  } catch (e) {
+    setSync(e?.code === 'quota_exceeded' ? 'Base pleine : résultat non enregistré.' : 'Enregistrement impossible pour l’instant ; réessayez.', true);
+  }
+}
+
+function setSync(text, warn = false) { const el = $('sync'); el.textContent = text; el.classList.toggle('warn', warn); }
+
+const noteTimers = {};
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.filter) { filter = b.dataset.filter; renderAll(); return; }
+  const card = b.closest('.test');
+  if (b.dataset.status && card) {
+    const id = card.dataset.id;
+    const current = results[id]?.statut;
+    const statut = current === b.dataset.status ? '' : b.dataset.status; // un second clic remet « à faire »
+    saveResult(id, { statut });
+    if (statut === 'ko') setTimeout(() => document.querySelector(`[data-note="${id}"]`)?.focus(), 0);
+    return;
+  }
+  if (b.dataset.addnote) { openNotes.add(b.dataset.addnote); renderAll(); document.querySelector(`[data-note="${b.dataset.addnote}"]`)?.focus(); }
+});
+document.addEventListener('input', (e) => {
+  const id = e.target.dataset?.note;
+  if (!id) return;
+  clearTimeout(noteTimers[id]);
+  setSync('Modification en cours…');
+  noteTimers[id] = setTimeout(() => saveResult(id, { note: e.target.value }), 700);
+});
+let versionTimer;
+$('version').addEventListener('input', (e) => {
+  infos.version = e.target.value.trim();
+  clearTimeout(versionTimer);
+  versionTimer = setTimeout(async () => {
+    if (local || !db) { saveLocal(); return; }
+    try { await db.doc('infos/recette').set({ version: infos.version }); setSync('Enregistré'); }
+    catch { setSync('Enregistrement impossible pour l’instant ; réessayez.', true); }
+  }, 700);
+});
+
+// ---------- Démarrage ----------
+renderAll();
+(async () => {
+  db = window.claude?.use ? await window.claude.use('db') : null;
+  if (!db) {
+    local = true;
+    try { const saved = JSON.parse(localStorage.getItem(LS) || '{}'); results = saved.results || {}; infos = saved.infos || {}; } catch {}
+    setSync('Résultats gardés dans ce navigateur seulement (base partagée indisponible ici).', true);
+    renderAll();
+    return;
+  }
+  db.collection('resultats').onSnapshot((snap) => {
+    const next = {};
+    for (const d of snap.docs) next[d.id] = d.data();
+    results = next;
+    setSync(snap.empty ? 'Aucun résultat pour l’instant : marquez votre premier test.' : `Résultats synchronisés · ${snap.size} test(s) marqué(s)`);
+    renderAll();
+  }, () => setSync('Connexion à la base perdue ; rechargez la page.', true));
+  db.doc('infos/recette').onSnapshot((d) => { infos = d.exists ? d.data() : {}; renderAll(); });
+})();
+</script>

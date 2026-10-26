@@ -93,6 +93,7 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 - **Imports** : seules les valeurs prévues par le formulaire sont gardées (pas de commande cachée).
 - **Terminal** : confirmation avant de coller plusieurs lignes ; liens ouverts seulement en http(s).
 - **Interface** : politique de contenu stricte, fenêtres web sans accès à l'application, mises à jour signées.
+- **Recette** : la liste des tests avant la vente est dans `docs/recette-avant-vente.html` ; le labo de test (serveurs jetables avec Docker Desktop) dans `tools/labo`.
 - **Dépendances** : `cargo audit` et `npm audit` chaque semaine sur GitHub (`.github/workflows/securite.yml`) ; exception documentée dans `src-tauri/.cargo/audit.toml`.
 
 ## Architecture

@@ -1,0 +1,121 @@
+# Labo de test de Termoria : des serveurs jetables sur votre PC, pour la recette.
+# Mode d'emploi : LISEZMOI.md. Tous les ports n'écoutent que sur 127.0.0.1 (rien n'est
+# exposé au réseau). Identifiant de test partout : test / termoria-test.
+name: termoria-labo
+
+services:
+  # Linux avec SSH (mot de passe et clé), SFTP, telnet, X11, Docker du labo (via le socket).
+  serveur:
+    build: ./serveur
+    hostname: serveur
+    environment:
+      TELNET: "1"
+    ports:
+      - "127.0.0.1:2201:22"
+      - "127.0.0.1:2323:23"
+    volumes:
+      - ./cles:/cles:ro
+      # Laisse le serveur voir les conteneurs du labo (test « Conteneurs »). Labo seulement.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [public]
+
+  # Bastion : seul point d'entrée vers le réseau interne.
+  bastion:
+    build: ./serveur
+    hostname: bastion
+    ports:
+      - "127.0.0.1:2202:22"
+    volumes:
+      - ./cles:/cles:ro
+    networks: [public, interne]
+
+  # Second bastion, joignable seulement depuis le premier (rebonds enchaînés).
+  bastion2:
+    build: ./serveur
+    hostname: bastion2
+    volumes:
+      - ./cles:/cles:ro
+    networks: [interne]
+
+  # Serveur interne : aucun port publié, joignable seulement par les bastions.
+  interne:
+    build: ./serveur
+    hostname: interne
+    volumes:
+      - ./cles:/cles:ro
+    networks: [interne]
+
+  # Vieil équipement : n'accepte que des algorithmes anciens (diffie-hellman-group14-sha1, aes128-cbc, hmac-sha1, ssh-rsa).
+  ancien:
+    build: ./serveur
+    hostname: ancien
+    environment:
+      ANCIEN: "1"
+    ports:
+      - "127.0.0.1:2203:22"
+    networks: [public]
+
+  # Double authentification : mot de passe puis code à 6 chiffres (TOTP).
+  deuxfacteurs:
+    build: ./serveur
+    hostname: deuxfacteurs
+    environment:
+      DEUX_FACTEURS: "1"
+    ports:
+      - "127.0.0.1:2204:22"
+    networks: [public]
+
+  # FTP et FTPS (TLS explicite, reprise de session exigée comme FileZilla Server).
+  ftp:
+    build: ./ftp
+    hostname: ftp
+    ports:
+      - "127.0.0.1:2121:21"
+      - "127.0.0.1:30000-30009:30000-30009"
+    networks: [public]
+
+  # Stockage compatible S3 (SeaweedFS), compartiment « labo » créé au démarrage.
+  s3:
+    image: chrislusf/seaweedfs:4.47
+    hostname: s3
+    command: server -dir=/data -s3 -s3.port=8333 -s3.config=/etc/labo/s3.json -ip=s3
+    volumes:
+      - ./s3/s3.json:/etc/labo/s3.json:ro
+    ports:
+      - "127.0.0.1:9000:8333"
+    networks: [public]
+
+  s3-init:
+    image: chrislusf/seaweedfs:4.47
+    depends_on: [s3]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until echo "s3.bucket.list" | weed shell -master=s3:9333 -filer=s3:8888 >/dev/null 2>&1; do sleep 2; done
+        echo "s3.bucket.create -name labo" | weed shell -master=s3:9333 -filer=s3:8888
+        echo "Compartiment labo prêt"
+    restart: "no"
+    networks: [public]
+
+  # Bureau Linux accessible en VNC (mot de passe : termoria).
+  bureau:
+    build: ./bureau
+    hostname: bureau
+    ports:
+      - "127.0.0.1:5901:5901"
+    networks: [public]
+
+  # Petite page web (tests « Interface web » et tunnels).
+  web:
+    image: nginx:1.27-alpine
+    hostname: web
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    ports:
+      - "127.0.0.1:8080:80"
+    networks: [public, interne]
+
+networks:
+  public: {}
+  interne:
+    internal: true

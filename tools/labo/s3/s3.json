@@ -1,0 +1,9 @@
+{
+  "identities": [
+    {
+      "name": "termoria",
+      "credentials": [{ "accessKey": "termoria", "secretKey": "termoria-labo-secret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
