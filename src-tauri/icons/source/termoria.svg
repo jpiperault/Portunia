@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Logo Termoria : invite de terminal « >_ ». Source de toutes les icônes (npx tauri icon). -->
+  <!-- Fond anthracite plutôt que noir, avec un liseré plus clair : visible sur une barre des tâches sombre. -->
+  <rect x="40" y="40" width="944" height="944" rx="212" fill="#17191e"/>
+  <rect x="52" y="52" width="920" height="920" rx="200" fill="none" stroke="#343a44" stroke-width="24"/>
+  <!-- Chevron rouge -->
+  <path d="M262 318 L486 512 L262 706" fill="none" stroke="#ea3b2e" stroke-width="112" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Curseur blanc -->
+  <rect x="540" y="640" width="250" height="102" rx="51" fill="#f4f5f7"/>
+</svg>
