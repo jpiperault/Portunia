@@ -52,6 +52,8 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 
 Autres fonctions :
 
+- fenêtre « Connexion rapide » (bouton à côté de « Nouvelle session », Ctrl+Maj+Q, ou une adresse seule comme `10.0.0.12` dans la recherche puis Entrée) : protocole, adresse, identifiant et mot de passe saisis à la main, rien n’est enregistré ;
+- session SSH enregistrée sans identifiant ou sans mot de passe : ils sont demandés à chaque connexion ;
 - connexion rapide sans créer de session : tapez `ssh deploy@10.0.1.12`, `rdp srv-01`, `vnc nas:5901`, `https://nas:5001` ou `COM3@9600` dans la recherche puis Entrée, ou dans la palette (Ctrl+Maj+O). En SSH, clé par défaut puis agent, sinon le mot de passe est demandé (et jamais enregistré). Historique des connexions récentes, bouton « Enregistrer comme session » ;
 - clés SSH : création Ed25519 ou RSA 4096 dans ~/.ssh (phrase secrète conseillée), copie de la clé publique, installation sur le serveur de l'onglet en un clic (authorized_keys et droits corrigés), puis la session passe à l'authentification par clé (bouton « Clé SSH » ou palette) ;
 - notes par session en Markdown (bouton « Notes », panneau de droite) : titres, listes, cases à cocher cliquables, liens, blocs de code envoyés au terminal d'un clic ; enregistrement automatique, repère dans l'arbre, incluses dans la sauvegarde Termoria ;

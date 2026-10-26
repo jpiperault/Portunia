@@ -50,7 +50,9 @@ impl Connector for SshConnector {
                 Field::new("port", "Port", FieldKind::Number).default(22),
                 Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
                     .placeholder("Vide = identifiants propres à cette session"),
-                Field::new("username", "Utilisateur", FieldKind::Text).required().hidden_by("credential"),
+                Field::new("username", "Utilisateur", FieldKind::Text)
+                    .placeholder("Vide = demandé à chaque connexion")
+                    .hidden_by("credential"),
                 Field::new(
                     "auth",
                     "Authentification",
@@ -70,6 +72,7 @@ impl Connector for SshConnector {
                     .show_if("auth", "key")
                     .hidden_by("credential"),
                 Field::new("password", "Mot de passe", FieldKind::Secret)
+                    .placeholder("Vide = demandé à chaque connexion")
                     .show_if("auth", "password")
                     .hidden_by("credential"),
                 Field::new(

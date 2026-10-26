@@ -9,7 +9,7 @@ import { FilesView } from './filesview';
 import { createMultiExec, MultiExecView } from './multiexec';
 import { openCredentialManager } from './credentials';
 import { createNetTools, NetToolsView, wakeSession } from './nettools';
-import { askCredentials, openCommandPalette, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
+import { askCredentials, looksLikeAddress, openCommandPalette, openQuickConnect, PaletteEntry, parseQuick, QuickTarget, rememberQuick } from './quick';
 import { badge, h, icon, viewIcon } from './dom';
 import { openSessionDialog } from './dialog';
 import { renderExtensions } from './extensions';
@@ -496,8 +496,10 @@ function renderViews() {
   if (!state.tabs.length) {
     views.append(h('div', { class: 'welcome' },
       h('h2', {}, 'Aucune session ouverte'),
-      h('p', { class: 'muted' }, 'Choisissez une session à gauche, ou créez-en une.'),
-      h('button', { class: 'btn primary', onclick: () => newSession() }, icon('plus', 14), 'Nouvelle session')));
+      h('p', { class: 'muted' }, 'Choisissez une session à gauche, créez-en une, ou connectez-vous directement à une adresse.'),
+      h('div', { class: 'welcome-actions' },
+        h('button', { class: 'btn primary', onclick: () => newSession() }, icon('plus', 14), 'Nouvelle session'),
+        h('button', { class: 'btn', onclick: () => quickConnect() }, icon('link', 14), 'Connexion rapide'))));
   }
 }
 
@@ -570,6 +572,14 @@ function openQuick(target: QuickTarget) {
   return openSession(quickSession(full), full);
 }
 
+/** Fenêtre « Connexion rapide » : adresse, identifiant et mot de passe saisis à la main. */
+async function quickConnect(initial = '') {
+  const r = await openQuickConnect(extensionEnabled, initial);
+  if (!r) return;
+  rememberQuick(r.text);
+  await openQuick(r.target);
+}
+
 /** Propose d'enregistrer une connexion rapide comme session (formulaire prérempli). */
 async function saveQuick(target: QuickTarget) {
   const result = await openSessionDialog({
@@ -583,6 +593,20 @@ async function saveQuick(target: QuickTarget) {
   if (result.connect) await openSession(result.session);
 }
 
+/** Session SSH à laquelle il manque l'identifiant ou le mot de passe : ils seront demandés. */
+function missingCredentials(session: Session): { reason: string; passwordOptional: boolean } | null {
+  const v = session.values;
+  if (session.protocol !== 'ssh' || (typeof v.credential === 'string' && v.credential.trim())) return null;
+  const noUser = !String(v.username ?? '').trim();
+  const byPassword = v.auth === 'password';
+  const noPassword = byPassword && !session.secretKeys.includes('password');
+  if (!noUser && !noPassword) return null;
+  return {
+    reason: `Session « ${session.name} » : ${noUser ? 'identifiant' : 'mot de passe'} à saisir pour cette connexion.`,
+    passwordOptional: !byPassword,
+  };
+}
+
 async function openSession(session: Session, quick?: QuickTarget) {
   const proto = protocolOf(session.protocol);
   if (!proto) return toast(`Extension « ${session.protocol} » non installée`, 'error');
@@ -590,8 +614,11 @@ async function openSession(session: Session, quick?: QuickTarget) {
     if (!confirm(`L'extension « ${proto.name} » est désactivée. L'activer et ouvrir « ${session.name} » ?`)) return;
     setExtension(proto.id, true);
   }
+  // Identifiants saisis au lancement (session sans utilisateur ou sans mot de passe enregistré).
+  let typed: Record<string, unknown> | null = null;
   const opener = (cols: number, rows: number, onEvent: (e: TermEvent) => void) => quick
     ? connectQuick(quick.protocol, quick.name, quick.values, cols, rows, onEvent)
+    : typed ? connectWith(session.id, typed, session.name, cols, rows, onEvent)
     : api.connect(session.id, cols, rows, onEvent);
 
   // Bureau à distance (client Windows) et web s'ouvrent dans leur propre fenêtre.
@@ -607,6 +634,12 @@ async function openSession(session: Session, quick?: QuickTarget) {
 
   const existing = !quick && state.tabs.find((t) => t.sessionId === session.id && !t.remoteCommand);
   if (existing) return activate(existing.id);
+  const missing = quick ? null : missingCredentials(session);
+  if (missing) {
+    const cred = await askCredentials(quickSession({ protocol: session.protocol, name: session.name, values: session.values }), missing.reason, missing.passwordOptional);
+    if (!cred) return;
+    typed = { username: cred.username, ...(cred.password ? { password: cred.password, auth: 'password' } : {}) };
+  }
 
   const termEl = h('div', { class: 'term-view' });
   const paneHead = h('div', { class: 'pane-head', hidden: true });
@@ -632,6 +665,14 @@ async function openSession(session: Session, quick?: QuickTarget) {
         Object.assign(quick.values, { username: cred.username, password: cred.password }, quick.protocol === 'ssh' ? { auth: 'password' } : {});
         if (quick.protocol === 'ssh') quick.name = `${cred.username}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}${quick.values.jump ? ` via ${quick.values.jump}` : ''}`;
         tab.title = quick.name;
+        reconnect(tab);
+      });
+    }
+    // Identifiants saisis au lancement refusés : on les redemande.
+    if (s === 'closed' && typed && reason && /Authentification refusée/.test(reason) && !reason.includes('Serveur de rebond')) {
+      askCredentials(quickSession({ protocol: session.protocol, name: session.name, values: { ...session.values, username: typed.username } }), reason, missing?.passwordOptional).then((cred) => {
+        if (!cred || !state.tabs.includes(tab)) return;
+        typed = { username: cred.username, ...(cred.password ? { password: cred.password, auth: 'password' } : {}) };
         reconnect(tab);
       });
     }
@@ -779,6 +820,8 @@ $('new-folder').append(icon('folderPlus'));
 $('new-folder').addEventListener('click', () => promptNewFolder(''));
 $('new-session').append(icon('plus'));
 $('new-session').addEventListener('click', () => newSession());
+$('quick-connect').append(icon('link'));
+$('quick-connect').addEventListener('click', () => quickConnect());
 $('open-extensions').append(icon('puzzle'), h('span', { class: 'grow' }, 'Extensions'));
 $('open-extensions').addEventListener('click', openExtensions);
 $('open-settings').append(icon('settings'), h('span', { class: 'grow' }, 'Paramètres'));
@@ -818,6 +861,7 @@ document.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (key === 'k') { e.preventDefault(); search.focus(); search.select(); }
   else if (key === 'n') { e.preventDefault(); newSession(); }
+  else if (key === 'q') { e.preventDefault(); quickConnect(); }
   else if (key === 't') { e.preventDefault(); const def = defaultShell(); if (def) openLocalShell(def); else toast('Aucun shell local trouvé', 'error'); }
   else if (key === 'w' && state.active) { e.preventDefault(); closeTab(state.active); }
   else if (key === 'f') { e.preventDefault(); activeTab()?.term?.openSearch(); }
@@ -987,6 +1031,7 @@ function paletteEntries(): PaletteEntry[] {
   }));
   const actions: PaletteEntry[] = [
     { label: 'Nouvelle session', group: 'Action', icon: 'plus', hint: 'Ctrl+Maj+N', action: () => newSession() },
+    { label: 'Connexion rapide', group: 'Action', icon: 'link', hint: 'Ctrl+Maj+Q', keywords: 'adresse serveur identifiant mot de passe sans enregistrer', action: () => quickConnect() },
     { label: 'Commandes enregistrées', group: 'Action', icon: 'commands', hint: 'Ctrl+Maj+P', action: () => openSnippetManager(snippetContext()) },
     { label: 'Enregistrements', group: 'Action', icon: 'play', action: () => openRecordings(toast) },
     { label: 'Importer / exporter', group: 'Action', icon: 'upload', action: () => openImportExport((msg) => { toast(msg); reload(); }, toast) },
@@ -1003,14 +1048,24 @@ function paletteEntries(): PaletteEntry[] {
 }
 
 function openGlobalPalette(initial = '') {
-  openCommandPalette(paletteEntries(), (target) => openQuick(target), initial);
+  openCommandPalette(paletteEntries(), (target) => openQuick(target), initial, (address) => quickConnect(address));
 }
 
 // Entrée dans la recherche : « user@hôte », « rdp srv-01 »… = connexion rapide.
 search.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   const target = parseQuick(search.value);
-  if (!target) return;
+  if (!target) {
+    // Adresse seule : fenêtre de connexion rapide (identifiant et mot de passe à la main).
+    if (!looksLikeAddress(search.value)) return;
+    e.preventDefault();
+    const address = search.value;
+    search.value = '';
+    state.filter = '';
+    renderTree();
+    quickConnect(address);
+    return;
+  }
   e.preventDefault();
   rememberQuick(search.value);
   search.value = '';
