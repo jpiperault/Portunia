@@ -1,0 +1,300 @@
+<title>Termoria Connexion rapide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette fidèle à l'application : tokens repris de src/styles.css (sombre par défaut, clair en option). */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --warn: #f0a35b; --danger: #ff7b7b;
+  --chip-bg: #2b2d33; --pop: #26282e; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --shadow: rgb(0 0 0 / .45);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --warn: #b5650f; --danger: #c23b3b;
+  --chip-bg: #eceef2; --pop: #ffffff; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --shadow: rgb(20 30 50 / .18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --warn: #b5650f; --danger: #c23b3b;
+  --chip-bg: #eceef2; --pop: #ffffff; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --shadow: rgb(20 30 50 / .18); color-scheme: light; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.wrap { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.note { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.note strong { color: var(--text-2); }
+.pill { font-size: 11px; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.steps { display: flex; gap: 8px; flex-wrap: wrap; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+
+/* Fenêtre de l'application */
+.win { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 520px; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); position: relative; }
+@media (max-width: 760px) { .win { grid-template-columns: minmax(0, 1fr); } .side { display: none; } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.search { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; }
+.search.hot { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.hint { font-size: 12px; color: var(--muted); padding: 0 2px; min-height: 18px; }
+.hint b { color: var(--accent); font-weight: 600; }
+.side-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 4px 0; }
+.icon-btn { width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); display: inline-grid; place-items: center; }
+.icon-btn:hover, .icon-btn.hot { background: var(--accent-soft); color: var(--accent); }
+.tree-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); }
+.badge { margin-left: auto; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; background: var(--b-ssh); color: var(--f-ssh); }
+.dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--muted); }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: flex; align-items: center; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--line); background: var(--bg); min-height: 39px; }
+.tab { display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 13px; border-radius: 6px 6px 0 0; background: var(--work); border: 1px solid var(--line); border-bottom-color: var(--work); margin-bottom: -1px; white-space: nowrap; }
+.tab .state { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+.tab .state.on { background: var(--ok); }
+.stage { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.welcome { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 8px; align-items: center; padding: 24px; }
+.welcome h2 { margin: 0; font-size: 18px; }
+.welcome p { margin: 0; max-width: 46ch; }
+
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.toolbar .who { font-weight: 600; font-size: 13px; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--panel); font-size: 13px; }
+.btn:hover { background: var(--hover); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.push { margin-left: auto; }
+
+.term { flex: 1; background: var(--term); color: var(--term-text); font: 13px/1.55 var(--mono); padding: 12px 14px; overflow: auto; min-height: 300px; cursor: text; }
+.term .dim { color: var(--term-dim); }
+.term .host { color: var(--term-host); }
+.term .ok { color: #7fdbaa; }
+.term .err { color: #ff8f8f; }
+.cursor { display: inline-block; width: .6em; height: 1.15em; vertical-align: text-bottom; background: var(--term-text); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+.term-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+
+/* Fenêtre « Connexion rapide » */
+.back { position: absolute; inset: 0; background: rgb(0 0 0 / .45); display: grid; place-items: center; padding: 16px; }
+.dlg { width: min(460px, 100%); background: var(--pop); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 20px 60px var(--shadow); display: flex; flex-direction: column; }
+.dlg header { padding: 18px 20px 0; }
+.dlg h3 { margin: 0; font-size: 16px; }
+.dlg-body { padding: 14px 20px; display: flex; flex-direction: column; gap: 12px; }
+.fld { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); }
+.fld input { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line-strong); background: var(--field); }
+.fld input.big { font-size: 15px; padding: 10px 12px; }
+.opt { font-size: 11px; color: var(--muted); font-weight: 400; }
+.seg { display: flex; gap: 6px; flex-wrap: wrap; }
+.seg button { border: 1px solid var(--line-strong); background: var(--field); border-radius: 6px; padding: 5px 10px; font-size: 12px; }
+.seg button[aria-checked="true"] { background: var(--accent-soft); border-color: var(--accent); }
+details { border: 1px solid var(--line); border-radius: 8px; }
+summary { cursor: pointer; padding: 9px 12px; font-size: 13px; color: var(--text-2); list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "▾"; color: var(--muted); }
+details[open] summary::after { content: "▴"; }
+.opts { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 12px; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) 90px; gap: 10px; }
+.dlg footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.dlg footer .muted { font-size: 12px; max-width: 26ch; }
+
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.legend div { padding: 12px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; color: var(--text-2); }
+.legend h4 { margin: 0 0 4px; font-size: 13px; color: var(--text); }
+.legend p { margin: 0; }
+</style>
+
+<div class="wrap">
+  <div class="note"><span class="pill">Maquette</span><span><strong>Connexion rapide de Termoria.</strong> Tapez une adresse puis Entrée : l'identifiant et le mot de passe se saisissent dans le terminal, comme avec PuTTY. Les réglages restent disponibles, mais facultatifs.</span></div>
+
+  <div class="steps" role="group" aria-label="Scénarios">
+    <button type="button" data-scn="search" aria-pressed="true">1. Adresse dans la recherche</button>
+    <button type="button" data-scn="dialog" aria-pressed="false">2. Fenêtre avec options</button>
+    <button type="button" data-scn="reset" aria-pressed="false">Recommencer</button>
+  </div>
+
+  <div class="win" id="win">
+    <aside class="side">
+      <input class="search" id="search" type="search" placeholder="Rechercher, ou une adresse : 10.0.0.12" aria-label="Rechercher ou se connecter" autocomplete="off" spellcheck="false">
+      <div class="hint" id="hint"></div>
+      <div class="side-head"><p class="label">Sessions</p>
+        <button class="icon-btn" id="quick-btn" type="button" title="Connexion rapide (Ctrl Maj Q)" aria-label="Connexion rapide">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5 14h6l-1 7 8-11h-6l1-7z"/></svg>
+        </button>
+      </div>
+      <div class="tree-row"><span class="dot"></span>srv-web-01<span class="badge">SSH</span></div>
+      <div class="tree-row"><span class="dot"></span>nas-bureau<span class="badge">SSH</span></div>
+      <div class="tree-row"><span class="dot"></span>routeur-cœur<span class="badge">SSH</span></div>
+    </aside>
+    <section class="main">
+      <div class="tabs" id="tabs"></div>
+      <div class="stage" id="stage"></div>
+    </section>
+    <div id="overlay"></div>
+  </div>
+
+  <div class="legend">
+    <div><h4>Seule l'adresse est demandée</h4><p>IP, nom ou hôte:port. Entrée ouvre l'onglet SSH aussitôt, sans fenêtre.</p></div>
+    <div><h4>Identifiants dans le terminal</h4><p>« login as: » puis « mot de passe : » masqué. Rien n'est enregistré. Clé SSH ou agent essayés d'abord, en silence.</p></div>
+    <div><h4>Options facultatives</h4><p>Protocole, port, identifiant, mot de passe, clé, bastion : dans la fenêtre « Connexion rapide », repliées par défaut.</p></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const ADDR = /^(?:([\w.-]+)@)?((?:\d{1,3}\.){3}\d{1,3}|[\w-]+(?:\.[\w-]+)+|\[[0-9a-f:]+\])(?::(\d{1,5}))?$/i;
+let term = null;
+
+function welcome() {
+  $('tabs').innerHTML = '';
+  $('stage').innerHTML = `<div class="welcome"><h2>Aucune session ouverte</h2>
+    <p class="muted">Tapez l'adresse d'un serveur dans la recherche, puis Entrée. Ou ouvrez la connexion rapide pour choisir le protocole et d'autres options.</p></div>`;
+}
+
+/* Terminal simulé : demande l'identifiant puis le mot de passe, comme PuTTY. */
+function openTerminal({ host, port, user, password, proto }) {
+  const where = `${host}${port && port !== '22' ? ':' + port : ''}`;
+  $('tabs').innerHTML = `<div class="tab"><span class="state" id="tab-state"></span><span id="tab-title">${esc(user ? user + '@' + where : where)}</span><span class="badge">${esc(proto.toUpperCase())}</span></div>`;
+  $('stage').innerHTML = `<div class="toolbar"><span class="who" id="who">${esc(where)}</span><span class="muted small" id="status">connexion…</span>
+      <button class="btn push" type="button" id="save" hidden>＋ Enregistrer comme session</button></div>
+    <div class="term" id="term" tabindex="0" aria-label="Terminal"></div><input class="term-input" id="ti" autocomplete="off" aria-label="Saisie du terminal">`;
+  term = { lines: [], line: '', mode: 'wait', host: where, user, tries: 0 };
+  const t = $('term'); t.addEventListener('click', () => $('ti').focus());
+  $('ti').addEventListener('keydown', onKey);
+  print(`<span class="dim">Connexion à </span><span class="host">${esc(where)}</span><span class="dim">…</span>`);
+  setTimeout(() => {
+    print(`<span class="dim">Clé SSH et agent : refusés, saisie manuelle.</span>`);
+    if (user && password) return login(user, password);
+    if (user) { term.mode = 'pass'; term.user = user; }
+    else term.mode = 'user';
+    render(); $('ti').focus();
+  }, 700);
+}
+function print(html) { term.lines.push(html); render(); }
+function render() {
+  const t = $('term'); if (!t) return;
+  const prompt = term.mode === 'user' ? 'login as: ' + esc(term.line)
+    : term.mode === 'pass' ? `${esc(term.user)}@${esc(term.host)}'s password: `
+    : term.mode === 'shell' ? `<span class="ok">${esc(term.user)}@srv</span>:<span class="host">~</span>$ ${esc(term.line)}` : '';
+  t.innerHTML = term.lines.map((l) => `<div>${l}</div>`).join('') + (term.mode === 'wait' ? '' : `<div>${prompt}<span class="cursor"></span></div>`);
+  t.scrollTop = t.scrollHeight;
+}
+function onKey(e) {
+  if (!term || term.mode === 'wait') return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (term.mode === 'user') {
+      if (!term.line.trim()) return;
+      print('login as: ' + esc(term.line)); term.user = term.line.trim(); term.line = ''; term.mode = 'pass';
+      $('tab-title').textContent = `${term.user}@${term.host}`;
+    } else if (term.mode === 'pass') {
+      print(`${esc(term.user)}@${esc(term.host)}'s password: `); const pw = term.line; term.line = '';
+      login(term.user, pw);
+    } else if (term.mode === 'shell') {
+      print(`<span class="ok">${esc(term.user)}@srv</span>:<span class="host">~</span>$ ${esc(term.line)}`);
+      if (term.line.trim()) print(`<span class="dim">(maquette : la commande n'est pas exécutée)</span>`);
+      term.line = '';
+    }
+    render(); return;
+  }
+  if (e.key === 'Backspace') { e.preventDefault(); term.line = term.line.slice(0, -1); render(); return; }
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { e.preventDefault(); term.line += e.key; render(); }
+}
+function login(user, pw) {
+  term.mode = 'wait'; render();
+  setTimeout(() => {
+    if (!pw) {
+      term.tries++;
+      print(`<span class="err">Accès refusé.</span>`); term.mode = 'pass'; render(); $('ti').focus(); return;
+    }
+    print(`Welcome to Ubuntu 24.04.1 LTS (GNU/Linux 6.8.0-45-generic x86_64)`);
+    print(`<span class="dim">Last login: Tue Oct 27 09:12:44 2026 from 10.0.0.5</span>`);
+    term.mode = 'shell'; term.user = user;
+    $('tab-state').classList.add('on'); $('status').textContent = 'connecté · identifiants non enregistrés';
+    $('save').hidden = false; render(); $('ti').focus();
+  }, 600);
+}
+
+/* Recherche : une adresse + Entrée ouvre l'onglet directement. */
+$('search').addEventListener('input', () => {
+  const v = $('search').value.trim(); const m = v.match(ADDR);
+  $('search').classList.toggle('hot', !!m);
+  $('hint').innerHTML = m ? `Entrée : <b>connexion SSH à ${esc(m[2])}${m[3] ? ':' + esc(m[3]) : ''}</b>` : v ? 'Recherche dans les sessions…' : '';
+});
+$('search').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const m = $('search').value.trim().match(ADDR); if (!m) return;
+  e.preventDefault(); $('search').value = ''; $('search').classList.remove('hot'); $('hint').textContent = '';
+  openTerminal({ host: m[2], port: m[3], user: m[1], proto: 'ssh' });
+});
+
+/* Fenêtre « Connexion rapide » : seule l'adresse est obligatoire. */
+function openDialog(prefill = '') {
+  $('overlay').innerHTML = `<div class="back" id="back"><form class="dlg" id="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+    <header><h3 id="dlg-t">Connexion rapide</h3></header>
+    <div class="dlg-body">
+      <label class="fld">Adresse du serveur<input class="big" id="d-addr" required placeholder="10.0.0.12, serveur.exemple.fr ou hôte:2222" value="${esc(prefill)}" autocomplete="off" spellcheck="false"></label>
+      <div class="fld"><span>Protocole</span><div class="seg" id="d-proto" role="radiogroup" aria-label="Protocole">
+        ${['SSH', 'Bureau à distance', 'Telnet', 'VNC', 'FTP / FTPS'].map((p, i) => `<button type="button" role="radio" aria-checked="${i === 0}">${p}</button>`).join('')}</div></div>
+      <details>
+        <summary>Options <span class="opt">facultatives : sinon demandées dans le terminal</span></summary>
+        <div class="opts">
+          <div class="row2">
+            <label class="fld">Identifiant <span class="opt">facultatif</span><input id="d-user" autocomplete="off" spellcheck="false" placeholder="demandé à la connexion"></label>
+            <label class="fld">Port<input id="d-port" inputmode="numeric" placeholder="22"></label>
+          </div>
+          <label class="fld">Mot de passe <span class="opt">facultatif</span><input id="d-pass" type="password" autocomplete="off" placeholder="demandé à la connexion"></label>
+          <label class="fld">Clé privée <span class="opt">facultatif</span><input placeholder="Vide = ~/.ssh/id_ed25519 ou agent"></label>
+          <label class="fld">Serveur de rebond <span class="opt">facultatif</span><input placeholder="Session SSH ou user@bastion"></label>
+        </div>
+      </details>
+    </div>
+    <footer><span class="muted">Rien n'est enregistré.</span>
+      <span style="display:flex;gap:8px"><button class="btn" type="button" id="d-cancel">Annuler</button><button class="btn primary" type="submit">Se connecter</button></span></footer>
+  </form></div>`;
+  const close = () => { $('overlay').innerHTML = ''; $('quick-btn').classList.remove('hot'); };
+  $('d-cancel').onclick = close;
+  $('back').addEventListener('click', (e) => { if (e.target.id === 'back') close(); });
+  $('d-proto').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    for (const x of $('d-proto').children) x.setAttribute('aria-checked', String(x === b));
+  });
+  $('dlg').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const m = $('d-addr').value.trim().match(ADDR); if (!m) { $('d-addr').focus(); return; }
+    const proto = [...$('d-proto').children].find((x) => x.getAttribute('aria-checked') === 'true').textContent;
+    close();
+    openTerminal({ host: m[2], port: $('d-port').value || m[3], user: $('d-user').value.trim() || m[1], password: $('d-pass').value, proto: proto === 'SSH' ? 'ssh' : proto.split(' ')[0].toLowerCase() });
+  });
+  $('d-addr').focus();
+}
+$('quick-btn').addEventListener('click', () => { $('quick-btn').classList.add('hot'); openDialog(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('overlay').innerHTML) { $('overlay').innerHTML = ''; $('quick-btn').classList.remove('hot'); } });
+
+/* Scénarios */
+function scenario(s) {
+  for (const b of document.querySelectorAll('[data-scn]')) b.setAttribute('aria-pressed', String(b.dataset.scn === s));
+  $('overlay').innerHTML = ''; term = null; welcome();
+  if (s === 'search' || s === 'reset') {
+    $('search').value = '10.0.0.12'; $('search').dispatchEvent(new Event('input')); $('search').focus();
+    if (s === 'reset') for (const b of document.querySelectorAll('[data-scn]')) b.setAttribute('aria-pressed', String(b.dataset.scn === 'search'));
+  } else if (s === 'dialog') {
+    $('search').value = ''; $('search').dispatchEvent(new Event('input')); $('quick-btn').classList.add('hot'); openDialog('10.0.0.12');
+  }
+}
+document.querySelector('.steps').addEventListener('click', (e) => { const b = e.target.closest('[data-scn]'); if (b) scenario(b.dataset.scn); });
+scenario('search');
+</script>

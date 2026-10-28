@@ -598,3 +598,11 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .ct-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); font-size: 13px; }
 .files-view { display: flex; flex-direction: column; position: relative; } .files-view > .files { flex: 1; min-height: 0; max-width: 1100px; width: 100%; margin: 0 auto; }
 .confirm-detail { display: block; padding: 10px 12px; background: var(--pop); border: 1px solid var(--line); border-radius: 6px; font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; word-break: break-all; user-select: all; }
+
+/* Fenêtre « Connexion rapide » : l'adresse d'abord, options repliées */
+.quick-dialog .quick-address { font-size: 15px; padding: 10px 12px; }
+.quick-options { border: 1px solid var(--line); border-radius: 8px; }
+.quick-options > summary { cursor: pointer; padding: 9px 12px; font-size: 13px; color: var(--text-2); }
+.quick-options[open] > summary { border-bottom: 1px solid var(--line); }
+.quick-options-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.quick-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px; }

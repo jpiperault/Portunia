@@ -270,8 +270,9 @@ export function looksLikeAddress(input: string): boolean {
 }
 
 /**
- * Connexion sans session enregistrée : protocole, adresse, identifiant et mot de passe
- * saisis à la main. Rien n'est enregistré ; `text` sert à l'historique (sans mot de passe).
+ * Connexion sans session enregistrée : seule l'adresse est obligatoire. Les options (identifiant,
+ * port, mot de passe, clé, rebond) sont facultatives et repliées : en SSH, ce qui manque est
+ * demandé dans le terminal. Rien n'est enregistré ; `text` sert à l'historique (sans mot de passe).
  */
 export function openQuickConnect(enabled: (protocol: string) => boolean, initial = ''): Promise<{ target: QuickTarget; text: string } | null> {
   return new Promise((resolve) => {
@@ -279,58 +280,87 @@ export function openQuickConnect(enabled: (protocol: string) => boolean, initial
     if (!choices.length) { resolve(null); return; }
     const first = splitTarget(initial);
     let protocol = choices[0];
-    const address = h('input', { type: 'text', required: true, spellcheck: 'false', autocomplete: 'off', placeholder: 'serveur.exemple.fr, 10.0.0.12 ou hôte:port', value: first ? `${first.host}${first.port ? `:${first.port}` : ''}` : initial });
-    const user = h('input', { type: 'text', spellcheck: 'false', autocomplete: 'off', value: first?.user ?? '' });
-    const pass = h('input', { type: 'password', autocomplete: 'off' });
-    const userField = h('label', { class: 'fld' }, 'Identifiant', user);
-    const passHint = h('span', { class: 'muted small' });
-    const passField = h('label', { class: 'fld' }, h('span', {}, 'Mot de passe ', passHint), pass);
+    const field = (attrs: Record<string, unknown>) => h('input', { type: 'text', spellcheck: 'false', autocomplete: 'off', ...attrs }) as HTMLInputElement;
+    const address = field({ required: true, class: 'quick-address', placeholder: '10.0.0.12, serveur.exemple.fr ou hôte:2222', value: first ? `${first.host}${first.port ? `:${first.port}` : ''}` : initial });
+    const user = field({ value: first?.user ?? '' });
+    const port = field({ inputmode: 'numeric' });
+    const pass = field({ type: 'password' });
+    const key = field({ placeholder: 'Vide = ~/.ssh/id_ed25519, id_ecdsa, id_rsa ou agent' });
+    const jump = field({ placeholder: 'Session SSH ou utilisateur@bastion:port' });
+    const optional = h('span', { class: 'muted small' }, ' facultatif');
+    const userField = h('label', { class: 'fld' }, h('span', {}, 'Identifiant', optional.cloneNode(true)), user);
+    const portField = h('label', { class: 'fld fld-port' }, 'Port', port);
+    const passField = h('label', { class: 'fld' }, h('span', {}, 'Mot de passe', optional.cloneNode(true)), pass);
+    const keyField = h('label', { class: 'fld' }, h('span', {}, 'Clé privée', optional.cloneNode(true)), key);
+    const jumpField = h('label', { class: 'fld' }, h('span', {}, 'Serveur de rebond', optional.cloneNode(true)), jump);
+    const optionsHint = h('span', { class: 'muted small' });
     const error = h('p', { class: 'form-error', role: 'alert' });
     const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Protocole' });
+    const DEFAULT_PORT: Record<string, string> = { ssh: '22', rdp: '3389', ftp: '21', vnc: '5900', telnet: '23' };
     const renderProtocol = () => {
       seg.replaceChildren(...choices.map((p) => h('button', {
         type: 'button', class: `seg-opt${p === protocol ? ' on' : ''}`, role: 'radio', 'aria-checked': String(p === protocol),
         onclick: () => { protocol = p; renderProtocol(); },
       }, p.label)));
+      const ssh = protocol.id === 'ssh';
       userField.hidden = !protocol.user;
       passField.hidden = !protocol.password;
-      passHint.textContent = protocol.id === 'ssh' ? '(vide = clé SSH ou agent)' : '';
+      keyField.hidden = jumpField.hidden = !ssh;
+      port.placeholder = DEFAULT_PORT[protocol.id] ?? '';
+      const ask = ssh ? 'Vide : demandé dans le terminal' : protocol.id === 'telnet' ? 'L’identifiant se tape dans le terminal' : 'Vide : demandé à la connexion';
+      user.placeholder = pass.placeholder = ask;
+      optionsHint.textContent = ssh || protocol.id === 'telnet' ? ' : sinon demandés dans le terminal' : ' : sinon demandés à la connexion';
     };
     renderProtocol();
+
+    const options = h('details', { class: 'quick-options' },
+      h('summary', {}, h('span', {}, 'Options', optionsHint)),
+      h('div', { class: 'quick-options-body' },
+        h('div', { class: 'quick-row' }, userField, portField),
+        passField, keyField, jumpField));
+    // Identifiant déjà connu (user@hôte tapé) : options ouvertes pour le voir.
+    if (user.value) (options as HTMLDetailsElement).open = true;
 
     let result: { target: QuickTarget; text: string } | null = null;
     const form = h('form', { method: 'dialog' },
       h('header', { class: 'dlg-head' }, h('h2', {}, 'Connexion rapide')),
       h('div', { class: 'dlg-body' },
-        seg,
         h('label', { class: 'fld' }, 'Adresse du serveur', address),
-        userField,
-        passField,
-        error,
-        h('p', { class: 'muted small', style: 'margin: 0' }, 'Rien n\'est enregistré : l\'identifiant et le mot de passe servent uniquement à cette connexion. Vous pourrez l\'enregistrer comme session depuis l\'onglet.')),
+        h('div', { class: 'fld' }, h('span', {}, 'Protocole'), seg),
+        options,
+        error),
       h('footer', { class: 'dlg-foot' },
+        h('span', { class: 'muted small grow' }, 'Rien n\'est enregistré.'),
         h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, 'Annuler'),
         h('button', { type: 'submit', class: 'btn primary' }, 'Se connecter')));
     form.addEventListener('submit', (e) => {
       const t = splitTarget(address.value);
-      const username = (t?.user ?? user.value).trim();
-      if (!t) { e.preventDefault(); error.textContent = 'Adresse non comprise. Exemples : 10.0.0.12, serveur.exemple.fr:2222.'; return; }
-      if (protocol.user && protocol.id !== 'rdp' && !username) { e.preventDefault(); error.textContent = 'Indiquez l\'identifiant.'; user.focus(); return; }
+      const p = port.value.trim();
+      if (!t) { e.preventDefault(); error.textContent = 'Adresse non comprise. Exemples : 10.0.0.12, serveur.exemple.fr:2222.'; address.focus(); return; }
+      if (p && !/^\d{1,5}$/.test(p)) { e.preventDefault(); error.textContent = 'Port : un nombre, par exemple 22.'; options.setAttribute('open', ''); port.focus(); return; }
+      const username = (protocol.user ? user.value.trim() : '') || t.user || '';
       const values: Record<string, unknown> = { host: t.host };
-      if (t.port) values.port = t.port;
-      if (protocol.user && username) values.username = username;
+      const finalPort = p ? Number(p) : t.port;
+      if (finalPort) values.port = finalPort;
+      if (username) values.username = username;
       if (protocol.password && pass.value) values.password = pass.value;
-      if (protocol.id === 'ssh') values.auth = pass.value ? 'password' : 'auto';
+      if (protocol.id === 'ssh') {
+        values.auth = pass.value ? 'password' : key.value.trim() ? 'key' : 'auto';
+        if (key.value.trim()) values.keyPath = key.value.trim();
+        if (jump.value.trim()) values.jump = jump.value.trim();
+      }
       if (protocol.id === 'rdp') values.client = 'tab';
       if (protocol.id === 'ftp') values.security = 'explicit';
-      const where = `${username && protocol.user ? `${username}@` : ''}${t.host}${t.port ? `:${t.port}` : ''}`;
-      const scheme = protocol.id === 'ftp' ? `ftps://${where}` : `${protocol.id} ${where}`;
-      result = { target: { protocol: protocol.id, name: where, values }, text: scheme };
+      const where = `${username ? `${username}@` : ''}${t.host}${finalPort ? `:${finalPort}` : ''}`;
+      const scheme = protocol.id === 'ftp' ? `ftps://${where}` : `${protocol.id} ${where}${values.jump ? ` -J ${values.jump}` : ''}`;
+      const name = `${where}${values.jump ? ` via ${values.jump}` : ''}`;
+      result = { target: { protocol: protocol.id, name, values }, text: protocol.id === 'ssh' && values.jump ? `ssh -J ${values.jump} ${where}` : scheme };
     });
-    const dialog = h('dialog', { class: 'dialog', 'aria-label': 'Connexion rapide' }, form);
+    const dialog = h('dialog', { class: 'dialog quick-dialog', 'aria-label': 'Connexion rapide' }, form);
     dialog.addEventListener('close', () => { dialog.remove(); resolve(result); });
     document.body.append(dialog);
     dialog.showModal();
-    (address.value ? (user.value ? pass : user) : address).focus();
+    address.focus();
+    address.select();
   });
 }

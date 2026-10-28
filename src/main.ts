@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, connectQuick, connectWith, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
@@ -576,6 +576,14 @@ function openQuick(target: QuickTarget) {
 async function quickConnect(initial = '') {
   const r = await openQuickConnect(extensionEnabled, initial);
   if (!r) return;
+  // Bureau à distance : pas de terminal pour taper les identifiants, on les demande ici.
+  const v = r.target.values;
+  if (r.target.protocol === 'rdp' && (!v.username || !v.password)) {
+    const cred = await askCredentials(r.target, 'Identifiants Windows du serveur (compte local ou DOMAINE\\utilisateur).');
+    if (!cred) return;
+    Object.assign(v, { username: cred.username, password: cred.password });
+    r.target.name = `${cred.username}@${r.target.name.replace(/^[^@]*@/, '')}`;
+  }
   rememberQuick(r.text);
   await openQuick(r.target);
 }
@@ -593,18 +601,48 @@ async function saveQuick(target: QuickTarget) {
   if (result.connect) await openSession(result.session);
 }
 
-/** Session SSH à laquelle il manque l'identifiant ou le mot de passe : ils seront demandés. */
-function missingCredentials(session: Session): { reason: string; passwordOptional: boolean } | null {
+/** Session SSH enregistrée sans utilisateur, ou sans mot de passe enregistré : saisie dans le terminal. */
+function needsTyping(session: Session): boolean {
   const v = session.values;
-  if (session.protocol !== 'ssh' || (typeof v.credential === 'string' && v.credential.trim())) return null;
-  const noUser = !String(v.username ?? '').trim();
-  const byPassword = v.auth === 'password';
-  const noPassword = byPassword && !session.secretKeys.includes('password');
-  if (!noUser && !noPassword) return null;
-  return {
-    reason: `Session « ${session.name} » : ${noUser ? 'identifiant' : 'mot de passe'} à saisir pour cette connexion.`,
-    passwordOptional: !byPassword,
+  if (session.protocol !== 'ssh' || (typeof v.credential === 'string' && v.credential.trim())) return false;
+  return !String(v.username ?? '').trim() || (v.auth === 'password' && !session.secretKeys.includes('password'));
+}
+
+/**
+ * Connexion SSH avec saisie dans le terminal, comme PuTTY : « login as: » si l'identifiant
+ * manque, puis le mot de passe (masqué) si la clé et l'agent sont refusés. Rien n'est enregistré :
+ * les réponses restent dans `typed` pour les reconnexions de cet onglet.
+ */
+async function sshLogin(tab: Tab, session: Session, typed: Record<string, unknown>, connect: () => Promise<ConnectResponse>, onUser: (user: string) => void): Promise<ConnectResponse> {
+  const term = tab.term!;
+  const v = { ...session.values, ...typed };
+  const host = `${v.host}${v.port && Number(v.port) !== 22 ? `:${v.port}` : ''}`;
+  const cancelled = () => new Error('Connexion annulée.');
+  if (!String(v.username ?? '').trim()) {
+    const user = (await term.ask('login as: '))?.trim();
+    if (!user) throw cancelled();
+    typed.username = user;
+    onUser(user);
+  }
+  const askPassword = async () => {
+    const pw = await term.ask(`${typed.username ?? v.username}@${host}'s password: `, true);
+    if (pw === null) throw cancelled();
+    Object.assign(typed, { password: pw, auth: 'password' });
   };
+  // Authentification par mot de passe sans mot de passe enregistré : demandé tout de suite.
+  if (v.auth === 'password' && !session.secretKeys.includes('password') && typed.password === undefined) await askPassword();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await connect();
+    } catch (e) {
+      const reason = errorText(e);
+      if (!/Authentification refusée/.test(reason) || reason.includes('Serveur de rebond') || attempt >= 4) throw e;
+      // Laisse s'afficher les messages en route (« Nouveau serveur mémorisé… ») avant la question.
+      await new Promise((r) => setTimeout(r, 80));
+      if (typed.password !== undefined) term.write('\x1b[31mAccès refusé.\x1b[0m\r\n');
+      await askPassword();
+    }
+  }
 }
 
 async function openSession(session: Session, quick?: QuickTarget) {
@@ -614,12 +652,21 @@ async function openSession(session: Session, quick?: QuickTarget) {
     if (!confirm(`L'extension « ${proto.name} » est désactivée. L'activer et ouvrir « ${session.name} » ?`)) return;
     setExtension(proto.id, true);
   }
-  // Identifiants saisis au lancement (session sans utilisateur ou sans mot de passe enregistré).
-  let typed: Record<string, unknown> | null = null;
-  const opener = (cols: number, rows: number, onEvent: (e: TermEvent) => void) => quick
+  // SSH : identifiant et mot de passe manquants saisis dans le terminal (connexion rapide,
+  // ou session enregistrée sans eux). `typed` garde les réponses pour les reconnexions.
+  const typed: Record<string, unknown> = quick ? quick.values : {};
+  const connectOnce = (cols: number, rows: number, onEvent: (e: TermEvent) => void) => quick
     ? connectQuick(quick.protocol, quick.name, quick.values, cols, rows, onEvent)
-    : typed ? connectWith(session.id, typed, session.name, cols, rows, onEvent)
+    : Object.keys(typed).length ? connectWith(session.id, typed, session.name, cols, rows, onEvent)
     : api.connect(session.id, cols, rows, onEvent);
+  const typing = session.protocol === 'ssh' && (quick ? true : needsTyping(session));
+  const opener = !typing ? connectOnce : (cols: number, rows: number, onEvent: (e: TermEvent) => void) =>
+    sshLogin(tab, session, typed, () => connectOnce(cols, rows, onEvent), (user) => {
+      if (!quick) return;
+      quick.name = `${user}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}${quick.values.jump ? ` via ${quick.values.jump}` : ''}`;
+      tab.title = quick.name;
+      renderTabs();
+    });
 
   // Bureau à distance (client Windows) et web s'ouvrent dans leur propre fenêtre.
   if (proto.view === 'desktop' || proto.view === 'web') {
@@ -634,12 +681,6 @@ async function openSession(session: Session, quick?: QuickTarget) {
 
   const existing = !quick && state.tabs.find((t) => t.sessionId === session.id && !t.remoteCommand);
   if (existing) return activate(existing.id);
-  const missing = quick ? null : missingCredentials(session);
-  if (missing) {
-    const cred = await askCredentials(quickSession({ protocol: session.protocol, name: session.name, values: session.values }), missing.reason, missing.passwordOptional);
-    if (!cred) return;
-    typed = { username: cred.username, ...(cred.password ? { password: cred.password, auth: 'password' } : {}) };
-  }
 
   const termEl = h('div', { class: 'term-view' });
   const paneHead = h('div', { class: 'pane-head', hidden: true });
@@ -657,22 +698,12 @@ async function openSession(session: Session, quick?: QuickTarget) {
   const onState = (s: TermState, reason?: string) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
-    // Connexion rapide SSH refusée (pas de clé, pas d'agent) : on demande les identifiants et on réessaie.
-    const refused = quick?.protocol === 'ssh' ? /Authentification refusée|Champ requis manquant : Utilisateur/ : quick?.protocol === 'ftp' ? /Identifiants refusés/ : null;
-    if (s === 'closed' && quick && refused && reason && !reason.includes('Serveur de rebond') && refused.test(reason)) {
+    // Connexion rapide FTP refusée : identifiants demandés dans une fenêtre (pas de terminal), puis nouvel essai.
+    // (En SSH, ils sont saisis dans le terminal : voir sshLogin.)
+    if (s === 'closed' && quick?.protocol === 'ftp' && reason && /Identifiants refusés/.test(reason)) {
       askCredentials(quick, reason).then((cred) => {
         if (!cred || !state.tabs.includes(tab)) return;
-        Object.assign(quick.values, { username: cred.username, password: cred.password }, quick.protocol === 'ssh' ? { auth: 'password' } : {});
-        if (quick.protocol === 'ssh') quick.name = `${cred.username}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}${quick.values.jump ? ` via ${quick.values.jump}` : ''}`;
-        tab.title = quick.name;
-        reconnect(tab);
-      });
-    }
-    // Identifiants saisis au lancement refusés : on les redemande.
-    if (s === 'closed' && typed && reason && /Authentification refusée/.test(reason) && !reason.includes('Serveur de rebond')) {
-      askCredentials(quickSession({ protocol: session.protocol, name: session.name, values: { ...session.values, username: typed.username } }), reason, missing?.passwordOptional).then((cred) => {
-        if (!cred || !state.tabs.includes(tab)) return;
-        typed = { username: cred.username, ...(cred.password ? { password: cred.password, auth: 'password' } : {}) };
+        Object.assign(quick.values, { username: cred.username, password: cred.password });
         reconnect(tab);
       });
     }

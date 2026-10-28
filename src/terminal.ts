@@ -59,6 +59,51 @@ export class TerminalView {
   private connecting = false;
   /** Renvoie true si la saisie a été prise en charge ailleurs (saisie multiple). */
   inputHook?: (data: string) => boolean;
+  /** Question en cours dans le terminal (identifiant, mot de passe), avant la connexion. */
+  private question: { text: string; secret: boolean; resolve: (answer: string | null) => void } | null = null;
+
+  /**
+   * Pose une question dans le terminal, comme PuTTY (« login as: », mot de passe masqué).
+   * Renvoie la réponse, ou null si l'utilisateur annule (Ctrl+C, Échap).
+   */
+  ask(prompt: string, secret = false): Promise<string | null> {
+    this.question?.resolve(null);
+    this.term.write(prompt);
+    this.term.focus();
+    return new Promise((resolve) => { this.question = { text: '', secret, resolve }; });
+  }
+
+  /** Écrit un message dans le terminal (hors session : avant la connexion). */
+  write(text: string) {
+    this.term.write(text);
+  }
+
+  private answerKey(data: string) {
+    const q = this.question!;
+    for (const ch of data) {
+      if (ch === '\r' || ch === '\n') {
+        this.question = null;
+        this.term.write('\r\n');
+        q.resolve(q.text);
+        return;
+      }
+      if (ch === '\x03' || ch === '\x1b') {
+        this.question = null;
+        this.term.write('^C\r\n');
+        q.resolve(null);
+        return;
+      }
+      if (ch === '\x7f' || ch === '\b') {
+        if (q.text) {
+          q.text = [...q.text].slice(0, -1).join('');
+          if (!q.secret) this.term.write('\b \b');
+        }
+      } else if (ch >= ' ') {
+        q.text += ch;
+        if (!q.secret) this.term.write(ch);
+      }
+    }
+  }
 
   /** Envoie du texte à la session comme s'il était tapé (sans passer par la saisie multiple). */
   send(data: string) {
@@ -110,6 +155,7 @@ export class TerminalView {
     });
 
     this.term.onData((data) => {
+      if (this.question) return this.answerKey(data);
       if (!this.connectionId && this.connecting) {
         this.pending.push(data);
         return;
@@ -377,6 +423,7 @@ export class TerminalView {
 
   dispose() {
     this.disposed = true;
+    this.question?.resolve(null);
     this.clearTimer();
     if (this.connectionId) api.disconnect(this.connectionId).catch(() => {});
     this.connectionId = null;
