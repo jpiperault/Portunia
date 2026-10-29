@@ -142,6 +142,8 @@ export class AuditPlayer {
   private subtitles = true;
   private playing = false;
   private frame = 0;
+  private baseFont = 14;
+  private resizer!: ResizeObserver;
   private lastTick = 0;
   private skipTimer = 0;
   private current = -1;
@@ -178,9 +180,13 @@ export class AuditPlayer {
     }
 
     const s = settings();
-    this.term = new Terminal({ fontFamily: fontStack(s), fontSize: s.fontSize, cols: parsed.cols, rows: parsed.rows, disableStdin: true, cursorBlink: false, theme: terminalTheme(), scrollback: 2000 });
+    this.baseFont = s.fontSize;
+    // Sans historique : comme une vidéo, on voit l'écran de la session, sans barre de défilement.
+    this.term = new Terminal({ fontFamily: fontStack(s), fontSize: s.fontSize, cols: parsed.cols, rows: parsed.rows, disableStdin: true, cursorBlink: false, theme: terminalTheme(), scrollback: 0 });
     this.build();
     this.term.open(this.screen.querySelector('.ap-term') as HTMLElement);
+    this.resizer = new ResizeObserver(() => this.fit());
+    this.resizer.observe(this.screen);
     this.seek(Math.max(0, (opts.start ?? 0) - 0.5));
     if (opts.start == null) this.toggle();
   }
@@ -405,7 +411,10 @@ export class AuditPlayer {
       else if (e.k === 'r') {
         const [c, r] = e.d.split('x').map(Number);
         if (out) { this.term.write(out); out = ''; }
-        if (c >= 10 && r >= 3) this.term.resize(c, r);
+        if (c >= 10 && r >= 3 && (c !== this.term.cols || r !== this.term.rows)) {
+          this.term.resize(c, r);
+          requestAnimationFrame(() => this.fit());
+        }
       }
     }
     if (out) this.term.write(out);
@@ -477,10 +486,29 @@ export class AuditPlayer {
     return [...head, ...body, ''].join('\n');
   }
 
+  /**
+   * Fait tenir l'écran enregistré (ses colonnes et ses lignes) dans la place disponible,
+   * comme une vidéo : la police rétrécit au besoin, sans dépasser la taille habituelle.
+   */
+  private fit(again = true) {
+    const screen = this.screen.querySelector('.xterm-screen') as HTMLElement | null;
+    const box = this.screen.querySelector('.ap-term') as HTMLElement;
+    if (!screen || !box.clientWidth || !box.clientHeight || !screen.offsetWidth || !screen.offsetHeight) return;
+    const ratio = Math.min(box.clientWidth / screen.offsetWidth, box.clientHeight / screen.offsetHeight);
+    const current = this.term.options.fontSize ?? this.baseFont;
+    const size = Math.max(5, Math.min(this.baseFont, Math.floor(current * ratio * 2) / 2));
+    if (size !== current) {
+      this.term.options.fontSize = size;
+      // La largeur d'un caractère ne suit pas exactement la police : un second passage ajuste.
+      if (again) requestAnimationFrame(() => this.fit(false));
+    }
+  }
+
   dispose() {
     this.playing = false;
     cancelAnimationFrame(this.frame);
     clearTimeout(this.skipTimer);
+    this.resizer.disconnect();
     this.term.dispose();
   }
 }
