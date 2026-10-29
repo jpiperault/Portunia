@@ -1,0 +1,703 @@
+<title>Relecture des sessions Heimdia</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette fidèle à Portunia (tokens de src/styles.css, sombre par défaut) + questionnaire.
+   Mise en page : onglets Maquette / Questions ; la maquette montre l'onglet d'administration du bastion. */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --sub-bg: rgb(0 0 0 / .78); --sub-key: #3a3d46; --hatch: rgb(255 255 255 / .07);
+  --shadow: rgb(0 0 0 / .45);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --sub-bg: rgb(0 0 0 / .78); --sub-key: #3a3d46; --hatch: rgb(0 0 0 / .07);
+  --shadow: rgb(20 30 50 / .18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --sub-bg: rgb(0 0 0 / .78); --sub-key: #3a3d46; --hatch: rgb(0 0 0 / .07);
+  --shadow: rgb(20 30 50 / .18); color-scheme: light; }
+:root[data-theme="dark"] {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --sub-bg: rgb(0 0 0 / .78); --sub-key: #3a3d46; --hatch: rgb(255 255 255 / .07);
+  --shadow: rgb(0 0 0 / .45); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.intro { display: flex; flex-direction: column; gap: 4px; }
+.intro h1 { font-size: 21px; font-weight: 650; }
+.intro p { max-width: 75ch; color: var(--text-2); }
+
+.maintabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.maintabs button { border: 0; background: none; padding: 9px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.maintabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.maintabs .count { font-size: 11px; background: var(--chip-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+.steps { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+
+/* Fenêtre Portunia */
+.win { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 560px; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+@media (max-width: 820px) { .win { grid-template-columns: minmax(0, 1fr); } .side { border-right: 0 !important; border-bottom: 1px solid var(--line); flex-direction: row !important; flex-wrap: wrap; } .side .sec { width: 100%; } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sec { padding: 6px 4px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.nrow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); }
+.nrow.sel { background: var(--accent-soft); color: var(--text); }
+.nrow .c { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; color: var(--muted); border-radius: 6px 6px 0 0; white-space: nowrap; }
+.tab.on { background: var(--work); color: var(--text); border: 1px solid var(--line); border-bottom-color: var(--work); margin-bottom: -1px; }
+.content { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 8px 12px; border-radius: 8px; font-size: 13px; background: var(--accent-soft); color: var(--text-2); }
+.banner b { color: var(--text); }
+.btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 7px 14px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.input { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--text); min-width: 0; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.filters .input { flex: 0 1 auto; }
+.filters .grow { flex: 1 1 220px; }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.pill.vault { background: var(--warn-soft); color: var(--warn); }
+.pill.rec { background: var(--danger-soft); color: var(--danger); }
+.pill.jump { border: 1px solid var(--line-strong); color: var(--muted); }
+.pill.keys { background: var(--accent-soft); color: var(--accent); }
+.pill.live { background: var(--ok-soft); color: var(--ok); }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 720px; }
+th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--text-2); font-variant-numeric: tabular-nums; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tr.hl td { background: var(--hover); }
+td .hit { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+td .hit mark { background: var(--warn-soft); color: var(--warn); border-radius: 3px; padding: 0 2px; }
+
+/* Lecteur */
+.ph { display: flex; gap: 10px 16px; align-items: center; flex-wrap: wrap; }
+.ph h2 { font-size: 16px; display: flex; gap: 8px; align-items: center; }
+.ph .meta { font-size: 12px; color: var(--muted); }
+.ph .right { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.seal { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.player { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 12px; }
+@media (max-width: 980px) { .player { grid-template-columns: minmax(0, 1fr); } }
+.screen { position: relative; background: var(--term); border-radius: 8px 8px 0 0; overflow: hidden; min-height: 330px; }
+.term { color: var(--term-text); font: 13px/1.55 var(--mono); padding: 14px 16px 78px; white-space: pre; overflow: hidden; min-height: 330px; }
+.term .p { color: var(--term-host); }
+.term .x { color: #ff8f8f; }
+.term .k { color: var(--term-ok); }
+.term .d { color: var(--term-dim); }
+.cursor { display: inline-block; width: 8px; height: 15px; background: var(--term-text); vertical-align: -2px; }
+.wm { position: absolute; top: 10px; right: 12px; font: 11px var(--ui); color: rgb(255 255 255 / .28); pointer-events: none; text-align: right; }
+.bigplay { position: absolute; inset: 0; display: grid; place-items: center; background: none; border: 0; }
+.bigplay span { width: 62px; height: 62px; border-radius: 50%; background: rgb(0 0 0 / .55); display: grid; place-items: center; color: #fff; font-size: 24px; padding-left: 4px; }
+.skipnote { position: absolute; top: 10px; left: 12px; font: 12px var(--ui); color: #fff; background: rgb(0 0 0 / .6); padding: 3px 9px; border-radius: 999px; }
+.subs { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: calc(100% - 32px); display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px 4px;
+  background: var(--sub-bg); color: #fff; font: 15px/1.5 var(--mono); padding: 6px 12px; border-radius: 6px; }
+.subs .who { font: 600 11px var(--ui); color: #9fc2ff; margin-right: 6px; letter-spacing: .04em; }
+.subs .kk { font: 600 11px var(--ui); background: var(--sub-key); border: 1px solid #555a66; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; color: #fff; }
+.subs .kk.del { color: #ffb4b4; }
+.subs .msk { font: 600 11px var(--ui); color: #ffd28a; background: rgb(240 163 91 / .22); border-radius: 4px; padding: 1px 6px; }
+.subs .typed { white-space: pre; }
+.subs .caret { display: inline-block; width: 2px; height: 16px; background: #fff; vertical-align: -3px; }
+.subs.fade { opacity: .55; }
+
+.controls { background: var(--panel); border: 1px solid var(--line-soft); border-top: 0; border-radius: 0 0 8px 8px; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+.track { position: relative; height: 28px; cursor: pointer; touch-action: none; }
+.track .rail { position: absolute; left: 0; right: 0; top: 11px; height: 6px; border-radius: 3px; background: var(--chip-bg); }
+.track .done { position: absolute; left: 0; top: 11px; height: 6px; border-radius: 3px; background: var(--accent); }
+.track .idle { position: absolute; top: 8px; height: 12px; background: repeating-linear-gradient(135deg, var(--hatch) 0 3px, transparent 3px 6px); border: 1px dashed var(--line-strong); border-radius: 3px; }
+.track .mk { position: absolute; top: 3px; width: 3px; height: 8px; border-radius: 2px; background: var(--muted); transform: translateX(-1px); }
+.track .mk.w { background: var(--warn); }
+.track .mk.x { background: var(--danger); height: 10px; top: 1px; }
+.track .knob { position: absolute; top: 7px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transform: translateX(-7px); box-shadow: 0 1px 4px var(--shadow); }
+.cbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ib { border: 1px solid transparent; background: none; border-radius: 6px; padding: 4px 8px; font-size: 13px; color: var(--text-2); min-width: 32px; }
+.ib:hover { background: var(--hover); }
+.ib[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+.ib:disabled { opacity: .4; cursor: not-allowed; }
+.time { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--muted); padding: 0 6px; }
+.cbar .sp { margin-left: auto; }
+.cc { font: 700 10px var(--ui); border: 1.5px solid currentColor; border-radius: 3px; padding: 0 3px; }
+
+.side2 { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel); display: flex; flex-direction: column; min-width: 0; max-height: 470px; }
+.side2 .st { display: flex; border-bottom: 1px solid var(--line); }
+.side2 .st button { flex: 1; border: 0; background: none; padding: 8px; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.side2 .st button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.side2 .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow: auto; min-height: 0; }
+.klist { display: flex; flex-direction: column; }
+.krow { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 6px; padding: 5px 6px; border-radius: 6px; font-size: 12px; border: 0; background: none; text-align: left; width: 100%; }
+.krow:hover { background: var(--hover); }
+.krow.now { background: var(--accent-soft); }
+.krow .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.krow code { font-family: var(--mono); color: var(--text-2); overflow-wrap: anywhere; }
+.krow .kk { font: 600 10px var(--ui); background: var(--chip-bg); border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 4px; color: var(--text-2); }
+.krow .msk { font: 600 10px var(--ui); background: var(--warn-soft); color: var(--warn); border-radius: 3px; padding: 0 4px; }
+.krow.w code { color: var(--warn); }
+.krow.x code { color: var(--danger); }
+.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 10px; font-size: 12.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.kv code { font-family: var(--mono); font-size: 11.5px; }
+.note { font-size: 12px; color: var(--muted); padding: 6px 8px; border-radius: 6px; background: var(--chip-bg); }
+
+.explain { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 760px) { .explain { grid-template-columns: minmax(0, 1fr); } }
+.explain h2 { font-size: 15px; margin-bottom: 6px; }
+.explain ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); max-width: 65ch; }
+.scope { border-left: 3px solid var(--accent); padding-left: 12px; }
+
+/* Questionnaire */
+.qbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.qbar .prog { flex: 1 1 200px; height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; min-width: 120px; }
+.qbar .prog i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.save { font-size: 12px; color: var(--muted); }
+.save.ok { color: var(--ok); }
+.save.err { color: var(--danger); }
+.qsec { display: flex; flex-direction: column; gap: 12px; }
+.qsec > h2 { font-size: 16px; padding-top: 10px; }
+.q { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.q .qt { font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.q .qn { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+.q .why { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 11px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 100%; }
+.opt input { margin: 2px 0 0; accent-color: var(--accent); }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.opt .rec { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 4px; }
+.q textarea { min-height: 38px; resize: vertical; width: 100%; }
+@media (prefers-reduced-motion: reduce) { .qbar .prog i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="label">Maquette · Heimdia, étape 3 · audit</p>
+    <h1>Relire une session comme une vidéo, avec la frappe en sous-titres</h1>
+    <p>Lecteur réservé aux rôles auditeur et administrateur, dans l'onglet d'administration du bastion. Le lecteur ci-dessous fonctionne : lancez la lecture, cliquez sur la barre ou sur une commande. L'onglet Questions rassemble les choix à faire avant de coder ; les réponses s'enregistrent toutes seules.</p>
+  </div>
+
+  <div class="maintabs" role="tablist">
+    <button role="tab" id="tab-maq" aria-selected="true" aria-controls="pane-maq">Maquette</button>
+    <button role="tab" id="tab-q" aria-selected="false" aria-controls="pane-q">Questions <span class="count" id="qcount">0 / 0</span></button>
+  </div>
+
+  <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
+    <div class="steps" aria-label="Écrans">
+      <button data-s="list" aria-pressed="true">1. Liste des sessions</button>
+      <button data-s="player" aria-pressed="false">2. Lecteur avec frappe</button>
+      <button data-s="nokeys" aria-pressed="false">3. Session sans frappe enregistrée</button>
+    </div>
+
+    <div class="win">
+      <nav class="side" aria-label="Administration">
+        <div class="sec">Heimdia · Production</div>
+        <div class="nrow">Serveurs et coffre <span class="c">24</span></div>
+        <div class="nrow">Comptes <span class="c">12</span></div>
+        <div class="nrow">Groupes <span class="c">4</span></div>
+        <div class="nrow">Règles <span class="c">6</span></div>
+        <div class="nrow">Journal</div>
+        <div class="nrow sel">Sessions <span class="c">1 en cours</span></div>
+        <div class="nrow">Réglages</div>
+      </nav>
+      <div class="main">
+        <div class="tabs">
+          <div class="tab">srv-web-01</div>
+          <div class="tab on" id="wintab">Administrer · Heimdia</div>
+        </div>
+        <div class="content">
+          <!-- 1. Liste -->
+          <div data-screen="list" class="wrap" style="max-width:none;gap:12px">
+            <div class="banner"><span><b>Relecture réservée aux auditeurs et aux administrateurs.</b> Chaque relecture est inscrite au journal du bastion.</span></div>
+            <div class="filters">
+              <input class="input grow" id="f-text" value="rm -rf" aria-label="Rechercher dans la frappe et l'écran">
+              <select class="input" id="f-who" aria-label="Compte"><option>Tous les comptes</option><option>julien</option><option>presta-acme</option></select>
+              <select class="input" id="f-srv" aria-label="Serveur"><option>Tous les serveurs</option><option>srv-web-01</option></select>
+              <select class="input" id="f-when" aria-label="Période"><option>7 derniers jours</option><option>Aujourd'hui</option><option>30 derniers jours</option></select>
+              <label class="small muted" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="f-keys" checked> Avec frappe</label>
+            </div>
+            <div class="tbl-wrap">
+              <table>
+                <thead><tr><th>Début</th><th>Durée</th><th>Compte</th><th>Serveur</th><th>Mode</th><th>Trouvé</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td>29/10 14:02</td><td>3 min 24</td><td>julien</td><td>srv-web-01</td><td><span class="pill vault">coffre</span> <span class="pill keys">frappe</span></td><td><span class="hit"><span id="hit-t">01:58</span> <mark>rm -rf</mark> /var/www/cache/*</span></td><td><button class="btn sm primary" data-go="player">▶ Relire</button></td></tr>
+                  <tr><td>29/10 11:37</td><td>18 min</td><td>presta-acme</td><td>srv-db-02</td><td><span class="pill rec">enregistré</span></td><td><span class="hit">12:04 <mark>rm -rf</mark> /tmp/dump-old</span></td><td><button class="btn sm" data-go="nokeys">▶ Relire</button></td></tr>
+                  <tr><td>28/10 17:42</td><td>42 min</td><td>julien</td><td>srv-web-01</td><td><span class="pill vault">coffre</span> <span class="pill keys">frappe</span></td><td><span class="hit">31:10 sudo <mark>rm -rf</mark> releases/2026-09*</span></td><td><button class="btn sm" data-go="player">▶ Relire</button></td></tr>
+                  <tr class="hl"><td>29/10 18:31</td><td><span class="pill live">en cours</span></td><td>marc</td><td>fw-01</td><td><span class="pill vault">coffre</span></td><td class="muted">—</td><td><button class="btn sm" disabled title="Vue en direct : à décider (questions)">Regarder</button></td></tr>
+                  <tr><td>28/10 09:15</td><td>1 h 02</td><td>presta-acme</td><td>sw-core</td><td><span class="pill jump">rebond</span></td><td class="muted">non enregistrée</td><td></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="small muted">La recherche porte sur la frappe et sur le texte affiché ; « Trouvé » donne le moment exact, et « Relire » démarre à cet endroit.</p>
+          </div>
+
+          <!-- 2 et 3. Lecteur -->
+          <div data-screen="player" class="wrap" style="max-width:none;gap:10px" hidden>
+            <div class="ph">
+              <h2>srv-web-01 <span class="pill vault">coffre</span></h2>
+              <span class="meta" id="pmeta">julien · compte deploy · 29/10/2026 14:02:11 · 3 min 24</span>
+              <span class="seal" title="Empreinte SHA-256 du fichier vérifiée avec la clé publique du bastion">✓ Signature vérifiée</span>
+              <div class="right"><button class="btn sm">Exporter</button><button class="btn sm">Copier le lien</button></div>
+            </div>
+            <div class="player">
+              <div>
+                <div class="screen" id="screen">
+                  <div class="term" id="term" aria-live="off"></div>
+                  <div class="wm">Consulté par claire (auditrice)<br>29/10/2026 18:40</div>
+                  <div class="skipnote" id="skipnote" hidden></div>
+                  <div class="subs" id="subs" hidden></div>
+                  <button class="bigplay" id="bigplay" aria-label="Lire"><span>▶</span></button>
+                </div>
+                <div class="controls">
+                  <div class="track" id="track" role="slider" tabindex="0" aria-label="Position dans la session" aria-valuemin="0">
+                    <div class="rail"></div><div class="done" id="done"></div><div class="knob" id="knob"></div>
+                  </div>
+                  <div class="cbar">
+                    <button class="ib" id="b-play" aria-label="Lire">▶</button>
+                    <button class="ib" id="b-back" aria-label="Reculer de 10 secondes">−10 s</button>
+                    <button class="ib" id="b-fwd" aria-label="Avancer de 10 secondes">+10 s</button>
+                    <span class="time" id="time">00:00 / 00:00</span>
+                    <span class="sp"></span>
+                    <button class="ib" id="b-skip" aria-pressed="true" title="Passer les moments où rien ne se passe">Sauter les pauses</button>
+                    <select class="input" id="b-speed" aria-label="Vitesse" style="padding:3px 6px;font-size:12px"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select>
+                    <button class="ib" id="b-cc" aria-pressed="true" title="Sous-titres : la frappe"><span class="cc">CC</span> Frappe</button>
+                    <button class="ib" aria-label="Plein écran">⛶</button>
+                  </div>
+                </div>
+              </div>
+              <aside class="side2">
+                <div class="st" role="tablist">
+                  <button role="tab" id="st-k" aria-selected="true">Frappe</button>
+                  <button role="tab" id="st-i" aria-selected="false">Informations</button>
+                </div>
+                <div class="body" id="sb-k">
+                  <input class="input" id="ksearch" placeholder="Rechercher dans la frappe" aria-label="Rechercher dans la frappe">
+                  <div class="note" id="knote" hidden></div>
+                  <div class="klist" id="klist"></div>
+                </div>
+                <div class="body" id="sb-i" hidden>
+                  <dl class="kv">
+                    <dt>Compte</dt><dd>julien (Julien P.)</dd>
+                    <dt>Serveur</dt><dd>srv-web-01 · 10.0.2.5:22</dd>
+                    <dt>Mode</dt><dd>coffre, compte <code>deploy</code> fourni par le bastion</dd>
+                    <dt>Depuis</dt><dd>Portunia 0.42 · 10.0.0.4</dd>
+                    <dt>Règle</dt><dd>Exploitation web (frappe enregistrée)</dd>
+                    <dt>Début</dt><dd>29/10/2026 14:02:11</dd>
+                    <dt>Fin</dt><dd>29/10/2026 14:05:35 · déconnexion normale</dd>
+                    <dt>Fichier</dt><dd>48 Ko · <code>2026/10/9f3c…e1.cast</code></dd>
+                    <dt>Empreinte</dt><dd><code>SHA-256 7A:1F:C2:…:09:B4</code></dd>
+                    <dt>Signature</dt><dd style="color:var(--ok)">vérifiée avec la clé du bastion</dd>
+                  </dl>
+                  <div class="note">Relu 2 fois : claire (29/10 18:40), julien (29/10 15:10).</div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="explain" id="explain"></div>
+  </section>
+
+  <section id="pane-q" role="tabpanel" aria-labelledby="tab-q" hidden>
+    <div class="qbar">
+      <span class="small"><b id="qdone">0</b> réponse(s) sur <span id="qtotal">0</span></span>
+      <div class="prog"><i id="qprog"></i></div>
+      <span class="save" id="save">Les réponses s'enregistrent toutes seules.</span>
+      <button class="btn sm" id="copy">Copier mes réponses</button>
+    </div>
+    <p class="small muted" style="padding-block:10px">« conseillé » = mon choix par défaut si vous ne répondez pas.</p>
+    <div id="qlist" class="wrap" style="max-width:none"></div>
+  </section>
+</div>
+
+<script>
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+// ---------- Session d'exemple (format asciicast : sortie « o », frappe « i ») ----------
+const EV = [];
+let T = 0, seed = 7;
+const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+const PROMPT = '\u0001deploy@srv-web-01:~$\u0002 ';
+const out = (d, dt = 0) => { T += dt; EV.push({ t: T, k: 'o', d }); };
+const type = (str, o = {}) => { for (const ch of str) { T += (0.08 + rnd() * 0.14); EV.push({ t: T, k: 'i', d: ch, s: !!o.secret }); if (!o.secret) EV.push({ t: T + 0.01, k: 'o', d: ch }); } };
+const key = (d, echo, dt = 0.35) => { T += dt; EV.push({ t: T, k: 'i', d }); if (echo != null) EV.push({ t: T + 0.01, k: 'o', d: echo }); };
+out('\u0003Heimdia : session enregistrée (frappe comprise).\u0004\n');
+out('Linux srv-web-01 6.12.0-amd64 Debian GNU/Linux 13\n\u0003Dernière connexion : mar. 28 oct. 17:42 depuis 10.0.0.4\u0004\n', 0.3);
+out(PROMPT, 0.3);
+T += 1.4; type('sudo systemctl restart nginx'); key('\r', '\n');
+out('[sudo] Mot de passe de deploy : ', 0.25); T += 1; type('Prod-2026!x', { secret: true }); key('\r', '\n');
+out(PROMPT, 1.6);
+T += 1.2; type('systemctl status nginx --no-pager'); key('\r', '\n');
+out('\u0005●\u0004 nginx.service - A high performance web server\n     Loaded: loaded (/usr/lib/systemd/system/nginx.service; enabled)\n     Active: \u0005active (running)\u0004 since Wed 2026-10-29 14:02:19 CET; 6s ago\n   Main PID: 41822 (nginx)\n      Tasks: 5 (limit: 4652)\n', 0.4);
+out(PROMPT, 0.1);
+T += 96;
+type('tial'); key('\x7f', '\b', 0.5); key('\x7f', '\b', 0.15); key('\x7f', '\b', 0.15); type('ail -n 3 /var/log/nginx/error.log'); key('\r', '\n');
+out('2026/10/29 14:03:58 [warn] 41823#41823: *912 an upstream response is buffered to a temporary file\n2026/10/29 14:04:02 [warn] 41823#41823: *915 an upstream response is buffered to a temporary file\n\u0006/var/cache/nginx/proxy_temp: No space left on device\u0004\n', 0.3);
+out(PROMPT, 0.1);
+T += 3.5; type('rm -rf /var/www/cache/*'); key('\r', '\n'); out(PROMPT, 0.8);
+T += 2.5; type('ping -c 100 10.0.2.1'); key('\r', '\n');
+out('PING 10.0.2.1 (10.0.2.1) 56(84) bytes of data.\n', 0.2);
+for (let i = 1; i <= 4; i++) out('64 bytes from 10.0.2.1: icmp_seq=' + i + ' ttl=64 time=0.' + (300 + i * 37) + ' ms\n', 1);
+key('\x03', '^C\n', 0.6);
+out('--- 10.0.2.1 ping statistics ---\n4 packets transmitted, 4 received, 0% packet loss, time 3004ms\n', 0.05);
+out(PROMPT, 0.05);
+T += 2; type('cd /etc/ngi'); key('\t', 'nx/', 0.4); key('\r', '\n');
+out('\u0001deploy@srv-web-01:/etc/nginx$\u0002 ', 0.1);
+T += 1.8; type('exit'); key('\r', '\n'); out('déconnexion\n', 0.2);
+EV.sort((a, b) => a.t - b.t);
+const DUR = T + 1.5;
+
+// Pauses (plus de 5 s sans rien)
+const IDLE = [];
+for (let i = 1; i < EV.length; i++) if (EV[i].t - EV[i - 1].t > 5) IDLE.push([EV[i - 1].t + 0.6, EV[i].t - 0.6]);
+
+// Lignes de frappe : de la première touche à Entrée (ou Ctrl+C)
+const KEYNAME = { '\r': 'Entrée', '\t': 'Tab', '\x03': 'Ctrl+C', '\x7f': '⌫' };
+const LINES = [];
+{ let cur = null;
+  for (const e of EV) { if (e.k !== 'i') continue;
+    if (!cur) cur = { t: e.t, keys: [] };
+    cur.keys.push(e);
+    if (e.d === '\r' || e.d === '\x03') { cur.end = e.t; LINES.push(cur); cur = null; } } }
+for (const l of LINES) {
+  let txt = ''; for (const k of l.keys) { if (k.d === '\x7f') txt = txt.slice(0, -1); else if (!KEYNAME[k.d] && !k.s) txt += k.d; }
+  l.text = txt; l.secret = l.keys.some((k) => k.s);
+  l.level = /rm -rf/.test(txt) ? 'x' : /^sudo\b/.test(txt) || l.secret ? 'w' : '';
+}
+
+// ---------- Rendu ----------
+const termEl = document.getElementById('term'), subsEl = document.getElementById('subs');
+function renderTerm(t) {
+  let buf = '';
+  for (const e of EV) { if (e.t > t) break; if (e.k !== 'o') continue;
+    for (const ch of e.d) { if (ch === '\b') buf = buf.slice(0, -1); else buf += ch; } }
+  const lines = buf.split('\n').slice(-15);
+  termEl.replaceChildren();
+  lines.forEach((ln, i) => {
+    let mode = null, span = null;
+    const flush = (s, cls) => { if (!s) return; const n = cls ? el('span', cls, s) : document.createTextNode(s); termEl.append(n); };
+    let acc = '', cls = '';
+    for (const ch of ln) {
+      const open = { '\u0001': 'p', '\u0003': 'd', '\u0005': 'k', '\u0006': 'x' }[ch];
+      if (open) { flush(acc, cls); acc = ''; cls = open; continue; }
+      if (ch === '\u0002' || ch === '\u0004') { flush(acc, cls); acc = ''; cls = ''; continue; }
+      acc += ch;
+    }
+    flush(acc, cls);
+    if (i === lines.length - 1) termEl.append(el('span', 'cursor'));
+    else termEl.append('\n');
+  });
+}
+function chip(parent, cls, text) { parent.append(el('span', cls, text)); }
+function renderSubs(t) {
+  if (!state.cc || state.nokeys) { subsEl.hidden = true; return; }
+  let line = null, done = false;
+  for (const l of LINES) { if (l.t <= t) { line = l; done = l.end <= t; } }
+  if (!line || (done && t - line.end > 2.5)) { subsEl.hidden = true; return; }
+  subsEl.hidden = false; subsEl.classList.toggle('fade', done);
+  subsEl.replaceChildren(el('span', 'who', 'JULIEN'));
+  let typed = '', secretCount = 0;
+  const flushTyped = () => { if (typed) { subsEl.append(el('span', 'typed', typed)); typed = ''; } };
+  const flushSecret = () => { if (secretCount) { subsEl.append(el('span', 'typed', '•'.repeat(secretCount))); chip(subsEl, 'msk', 'saisie sans écho, masquée'); secretCount = 0; } };
+  for (const k of line.keys) {
+    if (k.t > t) break;
+    if (k.s) { flushTyped(); secretCount++; continue; }
+    flushSecret();
+    if (KEYNAME[k.d]) { flushTyped(); chip(subsEl, 'kk' + (k.d === '\x7f' ? ' del' : ''), KEYNAME[k.d]); }
+    else typed += k.d;
+  }
+  flushTyped(); flushSecret();
+  if (!done) subsEl.append(el('span', 'caret'));
+}
+const klist = document.getElementById('klist');
+function renderList() {
+  const q = document.getElementById('ksearch').value.trim().toLowerCase();
+  klist.replaceChildren();
+  for (const l of LINES) {
+    if (state.nokeys && (l.secret || l.keys[l.keys.length - 1].d === '\x03')) continue;
+    const label = state.nokeys ? l.text : l.text;
+    if (q && !label.toLowerCase().includes(q)) continue;
+    const b = el('button', 'krow' + (l.level ? ' ' + (state.nokeys && l.level === 'w' && !/^sudo/.test(l.text) ? '' : l.level) : ''));
+    b.dataset.t = l.t;
+    b.append(el('span', 't', fmt(l.t)));
+    const c = el('code');
+    if (state.nokeys) c.textContent = l.text;
+    else {
+      let typed = '';
+      const flush = () => { if (typed) { c.append(typed); typed = ''; } };
+      let sc = 0;
+      for (const k of l.keys) {
+        if (k.s) { sc++; continue; }
+        if (sc) { flush(); c.append('•'.repeat(sc) + ' '); c.append(el('span', 'msk', 'masqué')); c.append(' '); sc = 0; }
+        if (KEYNAME[k.d]) { flush(); c.append(' '); c.append(el('span', 'kk', KEYNAME[k.d])); c.append(' '); }
+        else typed += k.d;
+      }
+      flush();
+    }
+    b.append(c);
+    b.addEventListener('click', () => { seek(Math.max(0, l.t - 0.4)); });
+    klist.append(b);
+  }
+  markNow();
+}
+function markNow() {
+  let now = null;
+  klist.querySelectorAll('.krow').forEach((r) => { if (+r.dataset.t <= state.t) now = r; r.classList.remove('now'); });
+  if (now) now.classList.add('now');
+}
+
+// ---------- Barre de temps ----------
+const track = document.getElementById('track');
+function buildTrack() {
+  track.querySelectorAll('.idle, .mk').forEach((n) => n.remove());
+  for (const [a, b] of IDLE) { const d = el('div', 'idle'); d.style.left = (100 * a / DUR) + '%'; d.style.width = (100 * (b - a) / DUR) + '%'; d.title = 'Pause de ' + Math.round(b - a) + ' s'; track.insertBefore(d, track.querySelector('.done')); }
+  for (const l of LINES) {
+    if (state.nokeys && l.secret) continue;
+    const m = el('div', 'mk' + (l.level ? ' ' + l.level : '')); m.style.left = (100 * l.t / DUR) + '%'; m.title = fmt(l.t) + '  ' + (l.text || '(saisie masquée)');
+    track.append(m);
+  }
+  track.setAttribute('aria-valuemax', String(Math.round(DUR)));
+}
+function fmt(s) { s = Math.max(0, Math.floor(s)); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+
+// ---------- Lecture ----------
+const state = { t: 0, playing: false, speed: 2, skip: true, cc: true, nokeys: false };
+let last = 0, skipTimer = null;
+function draw() {
+  renderTerm(state.t); renderSubs(state.t); markNow();
+  const p = 100 * state.t / DUR;
+  document.getElementById('done').style.width = p + '%';
+  document.getElementById('knob').style.left = p + '%';
+  document.getElementById('time').textContent = fmt(state.t) + ' / ' + fmt(DUR);
+  track.setAttribute('aria-valuenow', String(Math.round(state.t)));
+  document.getElementById('bigplay').hidden = state.playing || state.t > 0;
+  const pb = document.getElementById('b-play'); pb.textContent = state.playing ? '❚❚' : '▶'; pb.setAttribute('aria-label', state.playing ? 'Pause' : 'Lire');
+}
+function seek(t) { state.t = Math.min(Math.max(0, t), DUR); draw(); }
+function frame(now) {
+  if (!state.playing) return;
+  const dt = (now - last) / 1000; last = now;
+  let t = state.t + dt * state.speed;
+  if (state.skip) for (const [a, b] of IDLE) if (t > a && t < b) {
+    t = b; const n = document.getElementById('skipnote'); n.textContent = '⏭ Pause de ' + Math.round(b - a) + ' s sautée'; n.hidden = false;
+    clearTimeout(skipTimer); skipTimer = setTimeout(() => { n.hidden = true; }, 1800);
+  }
+  if (t >= DUR) { t = DUR; state.playing = false; }
+  state.t = t; draw();
+  if (state.playing) requestAnimationFrame(frame);
+}
+function play(on) {
+  state.playing = on ?? !state.playing;
+  if (state.playing) { if (state.t >= DUR) state.t = 0; last = performance.now(); requestAnimationFrame(frame); }
+  draw();
+}
+document.getElementById('b-play').addEventListener('click', () => play());
+document.getElementById('bigplay').addEventListener('click', () => play(true));
+document.getElementById('b-back').addEventListener('click', () => seek(state.t - 10));
+document.getElementById('b-fwd').addEventListener('click', () => seek(state.t + 10));
+document.getElementById('b-speed').addEventListener('change', (e) => { state.speed = +e.target.value; });
+document.getElementById('b-skip').addEventListener('click', (e) => { state.skip = !state.skip; e.currentTarget.setAttribute('aria-pressed', String(state.skip)); });
+document.getElementById('b-cc').addEventListener('click', (e) => { state.cc = !state.cc; e.currentTarget.setAttribute('aria-pressed', String(state.cc)); draw(); });
+document.getElementById('ksearch').addEventListener('input', renderList);
+function fromPointer(e) { const r = track.getBoundingClientRect(); seek(DUR * Math.min(1, Math.max(0, (e.clientX - r.left) / r.width))); }
+track.addEventListener('pointerdown', (e) => { track.setPointerCapture(e.pointerId); fromPointer(e); });
+track.addEventListener('pointermove', (e) => { if (track.hasPointerCapture(e.pointerId)) fromPointer(e); });
+track.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { seek(state.t - 5); e.preventDefault(); } if (e.key === 'ArrowRight') { seek(state.t + 5); e.preventDefault(); } });
+document.getElementById('screen').addEventListener('click', (e) => { if (e.target.closest('.bigplay')) return; play(); });
+document.addEventListener('keydown', (e) => { if (e.key === ' ' && !document.getElementById('pane-maq').hidden && !e.target.closest('input, textarea, select, button')) { e.preventDefault(); play(); } });
+function sideTab(k) {
+  document.getElementById('st-k').setAttribute('aria-selected', String(k)); document.getElementById('st-i').setAttribute('aria-selected', String(!k));
+  document.getElementById('sb-k').hidden = !k; document.getElementById('sb-i').hidden = k;
+}
+document.getElementById('st-k').addEventListener('click', () => sideTab(true));
+document.getElementById('st-i').addEventListener('click', () => sideTab(false));
+
+// ---------- Écrans ----------
+const TEXT = {
+  list: { t: 'Liste des sessions', p: ['Nouvel écran « Sessions » de l\'administration : filtres par compte, serveur et période.', 'La recherche porte sur la frappe et sur le texte affiché. « Trouvé » montre l\'extrait et son moment ; « Relire » démarre juste avant.', 'Les sessions en mode rebond ne sont pas enregistrées : elles apparaissent sans bouton.', 'Une session en cours se signale ; la regarder en direct est une question à trancher.'], s: ['Visible pour les rôles auditeur et administrateur seulement. Un compte « utilisateur » ne voit pas l\'entrée Sessions.', 'Chaque ouverture du lecteur est inscrite au journal : « enregistrement.consulte ».'] },
+  player: { t: 'Lecteur', p: ['Comme une vidéo : lecture, pause (barre d\'espace), ±10 s, vitesse 1× à 8×, plein écran.', 'Les pauses de plus de 5 s sont hachurées sur la barre et sautées pendant la lecture.', 'Sous-titres « CC Frappe » : ce que la personne tape, touches spéciales comprises (Entrée, Tab, ⌫, Ctrl+C).', 'Une saisie qui ne s\'affiche pas à l\'écran (mot de passe sudo) est remplacée par des points.', 'Repères sur la barre : chaque commande, en orange sudo et saisies masquées, en rouge les commandes sensibles.', 'Le panneau Frappe liste les lignes tapées : un clic y saute.'], s: ['Signature du fichier vérifiée à l\'ouverture ; un fichier modifié affiche un bandeau rouge et reste lisible.', 'Filigrane avec le nom de la personne qui regarde (dissuade les captures).', 'Le fichier est lu depuis le bastion, sans copie sur le PC (sauf « Exporter »).'] },
+  nokeys: { t: 'Session sans frappe enregistrée', p: ['La règle n\'enregistrait que l\'écran : pas de sous-titres, le bouton CC est grisé.', 'Le panneau liste les commandes repérées à l\'écran (le texte qui suit l\'invite). Les touches effacées, Ctrl+C et les saisies masquées n\'y figurent pas.'], s: ['Activer la frappe se fait dans la règle (case « Enregistrer la frappe »).'] },
+};
+const explain = document.getElementById('explain');
+function show(s) {
+  document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+  document.querySelector('[data-screen="list"]').hidden = s !== 'list';
+  document.querySelector('[data-screen="player"]').hidden = s === 'list';
+  document.getElementById('wintab').textContent = s === 'list' ? 'Administrer · Heimdia' : (s === 'nokeys' ? '▶ srv-db-02 · 29/10 11:37' : '▶ srv-web-01 · 29/10 14:02');
+  state.nokeys = s === 'nokeys';
+  const cc = document.getElementById('b-cc'); cc.disabled = state.nokeys; cc.title = state.nokeys ? 'Frappe non enregistrée pour cette session' : 'Sous-titres : la frappe';
+  const note = document.getElementById('knote'); note.hidden = !state.nokeys;
+  note.textContent = 'Frappe non enregistrée par la règle. Commandes repérées à l\'écran :';
+  document.getElementById('st-k').textContent = state.nokeys ? 'Commandes' : 'Frappe';
+  document.getElementById('ksearch').placeholder = state.nokeys ? 'Rechercher une commande' : 'Rechercher dans la frappe';
+  document.getElementById('pmeta').textContent = state.nokeys ? 'presta-acme · identifiants tapés par la personne · 29/10/2026 11:37:02 · 18 min (exemple rejoué avec la même session)' : 'julien · compte deploy · 29/10/2026 14:02:11 · ' + fmt(DUR).replace(':', ' min ');
+  if (s !== 'list') { buildTrack(); renderList(); if (s === 'player' && state.t === 0) seek(0); }
+  if (s === 'list') play(false);
+  const x = TEXT[s];
+  const left = el('div'); left.append(el('h2', null, x.t));
+  const ul = el('ul'); x.p.forEach((t) => ul.append(el('li', null, t))); left.append(ul);
+  const right = el('div', 'scope'); right.append(el('h2', null, 'À noter'));
+  const ul2 = el('ul'); x.s.forEach((t) => ul2.append(el('li', null, t))); right.append(ul2);
+  explain.replaceChildren(left, right);
+}
+document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+const RM = LINES.find((l) => /rm -rf/.test(l.text));
+document.getElementById('hit-t').textContent = fmt(RM.t);
+document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { show(b.dataset.go); seek(b.dataset.go === 'player' ? RM.t - 0.4 : 0); }));
+buildTrack(); renderList(); draw(); show('list');
+
+function tab(which) {
+  const q = which === 'q';
+  document.getElementById('tab-maq').setAttribute('aria-selected', String(!q));
+  document.getElementById('tab-q').setAttribute('aria-selected', String(q));
+  document.getElementById('pane-maq').hidden = q;
+  document.getElementById('pane-q').hidden = !q;
+  if (q) play(false);
+}
+document.getElementById('tab-maq').addEventListener('click', () => tab('maq'));
+document.getElementById('tab-q').addEventListener('click', () => tab('q'));
+if (location.hash === '#questions') tab('q');
+
+// ---------- Questions ----------
+const SECTIONS = [
+  { title: 'Accès', qs: [
+    { id: 'qui', t: 'Qui peut relire les sessions ?', why: 'Un périmètre par groupe de serveurs sert surtout aux prestataires et à la console maître (étape 5).', type: 'one', o: ['Auditeurs et administrateurs, toutes les sessions', 'Auditeurs et administrateurs, limités à certains groupes de serveurs', 'Administrateurs seulement'], rec: 0 },
+    { id: 'journal', t: 'Inscrire chaque relecture au journal d\'audit ?', why: 'Qui a regardé quelle session, et quand. Les enregistrements contiennent parfois des données sensibles.', type: 'one', o: ['Oui', 'Non'], rec: 0 },
+    { id: 'filigrane', t: 'Filigrane avec le nom de la personne qui regarde ?', why: 'Dissuade les captures d\'écran ; n\'apparaît pas dans un export .cast.', type: 'one', o: ['Oui', 'Non'], rec: 0 },
+    { id: 'edition', t: 'Dans quelle édition de Portunia ?', why: 'L\'administration du bastion est déjà réservée à Équipes.', type: 'one', o: ['Équipes, comme l\'administration', 'Toutes les éditions pour les rôles auditeur et administrateur'], rec: 0 },
+  ]},
+  { title: 'Frappe en sous-titres', qs: [
+    { id: 'masque', t: 'Saisies sans écho (mot de passe tapé à une invite) : que montrer ?', why: 'Heimdia voit qu\'une frappe n\'est pas réaffichée à l\'écran : c\'est presque toujours un mot de passe.', type: 'one', o: ['Toujours masquées (•••), pour tout le monde', 'Masquées, révélables par un administrateur (inscrit au journal)', 'Affichées en clair'], rec: 0 },
+    { id: 'masque-ou', t: 'Où masquer ces saisies ?', why: 'Masquer dès l\'enregistrement : le mot de passe n\'est jamais écrit sur le disque du bastion, mais il ne pourra jamais être révélé (incompatible avec la 2ᵉ option ci-dessus).', type: 'one', o: ['Dès l\'enregistrement', 'À l\'affichage seulement'], rec: 0 },
+    { id: 'style', t: 'Présentation des sous-titres', why: 'En bas de l\'image comme une vidéo, ils peuvent cacher les dernières lignes ; une barre sous le terminal ne cache rien mais éloigne le regard.', type: 'one', o: ['En bas de l\'image, comme une vidéo', 'Barre sous le terminal', 'Les deux, au choix dans le lecteur'], rec: 0 },
+    { id: 'sans', t: 'Sessions enregistrées sans la frappe', why: 'On peut repérer les commandes à l\'écran (texte après l\'invite), sans les touches effacées ni les saisies masquées.', type: 'one', o: ['Commandes repérées à l\'écran dans le panneau, pas de sous-titres', 'Commandes repérées aussi en sous-titres', 'Rien'], rec: 0 },
+    { id: 'defaut', t: 'Enregistrer la frappe par défaut dans une nouvelle règle ?', why: 'Aujourd\'hui la case est décochée par défaut.', type: 'one', o: ['Non, au choix de l\'administrateur', 'Oui'], rec: 0 },
+  ]},
+  { title: 'Lecteur', qs: [
+    { id: 'pauses', t: 'Pauses', why: 'Une session de 2 h contient souvent 1 h 30 sans rien.', type: 'one', o: ['Sauter les pauses de plus de 5 s par défaut', 'Lecture en temps réel par défaut'], rec: 0 },
+    { id: 'reperes', t: 'Repères sur la barre de temps', why: 'Les commandes sensibles viendraient d\'une liste réglable dans les réglages du bastion.', type: 'many', o: ['Chaque commande', 'Commandes sensibles (sudo, rm -rf, liste réglable)', 'Ctrl+C et erreurs affichées', 'Changements de taille de fenêtre'], rec: [0, 1, 2] },
+    { id: 'recherche', t: 'Recherche', why: 'Chercher dans le texte affiché demande d\'indexer chaque enregistrement à sa fermeture (quelques Mo de plus par Go).', type: 'one', o: ['Frappe et texte affiché, depuis la liste des sessions', 'Frappe seulement', 'Plus tard'], rec: 0 },
+    { id: 'export', t: 'Exporter', why: 'Le .cast signé sert de preuve et se relit avec asciinema ; une vidéo MP4 se partage mais perd la signature.', type: 'many', o: ['Fichier .cast signé', 'Transcription texte horodatée (frappe et commandes)', 'Vidéo MP4', 'Rien'], rec: [0, 1] },
+    { id: 'ou', t: 'Où s\'ouvre le lecteur ?', why: 'Un onglet comme les sessions ; une fenêtre à part pour un second écran.', type: 'one', o: ['Onglet de Portunia', 'Onglet, détachable dans une fenêtre', 'Fenêtre séparée'], rec: 1 },
+    { id: 'direct', t: 'Vue en direct d\'une session en cours', why: 'Prévue à l\'étape 3 : même lecteur, collé au présent, avec un bouton pour couper la session.', type: 'one', o: ['Dans ce lecteur, avec « Couper la session »', 'Plus tard, après la relecture'], rec: 0 },
+  ]},
+];
+const ALL = SECTIONS.flatMap((s) => s.qs);
+let answers = {};
+let db = null, saveTimer = null;
+const saveEl = document.getElementById('save');
+function setSave(text, cls) { saveEl.textContent = text; saveEl.className = 'save' + (cls ? ' ' + cls : ''); }
+function answered(q) { const a = answers[q.id]; return !!a && ((Array.isArray(a.v) ? a.v.length : a.v != null) || !!(a.note || '').trim()); }
+function render() {
+  const list = document.getElementById('qlist');
+  list.replaceChildren();
+  let n = 0;
+  for (const sec of SECTIONS) {
+    const box = el('div', 'qsec'); box.append(el('h2', null, sec.title));
+    for (const q of sec.qs) {
+      n++;
+      const card = el('div', 'q');
+      const head = el('div', 'qt'); head.append(el('span', 'qn', String(n)), el('span', null, q.t));
+      card.append(head, el('p', 'why', q.why));
+      const opts = el('div', 'opts');
+      const cur = answers[q.id] || {};
+      q.o.forEach((label, i) => {
+        const lab = el('label', 'opt');
+        const inp = document.createElement('input');
+        inp.type = q.type === 'many' ? 'checkbox' : 'radio'; inp.name = 'q-' + q.id; inp.id = 'q-' + q.id + '-' + i;
+        inp.checked = q.type === 'many' ? (cur.v || []).includes(i) : cur.v === i;
+        inp.addEventListener('change', () => {
+          const a = answers[q.id] || {};
+          if (q.type === 'many') { const set = new Set(a.v || []); inp.checked ? set.add(i) : set.delete(i); a.v = [...set].sort((x, y) => x - y); } else a.v = i;
+          answers[q.id] = a; changed();
+        });
+        const span = el('span', null, label);
+        if (Array.isArray(q.rec) ? q.rec.includes(i) : q.rec === i) span.append(el('span', 'rec', 'conseillé'));
+        lab.append(inp, span); opts.append(lab);
+      });
+      const note = document.createElement('textarea');
+      note.className = 'input'; note.id = 'note-' + q.id; note.rows = 1; note.placeholder = 'Précision (facultatif)'; note.value = cur.note || '';
+      note.addEventListener('input', () => { const a = answers[q.id] || {}; a.note = note.value; answers[q.id] = a; changed(); });
+      card.append(opts, note); box.append(card);
+    }
+    list.append(box);
+  }
+  progress();
+}
+function progress() {
+  const done = ALL.filter(answered).length;
+  document.getElementById('qdone').textContent = done;
+  document.getElementById('qtotal').textContent = ALL.length;
+  document.getElementById('qcount').textContent = done + ' / ' + ALL.length;
+  document.getElementById('qprog').style.width = (100 * done / ALL.length) + '%';
+}
+function changed() {
+  progress();
+  try { localStorage.setItem('heimdia-relecture', JSON.stringify(answers)); } catch {}
+  clearTimeout(saveTimer);
+  if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
+}
+async function save() {
+  try { await db.doc('questionnaire/relecture').set({ reponses: answers, misAJour: new Date().toISOString() }); setSave('Enregistré. Claude peut lire vos réponses.', 'ok'); }
+  catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
+}
+function summary() {
+  const lines = ['Réponses Heimdia : relecture des sessions']; let n = 0;
+  for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
+  return lines.join('\n');
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = summary();
+  try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
+});
+try { answers = JSON.parse(localStorage.getItem('heimdia-relecture') || '{}') || {}; } catch { answers = {}; }
+render();
+(async () => {
+  const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;
+  if (!api) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  db = api;
+  try {
+    const snap = await db.doc('questionnaire/relecture').get();
+    if (snap.exists) {
+      const stored = (snap.data() || {}).reponses || {};
+      answers = Object.assign({}, stored, answers); render();
+      if (JSON.stringify(stored) !== JSON.stringify(answers)) save(); else setSave('Enregistré. Claude peut lire vos réponses.', 'ok');
+    } else if (Object.keys(answers).length) save();
+  } catch { setSave('Lecture impossible : vos réponses restent dans ce navigateur.', 'err'); }
+})();
+</script>
