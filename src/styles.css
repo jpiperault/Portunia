@@ -624,6 +624,7 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .badge.mode-coffre { background: var(--warn-soft); color: var(--warn); }
 .badge.mode-enregistre { background: rgb(255 123 123 / .14); color: var(--danger); }
 .badge.mode-rebond { background: var(--chip-bg); color: var(--text-2); }
+.badge.proto-rdp { background: rgb(91 155 255 / .14); color: var(--accent); margin-right: 4px; }
 .badge-heimdia { background: var(--warn-soft); color: var(--warn); }
 
 /* Fenêtres de l'extension */

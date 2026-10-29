@@ -304,6 +304,8 @@ export interface BastionServer {
   nom: string;
   dossier: string;
   mode: 'coffre' | 'enregistre' | 'rebond';
+  /** Absent sur un bastion antérieur à la 0.6 : SSH. */
+  protocole?: 'ssh' | 'rdp';
   hote: string;
   port: number;
   compte: string | null;

@@ -301,6 +301,40 @@ const HANDSHAKE: Duration = Duration::from_secs(330);
 /// Rebonds enchaînés au plus (bastion → bastion → serveur).
 const MAX_HOPS: usize = 3;
 
+/// Tunnel vers `host:port` à travers le serveur de rebond `jumpHost` des valeurs (bastion
+/// Heimdia, avec son jeton), pour un autre moteur que SSH : Bureau à distance.
+/// Renvoie le port local, sur 127.0.0.1, qui accepte une seule connexion (celle du moteur).
+pub fn local_tunnel(ctx: &ConnectContext, host: &str, port: u16) -> Result<u16> {
+    let Some(Value::Object(jump)) = ctx.values.get("jumpHost") else {
+        bail!("Serveur de rebond manquant");
+    };
+    let mut hop = ctx.clone();
+    hop.values = jump.clone().into_iter().collect();
+    let via = hop.str("host").unwrap_or_default();
+    let host = host.to_string();
+    tauri::async_runtime::block_on(async move {
+        let (bastion, earlier) = session(&hop, 1, None).await.with_context(|| format!("Serveur de rebond {via}"))?;
+        // Canal ouvert tout de suite : un refus (règle, serveur injoignable) s'affiche à l'ouverture.
+        let channel = bastion
+            .channel_open_direct_tcpip(host.clone(), port as u32, "127.0.0.1", 0)
+            .await
+            .with_context(|| format!("{via} n'a pas pu joindre {host}:{port}"))?;
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
+        let local = listener.local_addr()?.port();
+        tauri::async_runtime::spawn(async move {
+            // Les connexions SSH (bastion et rebonds précédents) vivent autant que le tunnel.
+            let _hops = (earlier, &bastion);
+            if let Ok(Ok((mut socket, _))) = tokio::time::timeout(Duration::from_secs(60), listener.accept()).await {
+                let _ = socket.set_nodelay(true);
+                let mut stream = channel.into_stream();
+                let _ = tokio::io::copy_bidirectional(&mut socket, &mut stream).await;
+            }
+            let _ = bastion.disconnect(Disconnect::ByApplication, "", "fr").await;
+        });
+        Ok(local)
+    })
+}
+
 /// Connexion authentifiée, directe ou à travers le serveur de rebond `jumpHost`
 /// (valeurs complètes d'une autre session, préparées par le cœur).
 fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>) -> Pin<Box<dyn Future<Output = Result<(Handle, Hops)>> + Send + 'a>> {

@@ -25,6 +25,8 @@ export interface BastionHost {
   openAdmin(b: Bastion): void;
   openAudit(b: Bastion): void;
   allowsAdmin(): boolean;
+  /** Extension de protocole activée (Bureau à distance pour les serveurs RDP). */
+  protocolEnabled(id: string): boolean;
   filter(): string;
 }
 
@@ -191,16 +193,26 @@ export class BastionPanel {
   }
 
   private renderServer(b: Bastion, s: BastionServer, depth: number): HTMLElement {
-    const open = () => (b.connected ? this.host.openServer(b, s) : this.reconnect(b.id).then((ok) => ok && this.host.openServer(b, s)));
-    const command = `ssh -p ${b.sshPort} ${b.login}%${s.nom}@${b.host}`;
+    const rdp = s.protocole === 'rdp';
+    // Sans l'extension Bureau à distance, le serveur reste visible mais ne s'ouvre pas.
+    const missing = rdp && !this.host.protocolEnabled('rdp');
+    const open = () => {
+      if (missing) return this.host.toast('Activez l’extension Bureau à distance (Extensions) pour ouvrir ce serveur', 'error');
+      return b.connected ? this.host.openServer(b, s) : this.reconnect(b.id).then((ok) => ok && this.host.openServer(b, s));
+    };
+    const command = rdp ? `${s.hote}:${s.port}` : `ssh -p ${b.sshPort} ${b.login}%${s.nom}@${b.host}`;
     const menu = (): (MenuItem | 'separator')[] => [
       { label: 'Ouvrir', icon: 'play', action: open },
-      { label: 'Copier la commande ssh', icon: 'copy', action: () => navigator.clipboard.writeText(command) },
+      rdp
+        ? { label: 'Copier l\'adresse du serveur', icon: 'copy', action: () => navigator.clipboard.writeText(command) }
+        : { label: 'Copier la commande ssh', icon: 'copy', action: () => navigator.clipboard.writeText(command) },
     ];
-    const row = h('div', { class: `tree-row${b.connected ? '' : ' disabled'}` },
-      h('button', { class: 'tree-item session', style: `padding-left: ${16 + depth * 16}px`, title: `${MODE_TITLE[s.mode]}\n${command}`, onclick: open },
+    const title = missing ? 'Activez l’extension Bureau à distance pour ouvrir ce serveur' : `${rdp ? 'Bureau à distance · ' : ''}${MODE_TITLE[s.mode]}\n${command}`;
+    const row = h('div', { class: `tree-row${b.connected && !missing ? '' : ' disabled'}` },
+      h('button', { class: 'tree-item session', style: `padding-left: ${16 + depth * 16}px`, title, onclick: open },
         h('span', { class: `dot${b.connected ? ' on' : ''}` }),
         h('span', { class: 'grow ellipsis' }, s.nom),
+        rdp ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null,
         h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode])));
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu()); });
     return row;
@@ -485,7 +497,18 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
     const secretKey = h('textarea', { id: 't-secret-key', class: 'input', rows: 5, spellcheck: 'false', placeholder: '-----BEGIN OPENSSH PRIVATE KEY-----' }) as HTMLTextAreaElement;
     const passField = field('Mot de passe actuel du compte', secretPass, 'utilisé une seule fois');
     const keyField = field('Clé privée (sans phrase de passe)', secretKey);
+    const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', 'Bureau à distance (RDP)']], t?.protocole ?? 'ssh');
+    const rdpNote = h('p', { class: 'muted small', hidden: true }, 'Bureau à distance : mode rebond pour l\'instant. Le bastion relaie la connexion chiffrée sans la lire ; l\'utilisateur tape ses identifiants Windows à chaque ouverture. Les modes coffre et enregistré arrivent.');
+    // Port par défaut du protocole, tant que l'administrateur ne l'a pas changé.
+    proto.addEventListener('change', () => {
+      if (['22', '3389', ''].includes(port.value.trim())) port.value = proto.value === 'rdp' ? '3389' : '22';
+      if (proto.value === 'rdp') mode.value = 'rebond';
+      sync();
+    });
     const sync = () => {
+      const rdp = proto.value === 'rdp';
+      for (const o of mode.options) o.disabled = rdp && o.value !== 'rebond';
+      rdpNote.hidden = !rdp;
       const vault = mode.value === 'coffre';
       secretKind.closest('label')!.hidden = !vault;
       passField.hidden = !vault || !['generer', 'mot_de_passe'].includes(secretKind.value);
@@ -495,9 +518,10 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
     mode.addEventListener('change', sync);
     secretKind.addEventListener('change', sync);
     const body = [
+      field('Protocole', proto),
       h('div', { class: 'row2' }, field('Nom', nom, 'sans espace'), field('Dossier', dossier)),
       h('div', { class: 'quick-row' }, field('Adresse', hote), field('Port', port)),
-      field('Mode', mode), field('Compte sur le serveur', compte, 'obligatoire en mode coffre'),
+      field('Mode', mode), rdpNote, field('Compte sur le serveur', compte, 'obligatoire en mode coffre ; en Bureau à distance : DOMAINE\\compte, proposé à l\'ouverture'),
       field('Secret du coffre', secretKind), passField, keyField,
       h('p', { class: 'muted small' }, 'Le secret est chiffré par le bastion et ne se relit jamais. « Générer » crée une clé, l\'installe avec le mot de passe donné une seule fois, puis vérifie qu\'elle fonctionne.'),
     ];
@@ -507,7 +531,10 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       const secret = kind === 'generer' ? { type: 'generer', mot_de_passe: secretPass.value }
         : kind === 'mot_de_passe' ? { type: 'mot_de_passe', valeur: secretPass.value }
         : kind === 'cle' ? { type: 'cle', valeur: secretKey.value } : undefined;
-      const payload = { nom: nom.value.trim(), dossier: dossier.value.trim(), hote: hote.value.trim(), port: Number(port.value) || 22, mode: mode.value, compte: compte.value.trim() || null, secret };
+      const payload = {
+        nom: nom.value.trim(), dossier: dossier.value.trim(), hote: hote.value.trim(), port: Number(port.value) || (proto.value === 'rdp' ? 3389 : 22),
+        mode: mode.value, compte: compte.value.trim() || null, secret, protocole: proto.value,
+      };
       await (t ? call('PUT', `/admin/cibles/${t.id}`, payload) : call('POST', '/admin/cibles', payload));
       host.toast(t ? 'Serveur modifié' : 'Serveur ajouté');
     });
@@ -518,7 +545,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       const { cibles } = await call<{ cibles: any[] }>('GET', '/admin/cibles');
       const rows = cibles.map((t) => h('tr', {},
         h('td', {}, h('strong', {}, t.nom)), h('td', {}, t.dossier), h('td', {}, h('code', {}, `${t.hote}:${t.port}`)),
-        h('td', {}, h('span', { class: `badge mode-${t.mode}` }, MODE_LABEL[t.mode as BastionServer['mode']])), h('td', {}, t.compte ?? '—'),
+        h('td', {}, t.protocole === 'rdp' ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null, h('span', { class: `badge mode-${t.mode}` }, MODE_LABEL[t.mode as BastionServer['mode']])), h('td', {}, t.compte ?? '—'),
         h('td', {}, t.secret === 'key' ? 'Clé SSH' : t.secret === 'password' ? 'Mot de passe' : '—'),
         h('td', { title: t.empreinte ?? '' }, t.empreinte ? 'connue' : 'à la 1ʳᵉ connexion'),
         actions(small('Modifier', () => targetDialog(t)),

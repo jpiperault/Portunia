@@ -430,6 +430,15 @@ pub async fn bastion_connect(
     .collect();
     let mut values: HashMap<String, Value> = HashMap::new();
     let name = format!("{server} · {}", b.name);
+    if t["protocole"].as_str() == Some("rdp") {
+        // Bureau à distance en rebond : tunnel par le bastion, identifiants Windows de bout en bout.
+        values.insert("host".into(), t["hote"].clone());
+        values.insert("port".into(), t["port"].clone());
+        values.insert("client".into(), json!("tab"));
+        values.insert("jumpHost".into(), Value::Object(bastion_values));
+        values.extend(extra.into_iter().filter(|(k, _)| ["username", "password"].contains(&k.as_str())));
+        return start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await;
+    }
     if t["mode"].as_str() == Some("rebond") {
         // De bout en bout : le bastion relaie, l'authentification va au serveur.
         values.insert("host".into(), t["hote"].clone());

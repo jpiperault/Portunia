@@ -87,6 +87,12 @@ fn split_user(raw: &str) -> (String, String) {
 fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     let host = ctx.require("host", "Hôte")?;
     let port = ctx.port(3389)?;
+    // Serveur derrière un bastion Heimdia (rebond) : le moteur passe par un tunnel SSH local,
+    // l'authentification Windows reste de bout en bout.
+    let (host, port) = match ctx.values.get("jumpHost") {
+        Some(Value::Object(_)) => ("127.0.0.1".to_string(), super::ssh::local_tunnel(ctx, &host, port)?),
+        _ => (host, port),
+    };
     let (domain, username) = split_user(&ctx.str("username").unwrap_or_default());
     let password = ctx.raw("password").unwrap_or_default();
     let helper = helper_path().ok_or_else(|| {

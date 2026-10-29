@@ -196,12 +196,14 @@ const bastionPanel = new BastionPanel($('bastions'), {
   },
   openAdmin: (b) => openBastionAdmin(b),
   openAudit: (b) => openBastionAudit(b),
+  protocolEnabled: (id) => extensionEnabled(id),
   allowsAdmin: () => allows('bastionAdmin'),
   filter: () => state.filter,
 });
 
 /** Serveur d'un bastion : session SSH par le bastion, avec un jeton à usage unique par connexion. */
 function openBastionServer(b: Bastion, s: BastionServer) {
+  if (s.protocole === 'rdp') return openBastionDesktop(b, s);
   const rebond = s.mode === 'rebond';
   const session: Session = {
     id: '', name: `${s.nom} · ${b.name}`, folder: '', protocol: 'ssh', tags: [], secretKeys: [],
@@ -218,6 +220,34 @@ function openBastionServer(b: Bastion, s: BastionServer) {
     }
   };
   return openSession(session, undefined, { connect, typing: rebond });
+}
+
+/**
+ * Serveur Bureau à distance d'un bastion (mode rebond) : onglet RDP habituel, à travers un
+ * tunnel par le bastion. Le serveur Windows authentifie lui-même : identifiants demandés à
+ * chaque ouverture, jamais enregistrés.
+ */
+async function openBastionDesktop(b: Bastion, s: BastionServer) {
+  const cred = await askCredentials(
+    { protocol: 'rdp', name: s.nom, values: { host: s.nom, username: s.compte ?? '' } } as QuickTarget,
+    `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). Le bastion relaie la connexion chiffrée sans la lire.`,
+  );
+  if (!cred) return;
+  const session: Session = {
+    id: '', name: `${s.nom} · ${b.name}`, folder: '', protocol: 'rdp', tags: [], secretKeys: [],
+    values: { host: s.hote, port: s.port, username: cred.username, client: 'tab' },
+  };
+  const typed = { username: cred.username, password: cred.password };
+  const connect = async (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
+    try {
+      return await connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+    } catch (e) {
+      if (errorText(e) !== 'SESSION_EXPIREE') throw e;
+      if (await bastionPanel.reconnect(b.id)) return connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+      throw new Error('Session du bastion expirée : reconnectez-vous (section Bastions).');
+    }
+  };
+  return openSession(session, undefined, { connect, typing: false });
 }
 
 function openBastionAdmin(b: Bastion) {
