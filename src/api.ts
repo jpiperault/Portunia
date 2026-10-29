@@ -323,6 +323,7 @@ export interface Bastion {
   role: 'user' | 'auditor' | 'admin';
   expires: string;
   rememberAllowed: boolean;
+  ownReplay: boolean;
   servers: BastionServer[];
   connected: boolean;
   passwordSaved: boolean;
@@ -356,6 +357,8 @@ export const bastions = {
   servers: (id: string) => invoke<Bastion>('bastion_servers', { id }),
   admin: <T = any>(id: string, method: string, path: string, body?: unknown) => invoke<T>('bastion_admin', { id, method, path, body: body ?? null }),
   journalCsv: (id: string, query: string, dest: string) => invoke<void>('bastion_journal_csv', { id, query, dest }),
+  /** Écrit un export de l'audit (enregistrement, transcription) dans le fichier choisi. */
+  exportFile: (dest: string, content: string) => invoke<void>('bastion_export', { dest, content }),
   qr: (text: string) => invoke<string>('qr_svg', { text }),
 };
 

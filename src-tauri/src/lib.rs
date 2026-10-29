@@ -108,6 +108,7 @@ pub fn run() {
             bastion::bastion_servers,
             bastion::bastion_admin,
             bastion::bastion_journal_csv,
+            bastion::bastion_export,
             bastion::bastion_connect,
             bastion::qr_svg,
             commands::term_write,

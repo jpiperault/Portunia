@@ -1,6 +1,7 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, Bastion, BastionServer, connectBastion, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, Bastion, bastions, BastionServer, connectBastion, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { save } from '@tauri-apps/plugin-dialog';
 import { BastionPanel, HEIMDIA_EXTENSION, renderBastionAdmin } from './bastion';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
@@ -29,6 +30,8 @@ import { checkForUpdates } from './updates';
 import { allows, currentEdition, EDITION_LABEL, initLock, isLocked, loadLicense, lockNow } from './security';
 import { openRecordings, setPlayerHandler, stamp } from './recordings';
 import type { Player } from './player';
+import type { AuditPlayer, AuditRecording } from './auditplayer';
+import type { AuditRow } from './audit';
 import { folderColors, recordings, shells, ShellSpec } from './api';
 import { defaultShell, hideShell, loadShells, setDefaultShell, shellIcon, shellsLoaded, visibleShells } from './localshells';
 import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
@@ -59,6 +62,8 @@ interface Tab {
   notes?: NotesPanel;
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
+  /** Relecture d'une session de bastion (onglet « replay »). */
+  auditPlayer?: AuditPlayer;
   /** Outils réseau (onglet « tools »). */
   netTools?: NetToolsView;
   /** Commande sur plusieurs serveurs (onglet « multi »). */
@@ -190,6 +195,7 @@ const bastionPanel = new BastionPanel($('bastions'), {
     await reload();
   },
   openAdmin: (b) => openBastionAdmin(b),
+  openAudit: (b) => openBastionAudit(b),
   allowsAdmin: () => allows('bastionAdmin'),
   filter: () => state.filter,
 });
@@ -224,6 +230,74 @@ function openBastionAdmin(b: Bastion) {
   const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
   state.tabs.push(tab);
   activate(tab.id);
+}
+
+/** Audit du bastion (sessions et journal), chargé à la demande. */
+async function openBastionAudit(b: Bastion) {
+  if (!allows('bastionAdmin')) return toast('L’audit des bastions fait partie de Portunia Équipes (Paramètres › Licence)', 'error');
+  const title = `Audit · ${b.name}`;
+  const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
+  if (existing) return activate(existing.id);
+  const { renderBastionAudit } = await import('./audit');
+  const view = h('div', { class: 'page-view' }, renderBastionAudit(b, { toast, openRecording: (bb, s, start) => openAuditReplay(bb, s, start) }));
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
+  state.tabs.push(tab);
+  activate(tab.id);
+}
+
+/** Relecture d'une session du bastion dans un onglet. `reveal` : saisies masquées en clair (administrateur). */
+async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal = false, replace?: Tab) {
+  const title = `▶ ${s.serveur} · ${new Date(s.debut).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}`;
+  const existing = !replace && start == null && state.tabs.find((t) => t.kind === 'replay' && t.title === title);
+  if (existing) return activate(existing.id);
+  let rec: AuditRecording;
+  try {
+    rec = await bastions.admin<AuditRecording>(b.id, 'GET', `/audit/sessions/${s.id}/enregistrement${reveal ? '?reveler=true' : ''}`);
+  } catch (e) {
+    return toast(errorText(e) === 'SESSION_EXPIREE' ? 'Session du bastion expirée : reconnectez-vous (barre latérale).' : errorText(e), 'error');
+  }
+  const { AuditPlayer } = await import('./auditplayer');
+  const view = h('div', { class: 'pane audit-pane' });
+  const stamp = new Date(s.debut).toISOString().slice(0, 16).replace(/[T:]/g, '-');
+  const exportFile = async (name: string, ext: string, content: string, done: string) => {
+    const dest = await save({ defaultPath: `${s.serveur}-${s.compte}-${stamp}${name}.${ext}`, filters: [{ name: ext === 'cast' ? 'Enregistrement asciicast' : 'Texte', extensions: [ext] }] });
+    if (!dest) return;
+    try { await bastions.exportFile(dest, content); toast(`${done} : ${dest}`); } catch (e) { toast(errorText(e), 'error'); }
+  };
+  let player: AuditPlayer;
+  // Onglet qui affiche ce lecteur (remplacé par la version révélée).
+  let owner: Tab | undefined = replace;
+  try {
+    player = new AuditPlayer(view, rec, {
+      viewer: b.login,
+      start,
+      canReveal: b.role === 'admin',
+      reveal: () => {
+        if (!confirm('Afficher en clair les saisies sans écho (le plus souvent des mots de passe) ? Cette relecture sera inscrite au journal du bastion.')) return;
+        openAuditReplay(b, s, undefined, true, owner);
+      },
+      exportCast: () => exportFile(rec.revele ? '' : '-masque', 'cast', rec.cast, rec.revele ? 'Enregistrement signé exporté' : 'Copie masquée exportée (non signée)'),
+      exportText: () => exportFile('-transcription', 'txt', player.transcript(), 'Transcription exportée'),
+    });
+  } catch (e) {
+    return toast(`Enregistrement illisible : ${errorText(e)}`, 'error');
+  }
+  views.append(view);
+  if (replace) {
+    replace.auditPlayer?.dispose();
+    replace.view.remove();
+    replace.view = view;
+    replace.auditPlayer = player;
+    replace.title = `${title} (révélé)`;
+    renderTabs();
+    return activate(replace.id);
+  }
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'replay', title, view, state: 'connected', receive: false, auditPlayer: player };
+  owner = tab;
+  state.tabs.push(tab);
+  activate(tab.id);
+  view.focus();
 }
 
 function promptNewFolder(parent: string) {
@@ -599,6 +673,7 @@ function closeTab(id: string) {
   tab.server?.dispose();
   tab.containers?.dispose();
   tab.player?.dispose();
+  tab.auditPlayer?.dispose();
   tab.netTools?.dispose();
   tab.multi?.dispose();
   tab.view.remove();

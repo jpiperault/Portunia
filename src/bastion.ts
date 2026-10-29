@@ -1,6 +1,5 @@
 // Extension Heimdia : bastions dans la barre latérale, connexion (avec première connexion
 // et enrôlement du code), ouverture des serveurs et administration du bastion.
-import { save } from '@tauri-apps/plugin-dialog';
 import { Bastion, BastionLoginAnswer, bastions, BastionServer, errorText, Manifest, Session } from './api';
 import { h, icon } from './dom';
 import { MenuItem, showMenu } from './menu';
@@ -24,6 +23,7 @@ export interface BastionHost {
   sessions(): Session[];
   removeSessions(ids: string[]): Promise<void>;
   openAdmin(b: Bastion): void;
+  openAudit(b: Bastion): void;
   allowsAdmin(): boolean;
   filter(): string;
 }
@@ -142,7 +142,9 @@ export class BastionPanel {
       b.connected
         ? { label: 'Actualiser la liste', icon: 'refresh', action: () => this.refresh(b.id) }
         : { label: 'Se reconnecter', icon: 'lock', action: () => this.reconnect(b.id) },
-      ...((b.role === 'admin' || b.role === 'auditor') && b.connected ? [{ label: 'Administrer', icon: 'settings', action: () => this.host.openAdmin(b) }] : []),
+      ...(b.role === 'admin' && b.connected ? [{ label: 'Administrer', icon: 'settings', action: () => this.host.openAdmin(b) }] : []),
+      ...((b.role === 'admin' || b.role === 'auditor' || b.ownReplay) && b.connected
+        ? [{ label: b.role === 'user' ? 'Mes sessions' : 'Audit', icon: 'play', action: () => this.host.openAudit(b) }] : []),
       { label: `Copier l'empreinte du certificat`, icon: 'copy', action: () => navigator.clipboard.writeText(b.apiFingerprint) },
       'separator',
       ...(b.connected ? [{ label: 'Se déconnecter', icon: 'power', action: async () => { await bastions.logout(b.id).catch(() => {}); this.load(); } }] : []),
@@ -372,14 +374,12 @@ function openBypass(host: BastionHost, b: Bastion, list: { session: Session; ser
 
 // ---------- Administration ----------
 
-type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'journal' | 'sessions' | 'reglages';
+type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'reglages';
 const SECTIONS: { id: Section; label: string; admin: boolean }[] = [
   { id: 'cibles', label: 'Serveurs et coffre', admin: true },
   { id: 'comptes', label: 'Comptes', admin: true },
   { id: 'groupes', label: 'Groupes', admin: true },
   { id: 'regles', label: 'Règles', admin: true },
-  { id: 'journal', label: 'Journal', admin: false },
-  { id: 'sessions', label: 'Sessions', admin: false },
   { id: 'reglages', label: 'Réglages', admin: true },
 ];
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -466,7 +466,6 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
   const actions = (...buttons: HTMLElement[]) => h('td', { class: 'acts' }, ...buttons);
   const small = (label: string, onclick: () => void, danger = false) => h('button', { type: 'button', class: `btn sm${danger ? ' danger' : ''}`, onclick }, label);
   const toolbar = (text: string, button?: HTMLElement) => h('div', { class: 'admin-bar' }, h('p', { class: 'muted' }, text), button ?? null);
-  const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '');
 
   // --- Serveurs ---
   const targetDialog = (t?: any) => {
@@ -662,45 +661,6 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
         table(['Règle', 'Groupe', 'Serveurs', 'Quand', 'Options', 'État', ''], rows));
     },
 
-    journal: async () => {
-      const search = input({ id: 'j-search', type: 'search', placeholder: 'Compte, serveur, événement…' });
-      const list = h('div');
-      const seal = h('div', { class: 'seal' }, 'Vérification du journal…');
-      const load = async () => {
-        const { evenements } = await call<{ evenements: any[] }>('GET', `/admin/journal?limite=300${search.value ? `&q=${encodeURIComponent(search.value)}` : ''}`);
-        list.replaceChildren(table(['N°', 'Date', 'Qui', 'Événement', 'Détail'], evenements.reverse().map((e) => h('tr', { class: /echec|refuse|differente/.test(e.evenement) ? 'warn' : '' },
-          h('td', { class: 'num' }, String(e.seq)), h('td', {}, fmtDate(e.date)), h('td', {}, e.qui), h('td', {}, e.evenement),
-          h('td', { class: 'detail' }, Object.entries(e.detail ?? {}).map(([k, v]) => `${k} : ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · '))))));
-      };
-      call<{ intact: boolean; evenements?: number; probleme?: string }>('GET', '/admin/journal/verification').then((v) => {
-        seal.className = `seal${v.intact ? '' : ' bad'}`;
-        seal.textContent = v.intact ? `✓ Journal intact : ${v.evenements} événements chaînés, vérifiés à l'instant.` : `✗ JOURNAL ALTÉRÉ : ${v.probleme}`;
-      }).catch(fail);
-      let t = 0;
-      search.addEventListener('input', () => { clearTimeout(t); t = window.setTimeout(() => load().catch(fail), 300); });
-      await load();
-      const exportCsv = async () => {
-        const dest = await save({ defaultPath: `journal-${b.name}-${new Date().toISOString().slice(0, 10)}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] });
-        if (!dest) return;
-        try { await bastions.journalCsv(b.id, search.value, dest); host.toast(`Journal exporté : ${dest}`); } catch (e) { fail(e); }
-      };
-      return h('div', { class: 'admin-section' }, h('div', { class: 'admin-bar' }, search, h('button', { class: 'btn', onclick: exportCsv }, 'Exporter en CSV')), seal, list);
-    },
-
-    sessions: async () => {
-      const { sessions } = await call<{ sessions: any[] }>('GET', '/admin/sessions?limite=300');
-      const duration = (s: any) => {
-        if (!s.fin) return 'en cours';
-        const sec = Math.round((Date.parse(s.fin) - Date.parse(s.debut)) / 1000);
-        return sec >= 3600 ? `${Math.floor(sec / 3600)} h ${Math.floor((sec % 3600) / 60)} min` : sec >= 60 ? `${Math.floor(sec / 60)} min` : `${sec} s`;
-      };
-      return h('div', { class: 'admin-section' },
-        toolbar('Relecture des enregistrements et vue en direct : prochaine version.'),
-        table(['Début', 'Compte', 'Serveur', 'Type', 'Détail', 'Durée', 'Enregistrée', 'Adresse'], sessions.map((s) => h('tr', {},
-          h('td', {}, fmtDate(s.debut)), h('td', {}, s.compte), h('td', {}, s.serveur), h('td', {}, s.type), h('td', {}, s.detail),
-          h('td', {}, duration(s)), h('td', {}, s.enregistree ? 'oui' : '—'), h('td', {}, s.adresse)))));
-    },
-
     reglages: async () => {
       const r = await call<any>('GET', '/admin/reglages');
       const nom = input({ id: 's-nom', value: r.nom });
@@ -708,9 +668,14 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       const policy = select('s-policy', POLICIES.slice(1).some(([v]) => v === r.politique) ? POLICIES.slice(1) : [...POLICIES.slice(1), [r.politique, r.politique]], r.politique);
       const hours = input({ id: 's-hours', type: 'number', min: 1, max: 168, value: r.duree_session_h });
       const memo = checkbox('s-memo', 'Autoriser Portunia à mémoriser le mot de passe (le code reste demandé)', r.memo_mot_de_passe);
+      const own = checkbox('s-own', 'Chaque compte peut relire ses propres sessions (menu « Mes sessions » du bastion)', !!r.relecture_propres);
+      const sensitive = h('textarea', { id: 's-sensitive', class: 'input', rows: 4, spellcheck: 'false' }, (r.commandes_sensibles ?? []).join('\n')) as HTMLTextAreaElement;
       const saveBtn = h('button', { class: 'btn primary', onclick: async () => {
         try {
-          await call('PUT', '/admin/reglages', { nom: nom.value, banniere: banner.value, politique: policy.value, duree_session_h: Number(hours.value), memo_mot_de_passe: memo.box.checked });
+          await call('PUT', '/admin/reglages', {
+            nom: nom.value, banniere: banner.value, politique: policy.value, duree_session_h: Number(hours.value), memo_mot_de_passe: memo.box.checked,
+            relecture_propres: own.box.checked, commandes_sensibles: sensitive.value.split('\n').map((x) => x.trim()).filter(Boolean),
+          });
           host.toast('Réglages enregistrés');
         } catch (e) { fail(e); }
       } }, 'Enregistrer');
@@ -719,7 +684,11 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
         field('Bannière de connexion', banner, 'avertissement légal affiché avant l\'identification'),
         field('Connexion par défaut des comptes', policy),
         field('Durée d\'une session dans Portunia (heures)', hours),
-        memo.row, h('div', {}, saveBtn));
+        memo.row,
+        h('h3', {}, 'Relecture des sessions'),
+        own.row,
+        field('Commandes sensibles', sensitive, 'une par ligne ; repérées en rouge sur la barre de temps du lecteur'),
+        h('div', {}, saveBtn));
     },
   };
 

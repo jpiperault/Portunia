@@ -45,6 +45,9 @@ pub struct Bastion {
     pub expires: String,
     #[serde(default)]
     pub remember_allowed: bool,
+    /// Le bastion laisse chaque compte relire ses propres sessions.
+    #[serde(default)]
+    pub own_replay: bool,
     /// Dernière liste connue des serveurs, affichée grisée hors connexion.
     #[serde(default)]
     pub servers: Vec<Value>,
@@ -292,6 +295,7 @@ pub async fn bastion_login(state: State<'_, AppState>, request: LoginRequest) ->
     b.role = answer["compte"]["role"].as_str().unwrap_or("user").to_string();
     b.expires = answer["expire"].as_str().unwrap_or_default().to_string();
     b.remember_allowed = info["memo_mot_de_passe"].as_bool().unwrap_or(false);
+    b.own_replay = info["relecture_propres"].as_bool().unwrap_or(false);
     crate::secrets::set(&b.secret_id(), "jeton", answer["jeton"].as_str().unwrap_or_default()).map_err(full)?;
     // Mot de passe gardé seulement si l'utilisateur le demande et que le bastion l'autorise.
     let final_password = request.new_password.filter(|p| !p.is_empty()).unwrap_or(password);
@@ -343,17 +347,25 @@ pub async fn bastion_servers(state: State<'_, AppState>, id: String) -> CmdResul
     Ok(view(b))
 }
 
-/// Appel d'administration (/admin/…), réservé par le bastion aux rôles autorisés.
+/// Appel d'administration (/admin/…) ou d'audit (/audit/…), réservé par le bastion aux rôles autorisés.
 #[tauri::command]
 pub async fn bastion_admin(state: State<'_, AppState>, id: String, method: String, path: String, body: Option<Value>) -> CmdResult<Value> {
     state.unlocked()?;
-    if !path.starts_with("/admin/") || path.contains("..") {
+    if !(path.starts_with("/admin/") || path.starts_with("/audit/")) || path.contains("..") {
         return Err("Chemin d'administration invalide".into());
     }
     state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
     let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(err)?;
     let mut b = find(&state.data_dir, &id).map_err(full)?;
     authed(&state.data_dir, &mut b, method, &path, body).await.map_err(full)
+}
+
+/// Export de l'audit (enregistrement, transcription), écrit dans le fichier choisi par l'utilisateur.
+#[tauri::command]
+pub fn bastion_export(state: State<'_, AppState>, dest: String, content: String) -> CmdResult<()> {
+    state.unlocked()?;
+    state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
+    std::fs::write(&dest, content).map_err(|e| format!("Écriture impossible : {e}"))
 }
 
 /// Export CSV du journal, écrit dans le fichier choisi.
