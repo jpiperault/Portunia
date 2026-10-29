@@ -1,0 +1,576 @@
+<title>Portail web Heimdia</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette : le portail web public (navigateur) et son réglage dans Portunia, + questionnaire.
+   Tokens de Portunia (sombre par défaut) pour l'administration ; le portail a son propre habillage clair/sombre. */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-host: #6fc3df; --term-dim: #7d828c;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --b-rdp: #1f2f4a; --f-rdp: #8fb8ff;
+  --cf: #f38020; --cf-soft: #3a2614;
+  --pg-bg: #0f1115; --pg-card: #171a20; --pg-line: #262a33; --pg-text: #e9ebef; --pg-muted: #9aa1ad; --pg-accent: #6aa5ff; --pg-field: #0f1115;
+  --chrome: #202227; --chrome-2: #2a2c33;
+  --shadow: rgb(0 0 0 / .45);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1f4fa8;
+  --cf: #c45f0a; --cf-soft: #fde9d7;
+  --pg-bg: #eef1f5; --pg-card: #ffffff; --pg-line: #dde1e8; --pg-text: #1b1f27; --pg-muted: #5e6675; --pg-accent: #2563d6; --pg-field: #ffffff;
+  --chrome: #e4e6ea; --chrome-2: #d6d9df;
+  --shadow: rgb(20 30 50 / .18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1f4fa8;
+  --cf: #c45f0a; --cf-soft: #fde9d7;
+  --pg-bg: #eef1f5; --pg-card: #ffffff; --pg-line: #dde1e8; --pg-text: #1b1f27; --pg-muted: #5e6675; --pg-accent: #2563d6; --pg-field: #ffffff;
+  --chrome: #e4e6ea; --chrome-2: #d6d9df;
+  --shadow: rgb(20 30 50 / .18); color-scheme: light; }
+:root[data-theme="dark"] {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --b-rdp: #1f2f4a; --f-rdp: #8fb8ff;
+  --cf: #f38020; --cf-soft: #3a2614;
+  --pg-bg: #0f1115; --pg-card: #171a20; --pg-line: #262a33; --pg-text: #e9ebef; --pg-muted: #9aa1ad; --pg-accent: #6aa5ff; --pg-field: #0f1115;
+  --chrome: #202227; --chrome-2: #2a2c33;
+  --shadow: rgb(0 0 0 / .45); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.intro { display: flex; flex-direction: column; gap: 4px; }
+.intro h1 { font-size: 21px; font-weight: 650; }
+.intro p { max-width: 80ch; color: var(--text-2); }
+.maintabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.maintabs button { border: 0; background: none; padding: 9px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.maintabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.maintabs .count { font-size: 11px; background: var(--chip-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.steps { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.steps .grp { font-size: 11px; color: var(--muted); padding: 0 2px 0 6px; letter-spacing: .06em; text-transform: uppercase; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 6px 12px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.danger { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+
+/* Navigateur simulé (portail public) */
+.browser { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); background: var(--pg-bg); }
+.chrome { background: var(--chrome); display: flex; align-items: center; gap: 10px; padding: 8px 12px; }
+.chrome .dots { display: flex; gap: 6px; }
+.chrome .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--chrome-2); }
+.url { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; background: var(--pg-bg); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--pg-text); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.url .lock { color: var(--ok); font-weight: 700; }
+.page { min-height: 520px; color: var(--pg-text); font-family: var(--ui); }
+.pg-top { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--pg-line); background: var(--pg-card); flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; }
+.mark { width: 28px; height: 28px; border-radius: 7px; background: linear-gradient(135deg, var(--pg-accent), #3d6fd1); display: grid; place-items: center; color: #fff; font-size: 14px; font-weight: 700; }
+.pg-top .sp { margin-left: auto; }
+.pg-top .who { font-size: 12.5px; color: var(--pg-muted); }
+.timer { font-size: 12px; padding: 3px 9px; border-radius: 999px; background: var(--pg-bg); border: 1px solid var(--pg-line); color: var(--pg-muted); font-variant-numeric: tabular-nums; }
+.pg-btn { border: 1px solid var(--pg-line); background: var(--pg-card); color: var(--pg-text); border-radius: 8px; padding: 6px 12px; font-size: 13px; }
+.pg-btn.primary { background: var(--pg-accent); border-color: var(--pg-accent); color: #fff; font-weight: 600; }
+.login { display: grid; place-items: center; padding: 48px 16px; }
+.lcard { width: 100%; max-width: 380px; background: var(--pg-card); border: 1px solid var(--pg-line); border-radius: 14px; padding: 26px 24px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 10px 40px rgb(0 0 0 / .12); }
+.lcard h2 { font-size: 18px; }
+.legal { font-size: 12px; color: var(--pg-muted); background: var(--pg-bg); border: 1px solid var(--pg-line); border-radius: 8px; padding: 8px 10px; }
+.pf { display: flex; flex-direction: column; gap: 5px; font-size: 13px; }
+.pin { padding: 9px 11px; border-radius: 8px; border: 1px solid var(--pg-line); background: var(--pg-field); color: var(--pg-text); font-size: 14px; }
+.code { letter-spacing: .4em; font-family: var(--mono); }
+.turnstile { display: flex; align-items: center; gap: 10px; border: 1px solid var(--pg-line); border-radius: 8px; padding: 9px 11px; font-size: 12.5px; }
+.turnstile i { width: 18px; height: 18px; border-radius: 4px; background: var(--ok); color: #fff; display: grid; place-items: center; font-style: normal; font-size: 12px; }
+.turnstile span:last-child { margin-left: auto; color: var(--cf); font-weight: 600; font-size: 11px; }
+.foot { font-size: 11.5px; color: var(--pg-muted); text-align: center; }
+.home { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.home .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.home .pin { flex: 1 1 260px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.fold { grid-column: 1 / -1; font-size: 11px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--pg-muted); padding-top: 6px; }
+.srv { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; background: var(--pg-card); border: 1px solid var(--pg-line); text-align: left; color: var(--pg-text); }
+.srv:hover { border-color: var(--pg-accent); }
+.srv b { font-size: 14px; }
+.srv .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.srv.off { opacity: .55; cursor: not-allowed; }
+.srv small { color: var(--pg-muted); font-size: 11.5px; }
+.proto { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+.proto.ssh { background: var(--b-ssh); color: var(--f-ssh); }
+.proto.rdp { background: var(--b-rdp); color: var(--f-rdp); }
+.mode { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: var(--warn-soft); color: var(--warn); }
+.mode.rec { background: var(--danger-soft); color: var(--danger); }
+.sess { display: flex; flex-direction: column; height: 520px; }
+.sbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--pg-line); background: var(--pg-card); flex-wrap: wrap; font-size: 12.5px; }
+.sbar .sp { margin-left: auto; }
+.recpill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); font-weight: 600; font-size: 11.5px; }
+.recpill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.term { flex: 1; background: var(--term); color: var(--term-text); font: 13px/1.55 var(--mono); padding: 14px 16px; white-space: pre; overflow: auto; position: relative; }
+.term .p { color: var(--term-host); }
+.term .d { color: var(--term-dim); }
+.idle { position: absolute; right: 16px; bottom: 16px; max-width: 320px; background: var(--pg-card); color: var(--pg-text); border: 1px solid var(--pg-line); border-radius: 10px; padding: 12px 14px; font: 13px/1.45 var(--ui); white-space: normal; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 30px rgb(0 0 0 / .35); }
+.desk { flex: 1; background: radial-gradient(120% 90% at 70% 20%, #0f3a63 0%, #0a2744 70%); position: relative; }
+.desk .note { position: absolute; inset: 0; display: grid; place-items: center; color: #dfe9f7; font-size: 13px; text-align: center; padding: 20px; }
+
+/* Fenêtre Portunia (administration) */
+.win { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 560px; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+@media (max-width: 820px) { .win { grid-template-columns: minmax(0, 1fr); } .side { border-right: 0 !important; border-bottom: 1px solid var(--line); flex-direction: row !important; flex-wrap: wrap; } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; }
+.nrow { padding: 7px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); }
+.nrow.sel { background: var(--accent-soft); color: var(--text); }
+.adm { padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.card { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.card h3 { font-size: 14px; }
+.switchrow { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.switch { position: relative; width: 46px; height: 26px; border-radius: 999px; background: var(--chip-bg); border: 1px solid var(--line-strong); flex: none; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: var(--muted); transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--ok); border-color: var(--ok); }
+.switch[aria-checked="true"]::after { transform: translateX(20px); background: #fff; }
+@media (prefers-reduced-motion: reduce) { .switch::after { transition: none; } }
+.state { font-weight: 600; }
+.state.on { color: var(--ok); }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 14px; }
+.fld { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-2); min-width: 0; }
+.fld .h { font-size: 11.5px; color: var(--muted); }
+.input { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--text); min-width: 0; }
+.seg { display: flex; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; flex-wrap: wrap; }
+.seg span { flex: 1; text-align: center; padding: 6px 8px; font-size: 12px; color: var(--text-2); min-width: 90px; }
+.seg span.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.checks { display: flex; flex-direction: column; gap: 6px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); }
+.check i { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-strong); display: inline-grid; place-items: center; font-style: normal; font-size: 11px; flex: none; margin-top: 1px; }
+.check i.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.check small { display: block; color: var(--muted); font-size: 11.5px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.stat { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; }
+.stat b { display: block; font-size: 18px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; color: var(--muted); }
+.cf { border-left: 3px solid var(--cf); background: var(--cf-soft); border-radius: 0 8px 8px 0; padding: 9px 12px; font-size: 12.5px; color: var(--text-2); }
+.fp { font-family: var(--mono); font-size: 12px; padding: 7px 10px; border-radius: 7px; background: var(--chip-bg); color: var(--text-2); overflow-wrap: anywhere; }
+
+/* Schéma */
+.svgwrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 10px; }
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.flow > div { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px; background: var(--panel); font-size: 12.5px; color: var(--text-2); display: flex; flex-direction: column; gap: 6px; }
+.flow b { color: var(--text); font-size: 13px; }
+
+.explain { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 760px) { .explain { grid-template-columns: minmax(0, 1fr); } }
+.explain h2 { font-size: 15px; margin-bottom: 6px; }
+.explain ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); max-width: 65ch; }
+.scope { border-left: 3px solid var(--accent); padding-left: 12px; }
+
+/* Questionnaire */
+.qbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+.qbar .prog { flex: 1 1 200px; height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; min-width: 120px; }
+.qbar .prog i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.save { font-size: 12px; color: var(--muted); }
+.save.ok { color: var(--ok); }
+.save.err { color: var(--danger); }
+.qsec { display: flex; flex-direction: column; gap: 12px; }
+.qsec > h2 { font-size: 16px; padding-top: 10px; }
+.q { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.q .qt { font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.q .qn { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+.q .why { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 11px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 100%; }
+.opt input { margin: 2px 0 0; accent-color: var(--accent); }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.opt .rec { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 4px; }
+.q textarea { min-height: 38px; resize: vertical; width: 100%; }
+@media (prefers-reduced-motion: reduce) { .qbar .prog i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="label">Maquette · Heimdia, portail web</p>
+    <h1>Accéder à ses serveurs depuis un navigateur, sans client installé</h1>
+    <p>Une page publique, derrière Cloudflare, qui ne fait qu'une chose : se connecter puis ouvrir les serveurs autorisés, dans le navigateur. Pas d'administration sur cette page. L'administrateur l'active ou la coupe d'un clic dans Portunia. Les écrans se parcourent avec les boutons ; l'onglet Questions rassemble les choix à faire avant de coder, et les réponses s'enregistrent toutes seules.</p>
+  </div>
+
+  <div class="maintabs" role="tablist">
+    <button role="tab" id="tab-maq" aria-selected="true" aria-controls="pane-maq">Maquette</button>
+    <button role="tab" id="tab-q" aria-selected="false" aria-controls="pane-q">Questions <span class="count" id="qcount">0 / 0</span></button>
+  </div>
+
+  <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
+    <div class="steps" aria-label="Écrans">
+      <button data-s="how" aria-pressed="true">Fonctionnement</button>
+      <span class="grp">Portail (navigateur)</span>
+      <button data-s="login" aria-pressed="false">1. Connexion</button>
+      <button data-s="home" aria-pressed="false">2. Mes serveurs</button>
+      <button data-s="ssh" aria-pressed="false">3. Session SSH</button>
+      <button data-s="rdp" aria-pressed="false">4. Session RDP</button>
+      <button data-s="off" aria-pressed="false">5. Portail coupé</button>
+      <span class="grp">Portunia</span>
+      <button data-s="admin" aria-pressed="false">6. Activer le portail</button>
+    </div>
+
+    <!-- Fonctionnement -->
+    <div data-screen="how" class="wrap" style="max-width:none;gap:12px">
+      <div class="svgwrap">
+        <svg viewBox="0 0 980 230" width="100%" style="min-width:760px" role="img" aria-label="Le navigateur passe par Cloudflare, puis par un tunnel sortant jusqu'au portail de Heimdia, qui ouvre les serveurs">
+          <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>
+          <rect x="10" y="70" width="170" height="100" rx="10" fill="var(--work)" stroke="var(--line-strong)"/>
+          <text x="95" y="102" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Navigateur</text>
+          <text x="95" y="124" text-anchor="middle" fill="var(--muted)" font-size="12">PC, Mac, tablette</text>
+          <text x="95" y="144" text-anchor="middle" fill="var(--muted)" font-size="12">rien à installer</text>
+          <rect x="250" y="40" width="200" height="160" rx="10" fill="var(--work)" stroke="var(--cf)"/>
+          <text x="350" y="68" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Cloudflare</text>
+          <text x="350" y="94" text-anchor="middle" fill="var(--text-2)" font-size="12">HTTPS, anti-DDoS, pare-feu</text>
+          <text x="350" y="114" text-anchor="middle" fill="var(--text-2)" font-size="12">anti-robots (Turnstile)</text>
+          <text x="350" y="134" text-anchor="middle" fill="var(--text-2)" font-size="12">Access (facultatif) :</text>
+          <text x="350" y="150" text-anchor="middle" fill="var(--text-2)" font-size="12">compte de l'entreprise</text>
+          <text x="350" y="180" text-anchor="middle" fill="var(--muted)" font-size="11">acces.acme.fr</text>
+          <rect x="530" y="40" width="220" height="160" rx="10" fill="var(--work)" stroke="var(--accent)"/>
+          <text x="640" y="68" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Heimdia</text>
+          <text x="640" y="92" text-anchor="middle" fill="var(--muted)" font-size="12">portail web (port local 8445)</text>
+          <text x="640" y="116" text-anchor="middle" fill="var(--text-2)" font-size="12">mot de passe + code</text>
+          <text x="640" y="136" text-anchor="middle" fill="var(--text-2)" font-size="12">mêmes règles, même coffre</text>
+          <text x="640" y="156" text-anchor="middle" fill="var(--text-2)" font-size="12">même enregistrement</text>
+          <text x="640" y="182" text-anchor="middle" fill="var(--muted)" font-size="11">aucun port ouvert vers Internet</text>
+          <rect x="820" y="70" width="150" height="100" rx="10" fill="var(--work)" stroke="var(--line-strong)"/>
+          <text x="895" y="104" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Serveurs</text>
+          <text x="895" y="126" text-anchor="middle" fill="var(--muted)" font-size="12">SSH · RDP</text>
+          <line x1="182" y1="120" x2="246" y2="120" stroke="var(--accent)" stroke-width="2" marker-end="url(#ar)"/>
+          <text x="214" y="112" text-anchor="middle" fill="var(--muted)" font-size="10">HTTPS</text>
+          <line x1="526" y1="120" x2="454" y2="120" stroke="var(--accent)" stroke-width="2" marker-end="url(#ar)"/>
+          <text x="490" y="108" text-anchor="middle" fill="var(--muted)" font-size="10">tunnel</text>
+          <text x="490" y="140" text-anchor="middle" fill="var(--muted)" font-size="10">sortant</text>
+          <line x1="752" y1="120" x2="816" y2="120" stroke="var(--accent)" stroke-width="2" marker-end="url(#ar)"/>
+        </svg>
+      </div>
+      <div class="flow">
+        <div><b>Aucun port entrant</b>Le service Cloudflare Tunnel (cloudflared), installé sur le bastion, ouvre une connexion sortante vers Cloudflare. Le portail n'écoute que sur le bastion lui-même : rien n'est exposé directement à Internet.</div>
+        <div><b>Deux portes à franchir</b>Cloudflare filtre les robots et les attaques ; Cloudflare Access peut exiger en plus le compte de l'entreprise (Microsoft, Google…). Puis Heimdia demande son mot de passe et son code, comme dans Portunia.</div>
+        <div><b>Les mêmes règles</b>Le portail n'est qu'un autre client : mêmes comptes, mêmes règles d'accès, même coffre, même enregistrement signé, même journal. Une session web se relit dans l'audit comme une autre.</div>
+        <div><b>Rien à administrer ici</b>Le portail ne montre que les serveurs du compte connecté. Toute l'administration reste dans Portunia (et la ligne de commande).</div>
+      </div>
+    </div>
+
+    <!-- Navigateur -->
+    <div class="browser" data-screen="browser" hidden>
+      <div class="chrome"><div class="dots"><i></i><i></i><i></i></div><div class="url"><span class="lock">🔒</span><span id="url">acces.acme.fr</span></div></div>
+      <div class="page">
+        <!-- 1. Connexion -->
+        <div data-sub="login" class="login">
+          <div class="lcard">
+            <div class="brand"><span class="mark">A</span>Accès ACME</div>
+            <h2>Se connecter</h2>
+            <p class="legal">Accès réservé aux personnes autorisées. Les connexions sont journalisées et les sessions peuvent être enregistrées.</p>
+            <label class="pf">Identifiant<input class="pin" id="l-user" value="julien" autocomplete="off"></label>
+            <label class="pf">Mot de passe<input class="pin" id="l-pass" type="password" value="xxxxxxxxxxxx"></label>
+            <label class="pf">Code de l'application d'authentification<input class="pin code" id="l-code" value="482 913" inputmode="numeric"></label>
+            <div class="turnstile"><i>✓</i><span>Vérification réussie</span><span>Cloudflare</span></div>
+            <button class="pg-btn primary" id="go-home">Se connecter</button>
+            <p class="foot">Première connexion ou code perdu : adressez-vous à votre administrateur.<br>Heimdia · aucun logiciel à installer</p>
+          </div>
+        </div>
+        <!-- 2. Mes serveurs -->
+        <div data-sub="home" hidden>
+          <div class="pg-top"><div class="brand"><span class="mark">A</span>Accès ACME</div><span class="sp"></span><span class="timer" title="Déconnexion automatique">Session : 52 min</span><span class="who">julien</span><button class="pg-btn">Se déconnecter</button></div>
+          <div class="home">
+            <div class="bar"><input class="pin" id="h-search" placeholder="Rechercher un serveur"><span class="small" style="color:var(--pg-muted)">5 serveurs autorisés en ce moment</span></div>
+            <div class="grid">
+              <div class="fold">Linux</div>
+              <button class="srv" data-open="ssh"><b>srv-web-01</b><span class="tags"><span class="proto ssh">SSH</span><span class="mode">Coffre</span></span><small>Ouvrir dans un onglet de ce navigateur</small></button>
+              <button class="srv" data-open="ssh"><b>srv-db-02</b><span class="tags"><span class="proto ssh">SSH</span><span class="mode rec">Enregistré</span></span><small>Vos identifiants seront demandés</small></button>
+              <div class="fold">Windows</div>
+              <button class="srv" data-open="rdp"><b>srv-ad-01</b><span class="tags"><span class="proto rdp">RDP</span><span class="mode">Coffre</span></span><small>Bureau à distance dans le navigateur</small></button>
+              <div class="srv off" title="Les serveurs en mode rebond demandent Portunia"><b>srv-hyperv</b><span class="tags"><span class="proto rdp">RDP</span><span class="mode" style="background:var(--pg-bg);color:var(--pg-muted)">Rebond</span></span><small>Disponible seulement avec Portunia</small></div>
+              <div class="fold">Réseau</div>
+              <div class="srv off"><b>fw-edge</b><span class="tags"><span class="proto ssh">SSH</span><span class="mode" style="background:var(--pg-bg);color:var(--pg-muted)">Rebond</span></span><small>Disponible seulement avec Portunia</small></div>
+            </div>
+          </div>
+        </div>
+        <!-- 3. SSH -->
+        <div data-sub="ssh" class="sess" hidden>
+          <div class="sbar"><b>srv-web-01</b><span class="proto ssh">SSH</span><span class="recpill"><i></i>Enregistré</span><span style="color:var(--pg-muted)">compte admin (coffre)</span><span class="sp"></span><button class="pg-btn">Copier</button><button class="pg-btn">Coller</button><button class="pg-btn">← Mes serveurs</button><button class="pg-btn">Fermer</button></div>
+          <div class="term"><span class="d">Heimdia : session enregistrée.</span>
+Linux srv-web-01 6.12.0-amd64 Debian GNU/Linux 13
+<span class="p">admin@srv-web-01:~$</span> systemctl status nginx --no-pager
+● nginx.service - A high performance web server
+     Active: active (running) since Wed 2026-10-29 14:02:19 CET
+<span class="p">admin@srv-web-01:~$</span> <span style="background:var(--term-text)"> </span>
+<div class="idle"><b>Toujours là ?</b><span>Sans activité, la session se ferme dans 1 min 30.</span><button class="pg-btn primary" style="align-self:flex-start">Continuer</button></div></div>
+        </div>
+        <!-- 4. RDP -->
+        <div data-sub="rdp" class="sess" hidden>
+          <div class="sbar"><b>srv-ad-01</b><span class="proto rdp">RDP</span><span class="recpill"><i></i>Enregistré</span><span style="color:var(--pg-muted)">ACME\svc-admin (coffre)</span><span class="sp"></span><button class="pg-btn">Ctrl+Alt+Suppr</button><button class="pg-btn">Plein écran</button><button class="pg-btn">← Mes serveurs</button><button class="pg-btn">Fermer</button></div>
+          <div class="desk"><div class="note">Bureau Windows affiché dans la page<br>(client RDP web d'IronRDP, le même moteur que Portunia)<br><br>Disponible quand le mode coffre RDP sera prêt (étape 2 du Bureau à distance).</div></div>
+        </div>
+        <!-- 5. Coupé -->
+        <div data-sub="off" class="login" hidden>
+          <div class="lcard" style="text-align:center">
+            <div class="brand" style="justify-content:center"><span class="mark">A</span>Accès ACME</div>
+            <h2>Portail fermé</h2>
+            <p style="color:var(--pg-muted);font-size:13px">L'accès par le navigateur est désactivé en ce moment. Utilisez Portunia, ou adressez-vous à votre administrateur.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Portunia -->
+    <div class="win" data-screen="admin" hidden>
+      <nav class="side" aria-label="Administration">
+        <div class="nrow">Serveurs et coffre</div>
+        <div class="nrow">Comptes</div>
+        <div class="nrow">Groupes</div>
+        <div class="nrow">Règles</div>
+        <div class="nrow sel">Réglages</div>
+      </nav>
+      <div class="adm">
+        <div class="card">
+          <div class="switchrow">
+            <button class="switch" id="sw" role="switch" aria-checked="true" aria-label="Portail web"></button>
+            <div><b>Portail web</b> · <span class="state on" id="sw-state">activé</span><div class="small muted">Accès aux serveurs depuis un navigateur, sans Portunia. Coupé : la page affiche « Portail fermé » et les sessions web en cours sont fermées.</div></div>
+          </div>
+          <div class="stats">
+            <div class="stat"><b>2</b><span>sessions web en cours</span></div>
+            <div class="stat"><b>14</b><span>connexions web aujourd'hui</span></div>
+            <div class="stat"><b>3</b><span>échecs aujourd'hui</span></div>
+            <div class="stat"><b style="color:var(--ok)">relié</b><span>tunnel Cloudflare</span></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn">Voir les sessions web (Audit)</button><button class="btn danger">Fermer toutes les sessions web</button></div>
+        </div>
+        <div class="card">
+          <h3>Adresse et exposition</h3>
+          <div class="form">
+            <label class="fld">Adresse publique<input class="input" id="a-url" value="https://acces.acme.fr"><span class="h">affichée aux utilisateurs ; certificat géré par Cloudflare</span></label>
+            <label class="fld">Exposition<div class="seg"><span class="on">Cloudflare Tunnel</span><span>Proxy Cloudflare</span></div><span class="h">Tunnel : aucun port ouvert. Proxy : le port 8445 n'accepte que les adresses de Cloudflare.</span></label>
+            <label class="fld">Jeton du tunnel<input class="input" id="a-tok" type="password" value="xxxxxxxxxxxxxxxxxxxx"><span class="h">donné par Cloudflare Zero Trust › Tunnels ; gardé dans le coffre du bastion</span></label>
+          </div>
+          <div class="cf">Cloudflare Access (facultatif, conseillé) : exige le compte de l'entreprise avant même d'afficher la page de connexion. Se règle dans Cloudflare, rien à faire ici.</div>
+        </div>
+        <div class="card">
+          <h3>Qui, quoi, combien de temps</h3>
+          <div class="form">
+            <div class="checks">
+              <span class="label">Comptes autorisés</span>
+              <div class="check"><i class="on">✓</i><span>Groupe « Accès web » seulement<small>les autres comptes restent sur Portunia</small></span></div>
+              <div class="check"><i class="on">✓</i><span>Code obligatoire sur le portail<small>même si le compte se connecte sans code dans Portunia</small></span></div>
+            </div>
+            <div class="checks">
+              <span class="label">Protocoles</span>
+              <div class="check"><i class="on">✓</i><span>SSH (terminal dans la page)</span></div>
+              <div class="check"><i class="on">✓</i><span>Bureau à distance<small>serveurs en mode coffre ou enregistré</small></span></div>
+              <div class="check"><i class="on">✓</i><span>Copier-coller du texte</span></div>
+              <div class="check"><i>&nbsp;</i><span>Transfert de fichiers</span></div>
+            </div>
+            <div class="checks">
+              <span class="label">Durées</span>
+              <label class="fld">Session web<select class="input" id="a-dur"><option>1 heure</option><option>4 heures</option><option>8 heures</option></select></label>
+              <label class="fld">Inactivité<select class="input" id="a-idle"><option>15 minutes</option><option>30 minutes</option><option>1 heure</option></select></label>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end"><button class="btn primary">Enregistrer</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="explain" id="explain"></div>
+  </section>
+
+  <section id="pane-q" role="tabpanel" aria-labelledby="tab-q" hidden>
+    <div class="qbar">
+      <span class="small"><b id="qdone">0</b> réponse(s) sur <span id="qtotal">0</span></span>
+      <div class="prog"><i id="qprog"></i></div>
+      <span class="save" id="save">Les réponses s'enregistrent toutes seules.</span>
+      <button class="btn sm" id="copy">Copier mes réponses</button>
+    </div>
+    <p class="small muted" style="padding-block:10px">« conseillé » = mon choix par défaut si vous ne répondez pas.</p>
+    <div id="qlist" class="wrap" style="max-width:none"></div>
+  </section>
+</div>
+
+<script>
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+const TEXT = {
+  how: { t: 'Fonctionnement', p: ['Le navigateur passe par Cloudflare, puis par un tunnel sortant jusqu\'au portail de Heimdia.', 'Le portail est un client de plus du bastion : mêmes comptes, règles, coffre, enregistrement et journal.', 'Aucune administration sur le portail.'], s: ['Côté technique : terminal xterm.js et client RDP web d\'IronRDP, reliés au bastion par WebSocket (Cloudflare les relaie).', 'L\'adresse réelle de l\'utilisateur vient de l\'en-tête de Cloudflare, accepté seulement quand la requête arrive par le tunnel.'] },
+  login: { t: 'Connexion', p: ['Identifiant, mot de passe et code, dans la même page (pas d\'enrôlement ici : il se fait dans Portunia ou avec l\'administrateur).', 'Bannière légale du bastion affichée avant la connexion.', 'Vérification anti-robots de Cloudflare (Turnstile), puis limite d\'essais par compte et par adresse.'], s: ['Cookie de session « HttpOnly », « Secure », « SameSite=Strict », durée courte ; aucune information dans l\'adresse.', 'Politique de contenu stricte : la page ne charge rien d\'extérieur.'] },
+  home: { t: 'Mes serveurs', p: ['Seulement les serveurs que les règles autorisent maintenant, par dossier, avec recherche.', 'Chaque serveur s\'ouvre dans un nouvel onglet du navigateur.', 'Les serveurs en mode rebond restent visibles mais grisés : de bout en bout, ils ont besoin de Portunia.'], s: ['Temps de session restant affiché ; déconnexion automatique.'] },
+  ssh: { t: 'Session SSH', p: ['Terminal dans la page, connecté par le bastion comme depuis Portunia (coffre ou identifiants demandés dans le terminal).', 'Bandeau « Enregistré » et compte utilisé.', 'Après une inactivité, avertissement puis fermeture.'], s: ['Copier-coller selon le réglage ; pas de transfert de fichiers par défaut.'] },
+  rdp: { t: 'Session Bureau à distance', p: ['Bureau Windows dans la page, avec le client web d\'IronRDP.', 'Le bastion ouvre la session Windows avec le compte du coffre : rien à taper.'], s: ['Dépend du mode coffre RDP (étape 2 du Bureau à distance).'] },
+  off: { t: 'Portail coupé', p: ['Désactivé depuis Portunia : la page affiche « Portail fermé » et ne demande plus d\'identifiants.', 'Les sessions web en cours sont fermées.'], s: ['La désactivation est immédiate et inscrite au journal (« portail.desactive »).'] },
+  admin: { t: 'Activer le portail dans Portunia', p: ['Administrer › Réglages › Portail web : un interrupteur, et les réglages.', 'Adresse publique, exposition par Cloudflare Tunnel (conseillée) ou par le proxy Cloudflare.', 'Qui peut l\'utiliser, quels protocoles, durées de session et d\'inactivité.', 'État en direct : sessions web en cours, connexions et échecs du jour, liaison du tunnel.'], s: ['Activation et désactivation inscrites au journal du bastion.', 'Aussi en ligne de commande : sudo heimdia setting portail on|off.'] },
+};
+const explain = document.getElementById('explain');
+const URLS = { login: 'acces.acme.fr', home: 'acces.acme.fr/serveurs', ssh: 'acces.acme.fr/session/srv-web-01', rdp: 'acces.acme.fr/session/srv-ad-01', off: 'acces.acme.fr' };
+function show(s) {
+  document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+  document.querySelector('[data-screen="how"]').hidden = s !== 'how';
+  document.querySelector('[data-screen="admin"]').hidden = s !== 'admin';
+  const inBrowser = ['login', 'home', 'ssh', 'rdp', 'off'].includes(s);
+  document.querySelector('[data-screen="browser"]').hidden = !inBrowser;
+  document.querySelectorAll('[data-sub]').forEach((n) => { n.hidden = n.dataset.sub !== s; });
+  if (inBrowser) document.getElementById('url').textContent = URLS[s];
+  const x = TEXT[s];
+  const left = el('div'); left.append(el('h2', null, x.t));
+  const ul = el('ul'); x.p.forEach((t) => ul.append(el('li', null, t))); left.append(ul);
+  const right = el('div', 'scope'); right.append(el('h2', null, 'À noter'));
+  const ul2 = el('ul'); x.s.forEach((t) => ul2.append(el('li', null, t))); right.append(ul2);
+  explain.replaceChildren(left, right);
+}
+document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+document.getElementById('go-home').addEventListener('click', () => show('home'));
+document.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => show(b.dataset.open)));
+document.getElementById('sw').addEventListener('click', (e) => {
+  const on = e.currentTarget.getAttribute('aria-checked') !== 'true';
+  e.currentTarget.setAttribute('aria-checked', String(on));
+  const st = document.getElementById('sw-state'); st.textContent = on ? 'activé' : 'désactivé'; st.classList.toggle('on', on);
+});
+show('how');
+
+function tab(which) {
+  const q = which === 'q';
+  document.getElementById('tab-maq').setAttribute('aria-selected', String(!q));
+  document.getElementById('tab-q').setAttribute('aria-selected', String(q));
+  document.getElementById('pane-maq').hidden = q;
+  document.getElementById('pane-q').hidden = !q;
+}
+document.getElementById('tab-maq').addEventListener('click', () => tab('maq'));
+document.getElementById('tab-q').addEventListener('click', () => tab('q'));
+if (location.hash === '#questions') tab('q');
+
+// ---------- Questions ----------
+const SECTIONS = [
+  { title: 'Exposition', qs: [
+    { id: 'expo', t: 'Comment le portail est-il exposé à Internet ?', why: 'Cloudflare Tunnel : le bastion ouvre une connexion sortante, aucun port entrant. Proxy Cloudflare : un port ouvert, filtré sur les adresses de Cloudflare ; plus simple si l\'entreprise a déjà ce montage.', type: 'one', o: ['Cloudflare Tunnel (cloudflared installé avec le bastion)', 'Proxy Cloudflare, port filtré', 'Les deux au choix', 'Aussi sans Cloudflare (autre proxy, réseau interne)'], rec: 2 },
+    { id: 'access', t: 'Cloudflare Access (compte de l\'entreprise avant la page) ?', why: 'Une barrière de plus, gérée par Cloudflare (Microsoft 365, Google, code par e-mail…) : la page de connexion n\'est même pas visible des inconnus.', type: 'one', o: ['Conseillé dans la documentation, facultatif', 'Obligatoire : le portail refuse sans en-tête Access valide', 'Pas abordé'], rec: 0 },
+    { id: 'turnstile', t: 'Anti-robots sur la page de connexion', why: 'Turnstile (Cloudflare) arrête les essais automatiques de mots de passe, sans puzzle pour l\'utilisateur.', type: 'one', o: ['Turnstile, plus limite d\'essais par compte et par adresse', 'Limite d\'essais seulement'], rec: 0 },
+  ]},
+  { title: 'Connexion', qs: [
+    { id: 'code', t: 'Code obligatoire sur le portail ?', why: 'Un compte peut se connecter sans code dans Portunia (clé SSH, réseau interne). Sur Internet, le code devrait être exigé.', type: 'one', o: ['Toujours exigé sur le portail', 'Suit la politique du compte'], rec: 0 },
+    { id: 'passkey', t: 'Clés d\'accès (passkeys / WebAuthn)', why: 'Plus sûres que mot de passe + code (résistent à l\'hameçonnage), mais demandent un enrôlement par appareil.', type: 'one', o: ['Plus tard', 'Dès la première version'], rec: 0 },
+    { id: 'enrol', t: 'Première connexion et code perdu sur le portail', why: 'Laisser enrôler le code depuis Internet augmente le risque (mot de passe provisoire volé). Sinon, l\'utilisateur passe d\'abord par Portunia ou par l\'administrateur.', type: 'one', o: ['Pas sur le portail : Portunia ou l\'administrateur', 'Autorisé sur le portail'], rec: 0 },
+  ]},
+  { title: 'Accès', qs: [
+    { id: 'qui', t: 'Qui peut utiliser le portail ?', why: 'Un groupe dédié limite l\'exposition aux comptes qui en ont vraiment besoin (prestataires, astreinte).', type: 'one', o: ['Un groupe choisi (ex. « Accès web »)', 'Tous les comptes', 'Option par règle d\'accès'], rec: 0 },
+    { id: 'protos', t: 'Protocoles dans la première version', why: 'SSH dans le navigateur est simple et rapide à livrer. RDP dans le navigateur demande le mode coffre RDP (étape 2) et le client web d\'IronRDP.', type: 'one', o: ['SSH d\'abord, RDP ensuite', 'SSH et RDP ensemble (plus tard)'], rec: 0 },
+    { id: 'rebond', t: 'Serveurs en mode rebond', why: 'De bout en bout, le chiffrement se termine dans Portunia ; un navigateur ne peut pas le faire. Ils restent visibles, grisés, ou disparaissent.', type: 'one', o: ['Visibles, grisés « seulement avec Portunia »', 'Masqués sur le portail'], rec: 0 },
+    { id: 'fichiers', t: 'Copier-coller et fichiers', why: 'Le portail sert souvent depuis un poste non maîtrisé : limiter ce qui peut en sortir.', type: 'many', o: ['Copier-coller du texte', 'Transfert de fichiers (SFTP dans la page)', 'Réglable par règle d\'accès'], rec: [0, 2] },
+    { id: 'mobile', t: 'Appareils', why: 'Un terminal sur téléphone est peu pratique mais utile en astreinte ; une tablette passe bien.', type: 'one', o: ['Ordinateurs et tablettes', 'Aussi les téléphones (clavier adapté)'], rec: 0 },
+  ]},
+  { title: 'Durées et contrôle', qs: [
+    { id: 'duree', t: 'Durée d\'une session web par défaut', why: 'Plus court que dans Portunia : le poste n\'est pas forcément celui de l\'utilisateur.', type: 'one', o: ['1 heure', '4 heures', '8 heures'], rec: 0 },
+    { id: 'idle', t: 'Fermeture après inactivité', why: 'Avertissement 90 s avant, puis fermeture de la session et de la connexion au portail.', type: 'one', o: ['15 minutes', '30 minutes', 'Réglable seulement'], rec: 0 },
+    { id: 'coupe', t: 'Quand le portail est désactivé', why: 'Couper le portail doit-il fermer les sessions web en cours ?', type: 'one', o: ['Fermer tout de suite les sessions web', 'Les laisser finir, refuser les nouvelles'], rec: 0 },
+    { id: 'marque', t: 'Personnalisation de la page', why: 'Nom et logo de l\'entreprise rassurent l\'utilisateur et aident à repérer une fausse page.', type: 'one', o: ['Nom du bastion et logo', 'Nom seulement', 'Plus tard'], rec: 0 },
+  ]},
+  { title: 'Offre', qs: [
+    { id: 'offre', t: 'Le portail web dans quelle offre de Heimdia ?', why: 'Fonction recherchée (prestataires, astreinte, postes non maîtrisés) : argument pour une offre supérieure.', type: 'one', o: ['Dans toutes les offres', 'Offre supérieure seulement', 'À décider plus tard'], rec: 2 },
+  ]},
+];
+const ALL = SECTIONS.flatMap((s) => s.qs);
+let answers = {};
+let db = null, saveTimer = null;
+const saveEl = document.getElementById('save');
+function setSave(text, cls) { saveEl.textContent = text; saveEl.className = 'save' + (cls ? ' ' + cls : ''); }
+function answered(q) { const a = answers[q.id]; return !!a && ((Array.isArray(a.v) ? a.v.length : a.v != null) || !!(a.note || '').trim()); }
+function render() {
+  const list = document.getElementById('qlist');
+  list.replaceChildren();
+  let n = 0;
+  for (const sec of SECTIONS) {
+    const box = el('div', 'qsec'); box.append(el('h2', null, sec.title));
+    for (const q of sec.qs) {
+      n++;
+      const card = el('div', 'q');
+      const head = el('div', 'qt'); head.append(el('span', 'qn', String(n)), el('span', null, q.t));
+      card.append(head, el('p', 'why', q.why));
+      const opts = el('div', 'opts');
+      const cur = answers[q.id] || {};
+      q.o.forEach((label, i) => {
+        const lab = el('label', 'opt');
+        const inp = document.createElement('input');
+        inp.type = q.type === 'many' ? 'checkbox' : 'radio'; inp.name = 'q-' + q.id; inp.id = 'q-' + q.id + '-' + i;
+        inp.checked = q.type === 'many' ? (cur.v || []).includes(i) : cur.v === i;
+        inp.addEventListener('change', () => {
+          const a = answers[q.id] || {};
+          if (q.type === 'many') { const set = new Set(a.v || []); inp.checked ? set.add(i) : set.delete(i); a.v = [...set].sort((x, y) => x - y); } else a.v = i;
+          answers[q.id] = a; changed();
+        });
+        const span = el('span', null, label);
+        if (Array.isArray(q.rec) ? q.rec.includes(i) : q.rec === i) span.append(el('span', 'rec', 'conseillé'));
+        lab.append(inp, span); opts.append(lab);
+      });
+      const note = document.createElement('textarea');
+      note.className = 'input'; note.id = 'note-' + q.id; note.rows = 1; note.placeholder = 'Précision (facultatif)'; note.value = cur.note || '';
+      note.addEventListener('input', () => { const a = answers[q.id] || {}; a.note = note.value; answers[q.id] = a; changed(); });
+      card.append(opts, note); box.append(card);
+    }
+    list.append(box);
+  }
+  progress();
+}
+function progress() {
+  const done = ALL.filter(answered).length;
+  document.getElementById('qdone').textContent = done;
+  document.getElementById('qtotal').textContent = ALL.length;
+  document.getElementById('qcount').textContent = done + ' / ' + ALL.length;
+  document.getElementById('qprog').style.width = (100 * done / ALL.length) + '%';
+}
+function changed() {
+  progress();
+  try { localStorage.setItem('heimdia-portail', JSON.stringify(answers)); } catch {}
+  clearTimeout(saveTimer);
+  if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
+}
+async function save() {
+  try { await db.doc('questionnaire/portail').set({ reponses: answers, misAJour: new Date().toISOString() }); setSave('Enregistré. Claude peut lire vos réponses.', 'ok'); }
+  catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
+}
+function summary() {
+  const lines = ['Réponses Heimdia : portail web']; let n = 0;
+  for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
+  return lines.join('\n');
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = summary();
+  try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
+});
+try { answers = JSON.parse(localStorage.getItem('heimdia-portail') || '{}') || {}; } catch { answers = {}; }
+render();
+(async () => {
+  const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;
+  if (!api) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  db = api;
+  try {
+    const snap = await db.doc('questionnaire/portail').get();
+    if (snap.exists) {
+      const stored = (snap.data() || {}).reponses || {};
+      answers = Object.assign({}, stored, answers); render();
+      if (JSON.stringify(stored) !== JSON.stringify(answers)) save(); else setSave('Enregistré. Claude peut lire vos réponses.', 'ok');
+    } else if (Object.keys(answers).length) save();
+  } catch { setSave('Lecture impossible : vos réponses restent dans ce navigateur.', 'err'); }
+})();
+</script>
