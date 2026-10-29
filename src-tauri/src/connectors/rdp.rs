@@ -112,10 +112,14 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     let stdout = child.stdout.take().context("Moteur RDP : sortie indisponible")?;
 
     // Pour une vue écran, l'interface transmet la taille de l'onglet en pixels.
-    let settings = json!({
+    let mut settings = json!({
         "host": host, "port": port, "username": username, "domain": domain, "password": password,
         "width": ctx.cols, "height": ctx.rows,
     });
+    // Bastion Heimdia, mode enregistré : passage RDCleanPath avec un jeton à usage unique.
+    if let (Some(url), Some(token)) = (ctx.str("rdcleanpathUrl"), ctx.raw("rdcleanpathToken")) {
+        settings["rdcleanpath"] = json!({ "url": url, "token": token });
+    }
     writeln!(stdin, "{settings}")?;
     stdin.flush()?;
 

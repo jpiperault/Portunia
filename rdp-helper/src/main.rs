@@ -15,7 +15,7 @@ use std::{io::Write, time::Duration};
 use anyhow::Result;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use ironrdp_client::{
-    config::{ConfigBuilder, Destination},
+    config::{ConfigBuilder, Destination, TransportKind},
     rdp::{RdpClient, RdpInputEvent, RdpOutputEvent},
 };
 use ironrdp_pdu::input::{
@@ -42,6 +42,15 @@ struct Settings {
     password: String,
     width: u16,
     height: u16,
+    /// Passage RDCleanPath d'un bastion Heimdia (mode enregistré).
+    #[serde(default)]
+    rdcleanpath: Option<RdCleanPath>,
+}
+
+#[derive(Deserialize)]
+struct RdCleanPath {
+    url: String,
+    token: String,
 }
 
 #[derive(Deserialize)]
@@ -101,6 +110,10 @@ async fn run() -> Result<()> {
         .with_platform(ironrdp_pdu::rdp::capability_sets::MajorPlatformType::WINDOWS);
     if !s.domain.is_empty() {
         builder = builder.with_domain(s.domain.clone());
+    }
+    if let Some(rdcp) = &s.rdcleanpath {
+        let url = rdcp.url.parse().map_err(|e| anyhow::anyhow!("adresse du passage invalide : {e}"))?;
+        builder = builder.with_transport(TransportKind::RDCleanPath { url }).with_rdcleanpath_token(rdcp.token.clone());
     }
     let config = builder.build()?;
 

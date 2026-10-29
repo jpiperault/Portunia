@@ -1,6 +1,6 @@
 [package]
 name = "portunia"
-version = "0.44.0"
+version = "0.45.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 
@@ -42,6 +42,7 @@ rand = { version = "0.10", features = ["thread_rng"] }
 suppaftp = { version = "12.2.1", default-features = false, features = ["rustls-ring"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "stream"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 

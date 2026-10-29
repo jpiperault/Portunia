@@ -230,7 +230,9 @@ function openBastionServer(b: Bastion, s: BastionServer) {
 async function openBastionDesktop(b: Bastion, s: BastionServer) {
   const cred = await askCredentials(
     { protocol: 'rdp', name: s.nom, values: { host: s.nom, username: s.compte ?? '' } } as QuickTarget,
-    `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). Le bastion relaie la connexion chiffrée sans la lire.`,
+    s.mode === 'enregistre'
+      ? `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). Le bastion relaie et enregistre la session ; il ne voit pas votre mot de passe.`
+      : `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). Le bastion relaie la connexion chiffrée sans la lire.`,
   );
   if (!cred) return;
   const session: Session = {

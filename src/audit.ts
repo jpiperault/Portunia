@@ -14,6 +14,8 @@ export interface AuditHost {
 export interface AuditRow {
   id: string; compte: string; serveur: string; type: string; detail: string; mode: string; adresse: string;
   debut: string; fin: string | null; enregistree: boolean; frappe: boolean; octets: number;
+  /** Absent sur un bastion antérieur à la 0.8 : relisible si enregistrée. */
+  relisible?: boolean;
   trouve: { t: number; extrait: string } | null;
 }
 
@@ -97,9 +99,11 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
           h('td', {}, h('strong', {}, s.serveur), s.type !== 'shell' ? h('span', { class: 'muted small' }, ` · ${s.type}${s.detail && s.type === 'exec' ? ` ${s.detail}` : ''}`) : null),
           h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null, s.frappe ? h('span', { class: 'chip keys', title: 'Frappe enregistrée' }, 'frappe') : null),
           searching ? h('td', { class: 'hit' }, s.trouve ? h('button', { class: 'hit-btn', title: 'Relire à ce moment', onclick: () => replay(s.trouve!.t) }, h('span', { class: 'num' }, clock(s.trouve.t)), ' ', h('code', {}, s.trouve.extrait)) : h('span', { class: 'muted' }, '—')) : null,
-          h('td', { class: 'acts' }, s.enregistree
+          h('td', { class: 'acts' }, s.enregistree && s.relisible !== false
             ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, '▶ Relire')
-            : h('span', { class: 'muted small' }, s.mode === 'rebond' ? 'rebond, non enregistrée' : 'non enregistrée')));
+            : s.enregistree
+              ? h('span', { class: 'muted small', title: 'Enregistrée et signée par le bastion' }, 'Bureau à distance : relecture bientôt')
+              : h('span', { class: 'muted small' }, s.mode === 'rebond' ? 'rebond, non enregistrée' : 'non enregistrée')));
       });
       const head = ['Début', 'Durée', ...(full ? ['Compte'] : []), 'Serveur', 'Mode', ...(searching ? ['Trouvé'] : []), ''];
       list.replaceChildren(rows.length ? table(head, rows) : h('p', { class: 'muted' }, searching ? 'Aucune session ne contient ce texte sur cette période.' : 'Aucune session sur cette période.'));

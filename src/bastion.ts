@@ -499,16 +499,16 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
     const passField = field('Mot de passe actuel du compte', secretPass, 'utilisé une seule fois');
     const keyField = field('Clé privée (sans phrase de passe)', secretKey);
     const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', 'Bureau à distance (RDP)']], t?.protocole ?? 'ssh');
-    const rdpNote = h('p', { class: 'muted small', hidden: true }, 'Bureau à distance : mode rebond pour l\'instant. Le bastion relaie la connexion chiffrée sans la lire ; l\'utilisateur tape ses identifiants Windows à chaque ouverture. Les modes coffre et enregistré arrivent.');
+    const rdpNote = h('p', { class: 'muted small', hidden: true }, 'Bureau à distance : l\'utilisateur tape ses identifiants Windows à chaque ouverture. Rebond : le bastion relaie la connexion chiffrée sans la lire (Portunia seulement). Enregistré : le bastion relaie et enregistre la session, sans voir le mot de passe ; s\'ouvre aussi depuis le portail web. Le mode coffre arrive.');
     // Port par défaut du protocole, tant que l'administrateur ne l'a pas changé.
     proto.addEventListener('change', () => {
       if (['22', '3389', ''].includes(port.value.trim())) port.value = proto.value === 'rdp' ? '3389' : '22';
-      if (proto.value === 'rdp') mode.value = 'rebond';
+      if (proto.value === 'rdp' && mode.value === 'coffre') mode.value = 'enregistre';
       sync();
     });
     const sync = () => {
       const rdp = proto.value === 'rdp';
-      for (const o of mode.options) o.disabled = rdp && o.value !== 'rebond';
+      for (const o of mode.options) o.disabled = rdp && o.value === 'coffre';
       rdpNote.hidden = !rdp;
       const vault = mode.value === 'coffre';
       secretKind.closest('label')!.hidden = !vault;

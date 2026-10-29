@@ -154,6 +154,33 @@ fn client(expected: Option<&str>) -> Result<(reqwest::Client, Arc<Mutex<Option<S
     Ok((http, seen))
 }
 
+/// Relais local vers l'API du bastion, en TLS avec le certificat épinglé : le moteur RDP s'y
+/// connecte en clair sur 127.0.0.1 (passage RDCleanPath du bastion). Une seule connexion.
+async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u16> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let verifier = Pinned { expected: Some(fingerprint.to_string()), seen: Arc::default(), provider: provider.clone() };
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth();
+    let name = ServerName::try_from(host.to_string()).map_err(|_| anyhow!("Adresse du bastion invalide"))?;
+    let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| anyhow!("Bastion injoignable ({host}:{port}) : {e}"))?;
+    let mut tls = tokio_rustls::TlsConnector::from(Arc::new(config))
+        .connect(name, tcp)
+        .await
+        .map_err(|e| anyhow!("Bastion {host}:{port} : {e}"))?;
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
+    let local = listener.local_addr()?.port();
+    tauri::async_runtime::spawn(async move {
+        if let Ok(Ok((mut socket, _))) = tokio::time::timeout(std::time::Duration::from_secs(60), listener.accept()).await {
+            let _ = socket.set_nodelay(true);
+            let _ = tokio::io::copy_bidirectional(&mut socket, &mut tls).await;
+        }
+    });
+    Ok(local)
+}
+
 /// Appel de l'API. Erreur « SESSION_EXPIREE » si le jeton n'est plus valable.
 async fn call(host: &str, port: u16, fingerprint: &str, token: Option<&str>, method: reqwest::Method, path: &str, body: Option<Value>) -> Result<Value> {
     let (http, _) = client(Some(fingerprint))?;
@@ -430,6 +457,18 @@ pub async fn bastion_connect(
     .collect();
     let mut values: HashMap<String, Value> = HashMap::new();
     let name = format!("{server} · {}", b.name);
+    if t["protocole"].as_str() == Some("rdp") && t["mode"].as_str() == Some("enregistre") {
+        // Bureau à distance enregistré : passage RDCleanPath du bastion (qui relaie et enregistre) ;
+        // l'authentification Windows (NLA) reste entre le moteur RDP et le serveur.
+        let local = pinned_forwarder(&b.host, b.api_port, &b.api_fingerprint).await.map_err(full)?;
+        values.insert("host".into(), t["hote"].clone());
+        values.insert("port".into(), t["port"].clone());
+        values.insert("client".into(), json!("tab"));
+        values.insert("rdcleanpathUrl".into(), json!(format!("ws://127.0.0.1:{local}/api/v1/rdp")));
+        values.insert("rdcleanpathToken".into(), json!(ticket));
+        values.extend(extra.into_iter().filter(|(k, _)| ["username", "password"].contains(&k.as_str())));
+        return start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await;
+    }
     if t["protocole"].as_str() == Some("rdp") {
         // Bureau à distance en rebond : tunnel par le bastion, identifiants Windows de bout en bout.
         values.insert("host".into(), t["hote"].clone());
