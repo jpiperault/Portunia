@@ -1,0 +1,631 @@
+<title>Heimdia dans Portunia</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette fidèle à Portunia (tokens de src/styles.css, sombre par défaut) + questionnaire.
+   Mise en page : onglets Maquette / Questions ; la maquette montre la fenêtre de Portunia. */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --shadow: rgb(0 0 0 / .45);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --shadow: rgb(20 30 50 / .18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --shadow: rgb(20 30 50 / .18); color-scheme: light; }
+:root[data-theme="dark"] {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --shadow: rgb(0 0 0 / .45); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.intro { display: flex; flex-direction: column; gap: 4px; }
+.intro h1 { font-size: 21px; font-weight: 650; }
+.intro p { max-width: 75ch; color: var(--text-2); }
+
+.maintabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.maintabs button { border: 0; background: none; padding: 9px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.maintabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.maintabs .count { font-size: 11px; background: var(--chip-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+.steps { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.steps .grp { font-size: 11px; color: var(--muted); padding: 0 2px 0 8px; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Fenêtres */
+.win { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 540px; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+.win.solo { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 760px) { .win { grid-template-columns: minmax(0, 1fr); } .side { border-right: 0 !important; border-bottom: 1px solid var(--line); } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.search { width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--muted); }
+.sec { padding: 8px 4px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bcard { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--panel); }
+.bcard .top { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.led { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.led.off { background: var(--muted); }
+.trow { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); min-width: 0; }
+.trow .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow.folder { color: var(--muted); font-size: 12px; padding-top: 7px; }
+.trow.sel { background: var(--accent-soft); color: var(--text); }
+.trow .tags { margin-left: auto; display: flex; gap: 4px; flex: none; }
+.proto { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; background: var(--b-ssh); color: var(--f-ssh); }
+.mode { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
+.mode.rec { border-color: transparent; background: var(--danger-soft); color: var(--danger); }
+.mode.vault { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
+.mode.ok { border-color: transparent; background: var(--ok-soft); color: var(--ok); }
+.mode.later { border-style: dashed; }
+.nrow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.nrow.sel { background: var(--accent-soft); color: var(--text); }
+.nrow .c { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.nrow.later { opacity: .55; cursor: default; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; color: var(--muted); border-radius: 6px 6px 0 0; white-space: nowrap; }
+.tab.on { background: var(--work); color: var(--text); border: 1px solid var(--line); border-bottom-color: var(--work); margin-bottom: -1px; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.content { flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.status { display: flex; gap: 14px; flex-wrap: wrap; padding: 6px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); background: var(--bg); }
+.status b { color: var(--text-2); font-weight: 600; }
+
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 8px; font-size: 13px; background: var(--danger-soft); }
+.banner.info { background: var(--accent-soft); }
+.banner .ico { color: var(--danger); font-weight: 700; }
+.banner.info .ico { color: var(--accent); }
+
+.term { background: var(--term); color: var(--term-text); font: 13px/1.6 var(--mono); border-radius: 8px; padding: 14px 16px; overflow-x: auto; white-space: pre; flex: 1; min-height: 260px; }
+.term .d { color: var(--term-dim); }
+.term .h { color: var(--term-host); }
+.term .k { color: var(--term-ok); }
+.term .x { color: #ff8f8f; }
+.term .w { color: #f0c27b; }
+.cursor { display: inline-block; width: 8px; height: 15px; background: var(--term-text); vertical-align: -2px; }
+.qr { display: inline-block; width: 92px; height: 92px; vertical-align: top; background:
+  conic-gradient(from 90deg at 30% 30%, #d6d8dd 25%, transparent 0) 0 0 / 23px 23px,
+  repeating-linear-gradient(45deg, #d6d8dd 0 3px, transparent 3px 7px); border: 5px solid #d6d8dd; border-radius: 3px; }
+
+.card { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.dialog { max-width: 520px; align-self: center; width: 100%; box-shadow: 0 18px 50px var(--shadow); }
+.fld { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-2); }
+.input { padding: 8px 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--text); min-width: 0; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row > .fld { flex: 1 1 160px; }
+.btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 7px 14px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.danger { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.fp { font-family: var(--mono); font-size: 12px; padding: 8px 10px; border-radius: 7px; background: var(--chip-bg); color: var(--text-2); overflow-wrap: anywhere; }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 640px; }
+th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--text-2); font-variant-numeric: tabular-nums; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td code { font-family: var(--mono); font-size: 12px; }
+.acts { display: flex; gap: 6px; }
+
+.rules { display: flex; flex-direction: column; gap: 10px; }
+.rule { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; }
+.rule .who { font-weight: 600; }
+.rule .what { font-size: 13px; color: var(--text-2); }
+.chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip-bg); color: var(--text-2); }
+.chip.no { background: var(--danger-soft); color: var(--danger); }
+.chip.yes { background: var(--ok-soft); color: var(--ok); }
+.chip.w { background: var(--warn-soft); color: var(--warn); }
+
+.player { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 14px; }
+@media (max-width: 900px) { .player { grid-template-columns: minmax(0, 1fr); } }
+.bar { position: relative; height: 24px; border-radius: 6px; background: var(--chip-bg); }
+.bar .done { position: absolute; inset: 0 auto 0 0; width: 40%; background: var(--accent-soft); border-radius: 6px; }
+.bar .mk { position: absolute; top: 5px; bottom: 5px; width: 3px; border-radius: 2px; background: var(--accent); }
+.bar .head { position: absolute; top: -3px; bottom: -3px; left: 40%; width: 2px; background: var(--text); }
+.cmds { display: flex; flex-direction: column; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+.cmd { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 8px; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.cmd:last-child { border-bottom: 0; }
+.cmd code { font-family: var(--mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmd.hit { background: var(--accent-soft); }
+.seal { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; padding: 9px 10px; border-radius: 8px; background: var(--ok-soft); }
+.seal b { color: var(--ok); }
+
+.explain { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 760px) { .explain { grid-template-columns: minmax(0, 1fr); } }
+.explain h2 { font-size: 15px; margin-bottom: 6px; }
+.explain ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); max-width: 65ch; }
+.scope { border-left: 3px solid var(--accent); padding-left: 12px; }
+
+.v1grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.v1col { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; background: var(--panel); }
+.v1col h3 { font-size: 13px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+.v1col ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-2); display: flex; flex-direction: column; gap: 3px; }
+
+/* Questionnaire */
+.qbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+.qbar .prog { flex: 1 1 200px; height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; min-width: 120px; }
+.qbar .prog i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.save { font-size: 12px; color: var(--muted); }
+.save.ok { color: var(--ok); }
+.save.err { color: var(--danger); }
+.qsec { display: flex; flex-direction: column; gap: 12px; }
+.qsec > h2 { font-size: 16px; padding-top: 10px; }
+.q { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.q.done { border-color: var(--line); }
+.q .qt { font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.q .qn { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+.q .why { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 11px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 100%; }
+.opt input { margin: 2px 0 0; accent-color: var(--accent); }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.opt .rec { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 4px; }
+.q textarea { min-height: 38px; resize: vertical; width: 100%; }
+@media (prefers-reduced-motion: no-preference) { .rec-dot { animation: pulse 1.6s ease-in-out infinite; } }
+@keyframes pulse { 50% { opacity: .35; } }
+/* Ajouts propres à l'étape 2 */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; }
+@media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.panel { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.panel h3 { font-size: 14px; }
+.seg { display: flex; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; }
+.seg span { flex: 1; text-align: center; padding: 6px 8px; font-size: 12px; color: var(--text-2); }
+.seg span.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.days { display: flex; gap: 4px; flex-wrap: wrap; }
+.days span { width: 34px; text-align: center; padding: 5px 0; border-radius: 6px; font-size: 12px; border: 1px solid var(--line-strong); color: var(--muted); }
+.days span.on { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-2); }
+.check i { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-strong); display: inline-grid; place-items: center; font-style: normal; font-size: 11px; }
+.check i.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.bl { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.bl .grow { flex: 1; min-width: 0; }
+.bl b { display: block; }
+.led.warn { background: var(--warn); }
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+.flow div { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px; font-size: 12.5px; color: var(--text-2); }
+.flow b { display: block; color: var(--text); font-size: 13px; margin-bottom: 3px; }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="label">Maquette · Heimdia, étape 2 · intégration dans Portunia</p>
+    <h1>Heimdia dans Portunia : se connecter, ouvrir, administrer</h1>
+    <p>Ce que l'utilisateur et l'administrateur verront dans Portunia une fois l'étape 2 livrée. L'onglet Questions rassemble les choix à faire avant de coder ; les réponses s'enregistrent toutes seules.</p>
+  </div>
+
+  <div class="maintabs" role="tablist">
+    <button role="tab" id="tab-maq" aria-selected="true" aria-controls="pane-maq">Maquette</button>
+    <button role="tab" id="tab-q" aria-selected="false" aria-controls="pane-q">Questions <span class="count" id="qcount">0 / 0</span></button>
+  </div>
+
+  <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
+    <div class="flow" aria-label="Fonctionnement">
+      <div><b>1. Connexion au bastion</b>Une fois par journée : mot de passe et code. Heimdia rend un jeton de session.</div>
+      <div><b>2. Liste des serveurs</b>Portunia lit les serveurs autorisés par l'API et les range dans l'arbre.</div>
+      <div><b>3. Ouverture</b>Pour chaque session, un jeton à usage unique : pas de code à retaper.</div>
+      <div><b>4. Administration</b>Comptes, serveurs, règles, journal : mêmes écrans pour qui a le rôle.</div>
+    </div>
+
+    <div class="steps" role="group" aria-label="Écrans">
+      <span class="grp">Utilisateur</span>
+      <button data-s="list" aria-pressed="true">1. Bastions</button>
+      <button data-s="add" aria-pressed="false">2. Ajouter</button>
+      <button data-s="tree" aria-pressed="false">3. Arbre</button>
+      <button data-s="open" aria-pressed="false">4. Ouvrir</button>
+      <span class="grp">Administrateur</span>
+      <button data-s="targets" aria-pressed="false">5. Serveurs</button>
+      <button data-s="users" aria-pressed="false">6. Comptes</button>
+      <button data-s="rules" aria-pressed="false">7. Règles</button>
+      <button data-s="audit" aria-pressed="false">8. Journal</button>
+    </div>
+
+    <div class="win" id="win">
+      <aside class="side" id="side-user">
+        <div class="search">Rechercher ou taper une adresse…</div>
+        <div class="sec">Mes sessions</div>
+        <div class="trow"><span class="n">NAS bureau</span><span class="tags"><span class="proto">SSH</span></span></div>
+        <div class="sec">Bastions</div>
+        <div class="bcard"><div class="top"><span class="led" id="bled"></span>Heimdia · ACME</div><div class="small muted" id="bsub">julien · expire dans 7 h 52</div></div>
+        <div id="btree">
+          <div class="trow folder">▾ Production</div>
+          <div class="trow" id="t-web"><span class="n">web-01</span><span class="tags"><span class="mode vault">Coffre</span><span class="proto">SSH</span></span></div>
+          <div class="trow"><span class="n">db-01</span><span class="tags"><span class="mode vault">Coffre</span><span class="proto">SSH</span></span></div>
+          <div class="trow folder">▾ Recette</div>
+          <div class="trow"><span class="n">rec-app</span><span class="tags"><span class="mode rec">Enregistré</span><span class="proto">SSH</span></span></div>
+          <div class="trow folder">▾ Réseau</div>
+          <div class="trow"><span class="n">fw-edge</span><span class="tags"><span class="mode">Rebond</span><span class="proto">SSH</span></span></div>
+        </div>
+        <div class="bcard" style="margin-top:6px"><div class="top"><span class="led warn"></span>Heimdia · Client Durand</div><div class="small muted">session expirée · cliquer pour se reconnecter</div></div>
+      </aside>
+      <aside class="side" id="side-admin" hidden>
+        <div class="sec">Administration · Heimdia ACME</div>
+        <div class="bcard"><div class="top"><span class="led"></span>bastion.acme.local</div><div class="small muted">Rôle : administrateur</div></div>
+        <div class="nrow" data-nav="targets">Serveurs et coffre<span class="c">12</span></div>
+        <div class="nrow" data-nav="users">Comptes et groupes<span class="c">9</span></div>
+        <div class="nrow" data-nav="rules">Règles<span class="c">4</span></div>
+        <div class="nrow" data-nav="audit">Journal et sessions</div>
+        <div class="nrow later">Relecture <span class="mode later" style="margin-left:auto">étape 3</span></div>
+        <div class="nrow later">Sessions en direct <span class="mode later" style="margin-left:auto">étape 3</span></div>
+      </aside>
+
+      <section class="main">
+        <!-- 1 Liste des bastions -->
+        <div data-screen="list" class="main">
+          <div class="tabs"><div class="tab on">Paramètres › Bastions</div></div>
+          <div class="content">
+            <div class="row" style="justify-content:space-between"><p class="small muted">Chaque bastion ajouté devient une section de l'arbre.</p><button class="btn primary">Ajouter un bastion</button></div>
+            <div class="bl"><span class="led"></span><div class="grow"><b>Heimdia · ACME</b><span class="small muted">bastion.acme.local:8443 · julien · administrateur · expire dans 7 h 52</span></div><button class="btn sm">Administrer</button><button class="btn sm">Se déconnecter</button></div>
+            <div class="bl"><span class="led warn"></span><div class="grow"><b>Heimdia · Client Durand</b><span class="small muted">10.40.0.5:8443 · julien · utilisateur · session expirée</span></div><button class="btn sm primary">Se reconnecter</button><button class="btn sm">Retirer</button></div>
+            <div class="bl"><span class="led off"></span><div class="grow"><b>Heimdia · Labo</b><span class="small muted">192.168.91.51:8443 · injoignable depuis 10:42</span></div><button class="btn sm">Réessayer</button><button class="btn sm">Retirer</button></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Réglage</th><th>Valeur</th></tr></thead>
+              <tbody>
+                <tr><td>Durée de la session du bastion</td><td>Fixée par l'administrateur du bastion (8 h ici)</td></tr>
+                <tr><td>Mémoriser mon mot de passe du bastion</td><td><span class="mode">voir les questions</span></td></tr>
+                <tr><td>Serveurs du bastion dans la recherche</td><td><span class="mode ok">oui</span></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="status"><span>3 bastions</span><span>1 connecté</span></div>
+        </div>
+
+        <!-- 2 Ajouter -->
+        <div data-screen="add" class="main" hidden>
+          <div class="tabs"><div class="tab on">Paramètres › Bastions</div></div>
+          <div class="content" style="justify-content:center">
+            <div class="card dialog">
+              <h3 style="font-size:15px">Ajouter un bastion Heimdia</h3>
+              <label class="fld">Adresse<input class="input" id="a-addr" value="bastion.acme.local"></label>
+              <div class="fld">Empreinte du certificat, à comparer avec celle affichée par « heimdia init »<div class="fp">SHA256:41AB 7C0E 92D1 F3A8 55B0 6E14 C9D2 08FF</div></div>
+              <div class="row"><label class="fld">Identifiant<input class="input" id="a-user" value="julien"></label><label class="fld">Mot de passe<input class="input" id="a-pass" type="password" value="xxxxxxxxxxxx"></label></div>
+              <label class="fld">Code de l'application d'authentification<input class="input" id="a-otp" value="482 913" inputmode="numeric"></label>
+              <p class="small muted">Première connexion de ce compte ? Portunia affichera ici le code QR à scanner.</p>
+              <div class="row" style="justify-content:flex-end"><button class="btn">Annuler</button><button class="btn primary">L'empreinte correspond, se connecter</button></div>
+            </div>
+          </div>
+          <div class="status"><span>Adresse seule : port 8443 par défaut</span></div>
+        </div>
+
+        <!-- 3 Arbre -->
+        <div data-screen="tree" class="main" hidden>
+          <div class="tabs"><div class="tab on">Accueil</div></div>
+          <div class="content">
+            <div class="banner info"><span class="ico">i</span><div>Les serveurs du bastion se rangent comme l'administrateur les a classés. On ne peut ni les modifier ni les supprimer dans Portunia ; on peut les mettre en favoris et les chercher.</div></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>État du bastion</th><th>Dans l'arbre</th><th>Au double-clic</th></tr></thead>
+              <tbody>
+                <tr><td><span class="led" style="display:inline-block"></span> Connecté</td><td>Serveurs autorisés maintenant</td><td>Ouvre la session</td></tr>
+                <tr><td><span class="led warn" style="display:inline-block"></span> Session expirée</td><td>Dernière liste connue, grisée</td><td>Redemande mot de passe et code, puis ouvre</td></tr>
+                <tr><td><span class="led off" style="display:inline-block"></span> Injoignable</td><td>Dernière liste connue, grisée</td><td>Message, nouvel essai possible</td></tr>
+              </tbody>
+            </table></div>
+            <p class="small muted">Clic droit sur un serveur : Ouvrir, Ouvrir dans un nouvel onglet, Copier la commande ssh, Favori. Les serveurs hors plage horaire n'apparaissent pas.</p>
+          </div>
+          <div class="status"><span>Liste rafraîchie toutes les 5 min et à chaque ouverture</span></div>
+        </div>
+
+        <!-- 4 Ouvrir -->
+        <div data-screen="open" class="main" hidden>
+          <div class="tabs"><div class="tab">Accueil</div><div class="tab on"><span class="rec-dot" aria-label="Enregistré"></span>web-01 · ACME</div></div>
+          <div class="content">
+            <div class="banner"><span class="ico">●</span><div>Session <b>enregistrée</b> par Heimdia · compte <b>admin</b> fourni par le coffre.</div></div>
+<div class="term"><span class="d">Connexion à web-01 via Heimdia ACME…</span>
+<span class="d">Heimdia : session enregistrée.</span>
+<span class="h">admin@web-01</span>:~$ uptime
+ 10:41:02 up 32 days,  2:14,  1 user,  load average: 0.08, 0.05, 0.01
+<span class="h">admin@web-01</span>:~$ <span class="cursor"></span></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Mode</th><th>Ce que fait Portunia</th></tr></thead>
+              <tbody>
+                <tr><td><span class="mode vault">Coffre</span></td><td>Ouvre directement : le bastion fournit le compte. Panneau Fichiers (SFTP) si la règle l'autorise.</td></tr>
+                <tr><td><span class="mode rec">Enregistré</span></td><td>Le bastion demande identifiant et mot de passe du serveur dans le terminal, comme pour la connexion rapide.</td></tr>
+                <tr><td><span class="mode">Rebond</span></td><td>Connexion de bout en bout par le bastion (comme ssh -J) : votre clé ou votre mot de passe va au serveur, le bastion ne voit rien.</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="status"><span>Via <b>Heimdia ACME</b></span><span>Jeton à usage unique</span><span>Reconnexion : nouveau jeton, sans code</span></div>
+        </div>
+
+        <!-- 5 Serveurs -->
+        <div data-screen="targets" class="main" hidden>
+          <div class="tabs"><div class="tab on">Serveurs et coffre</div></div>
+          <div class="content">
+            <div class="split">
+              <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+                <div class="row" style="justify-content:space-between"><input class="input" id="t-find" placeholder="Filtrer" style="flex:1 1 160px"><button class="btn primary">Ajouter un serveur</button></div>
+                <div class="tbl-wrap"><table>
+                  <thead><tr><th>Serveur</th><th>Dossier</th><th>Adresse</th><th>Mode</th><th>Empreinte</th></tr></thead>
+                  <tbody>
+                    <tr style="background:var(--accent-soft)"><td>web-01</td><td>Production</td><td><code>10.0.1.11:22</code></td><td><span class="mode vault">Coffre</span></td><td><span class="mode ok">connue</span></td></tr>
+                    <tr><td>db-01</td><td>Production</td><td><code>10.0.1.20:22</code></td><td><span class="mode vault">Coffre</span></td><td><span class="mode ok">connue</span></td></tr>
+                    <tr><td>rec-app</td><td>Recette</td><td><code>10.0.2.5:22</code></td><td><span class="mode rec">Enregistré</span></td><td><span class="mode ok">connue</span></td></tr>
+                    <tr><td>fw-edge</td><td>Réseau</td><td><code>10.0.0.1:22</code></td><td><span class="mode">Rebond</span></td><td><span class="mode vault">à la 1ʳᵉ connexion</span></td></tr>
+                  </tbody>
+                </table></div>
+              </div>
+              <div class="panel">
+                <h3>web-01</h3>
+                <label class="fld">Adresse<input class="input" id="e-host" value="10.0.1.11"></label>
+                <div class="fld">Mode<div class="seg"><span>Rebond</span><span>Enregistré</span><span class="on">Coffre</span></div></div>
+                <label class="fld">Compte sur le serveur<input class="input" id="e-acc" value="admin"></label>
+                <div class="fld">Secret du coffre<div class="fp">Clé SSH ed25519 · créée le 29/10 · jamais réaffichée</div></div>
+                <div class="row"><button class="btn sm">Remplacer le secret</button><button class="btn sm">Oublier l'empreinte</button></div>
+                <div class="row" style="justify-content:space-between"><button class="btn sm danger">Supprimer</button><button class="btn primary">Enregistrer</button></div>
+              </div>
+            </div>
+          </div>
+          <div class="status"><span>Chaque modification est tracée dans le journal</span></div>
+        </div>
+
+        <!-- 6 Comptes -->
+        <div data-screen="users" class="main" hidden>
+          <div class="tabs"><div class="tab on">Comptes et groupes</div></div>
+          <div class="content">
+            <div class="split">
+              <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+                <div class="row" style="justify-content:space-between"><div class="seg" style="flex:0 1 240px"><span class="on">Comptes</span><span>Groupes</span></div><button class="btn primary">Créer un compte</button></div>
+                <div class="tbl-wrap"><table>
+                  <thead><tr><th>Compte</th><th>Rôle</th><th>Groupes</th><th>Connexion</th><th>Code</th></tr></thead>
+                  <tbody>
+                    <tr><td>julien</td><td>Administrateur</td><td>Admins Linux</td><td>mot de passe + code</td><td><span class="mode ok">enrôlé</span></td></tr>
+                    <tr><td>claire.a</td><td>Auditeur</td><td>—</td><td>clé + code</td><td><span class="mode ok">enrôlé</span></td></tr>
+                    <tr style="background:var(--accent-soft)"><td>marc.d</td><td>Utilisateur</td><td>Développeurs</td><td>réglage général</td><td><span class="mode vault">à la 1ʳᵉ connexion</span></td></tr>
+                  </tbody>
+                </table></div>
+              </div>
+              <div class="panel">
+                <h3>Nouveau compte</h3>
+                <label class="fld">Identifiant<input class="input" id="u-login" value="marc.d"></label>
+                <div class="fld">Rôle<div class="seg"><span class="on">Utilisateur</span><span>Auditeur</span><span>Admin</span></div></div>
+                <label class="fld">Groupes<input class="input" id="u-grp" value="Développeurs"></label>
+                <div class="fld">Connexion<div class="seg"><span class="on">Général</span><span>Personnalisée</span></div></div>
+                <div class="fld">Mot de passe provisoire<div class="fp">Kx7-mQ2p-Vw9z · à changer à la 1ʳᵉ connexion</div></div>
+                <p class="small muted">Le code TOTP sera enrôlé par Marc lui-même, à sa première connexion depuis Portunia.</p>
+                <button class="btn primary">Créer</button>
+              </div>
+            </div>
+          </div>
+          <div class="status"><span>9 comptes · 4 groupes</span></div>
+        </div>
+
+        <!-- 7 Règles -->
+        <div data-screen="rules" class="main" hidden>
+          <div class="tabs"><div class="tab on">Règles</div></div>
+          <div class="content">
+            <div class="split">
+              <div class="rules" style="min-width:0">
+                <div class="rule" style="border-color:var(--accent)"><div><div class="who">Admins Linux → Production</div><div class="what">web-01, web-02, db-01</div></div><span class="mode ok">active</span>
+                  <div class="chips"><span class="chip">Lun-ven 7 h-20 h</span><span class="chip yes">SFTP</span><span class="chip no">Tunnels</span><span class="chip">Affichage seul</span></div></div>
+                <div class="rule"><div><div class="who">Prestataire Infogérance → db-01</div><div class="what">db-01</div></div><span class="mode vault">expire le 31/12</span>
+                  <div class="chips"><span class="chip no">SFTP</span><span class="chip no">Tunnels</span><span class="chip w">Affichage + frappe</span></div></div>
+              </div>
+              <div class="panel">
+                <h3>Admins Linux → Production</h3>
+                <label class="fld">Groupe<input class="input" id="r-grp" value="Admins Linux"></label>
+                <div class="fld">Serveurs<div class="chips"><span class="chip">web-01 ✕</span><span class="chip">web-02 ✕</span><span class="chip">db-01 ✕</span><span class="chip">+ ajouter</span></div></div>
+                <div class="fld">Jours<div class="days"><span class="on">L</span><span class="on">M</span><span class="on">M</span><span class="on">J</span><span class="on">V</span><span>S</span><span>D</span></div></div>
+                <div class="row"><label class="fld">De<input class="input" id="r-from" value="7 h"></label><label class="fld">À<input class="input" id="r-to" value="20 h"></label></div>
+                <span class="check"><i class="on">✓</i>Transferts de fichiers (SFTP, scp)</span>
+                <span class="check"><i></i>Tunnels (redirection de ports)</span>
+                <span class="check"><i></i>Enregistrer aussi la frappe</span>
+                <label class="fld">Expire le<input class="input" id="r-exp" value="" placeholder="jamais"></label>
+                <button class="btn primary">Enregistrer</button>
+              </div>
+            </div>
+          </div>
+          <div class="status"><span>Une règle modifiée s'applique à la prochaine ouverture de session</span></div>
+        </div>
+
+        <!-- 8 Journal -->
+        <div data-screen="audit" class="main" hidden>
+          <div class="tabs"><div class="tab on">Journal et sessions</div></div>
+          <div class="content">
+            <div class="row"><div class="seg" style="flex:0 1 260px"><span class="on">Journal</span><span>Sessions</span></div><input class="input" id="j-find" placeholder="Compte, serveur, événement…" style="flex:1 1 180px"><button class="btn">Exporter en CSV</button></div>
+            <div class="seal"><span>✓</span><div><b>Journal intact.</b> 18 432 événements chaînés, vérifiés à l'ouverture de cet écran.</div></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Heure</th><th>Qui</th><th>Événement</th><th>Détail</th></tr></thead>
+              <tbody>
+                <tr><td>10:52</td><td>julien</td><td>Session fermée</td><td>web-01 · 12 min · enregistrée</td></tr>
+                <tr><td>10:40</td><td>julien</td><td>Session ouverte</td><td>web-01 · Portunia · coffre</td></tr>
+                <tr><td>10:38</td><td>presta.infog</td><td><span class="mode rec">Accès refusé</span></td><td>web-01 : aucune règle active</td></tr>
+                <tr><td>10:31</td><td>julien</td><td>Règle modifiée</td><td>Admins Linux → Production : horaires</td></tr>
+                <tr><td>10:12</td><td>marc.d</td><td><span class="mode vault">Code refusé</span></td><td>déjà utilisé · 192.168.1.44</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="status"><span>Rôle requis : administrateur ou auditeur</span></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="explain" id="explain"></div>
+  </section>
+
+  <section id="pane-q" role="tabpanel" aria-labelledby="tab-q" hidden>
+    <div class="qbar">
+      <span class="small"><b id="qdone">0</b> réponse(s) sur <span id="qtotal">0</span></span>
+      <div class="prog"><i id="qprog"></i></div>
+      <span class="save" id="save">Les réponses s'enregistrent toutes seules.</span>
+      <button class="btn sm" id="copy">Copier mes réponses</button>
+    </div>
+    <p class="small muted" style="padding-block:10px">« conseillé » = mon choix par défaut si vous ne répondez pas.</p>
+    <div id="qlist" class="wrap" style="max-width:none"></div>
+  </section>
+</div>
+
+<script>
+const TEXT = {
+  list: { t: 'Paramètres › Bastions', p: ['Plusieurs bastions, chacun avec son état : connecté, session expirée, injoignable.', 'Le bouton Administrer n\'apparaît que pour les rôles administrateur et auditeur.', 'Retirer un bastion efface son jeton et sa liste de serveurs de ce PC.'], s: ['L\'API du bastion écoute sur le port 8443, en HTTPS.'] },
+  add: { t: 'Ajouter un bastion', p: ['Même logique qu\'un nouveau serveur SSH : on compare l\'empreinte du certificat avant d\'envoyer le mot de passe.', 'Mot de passe et code donnent un jeton de session, valable la durée fixée par l\'administrateur.', 'Premier passage d\'un compte : mot de passe provisoire à changer, puis code QR à scanner, directement dans Portunia.'], s: ['Ni le mot de passe ni le code ne sont gardés, sauf choix contraire (questions).'] },
+  tree: { t: 'Les serveurs du bastion dans l\'arbre', p: ['Lecture seule : c\'est l\'administrateur du bastion qui classe et nomme.', 'Hors connexion, la dernière liste reste visible, grisée.', 'Recherche, favoris et palette de commandes incluent ces serveurs.'], s: [] },
+  open: { t: 'Ouvrir une session', p: ['Portunia demande au bastion un jeton à usage unique et se connecte avec : pas de code à chaque onglet.', 'Coffre et Enregistré passent par le proxy du bastion ; Rebond passe de bout en bout.', 'La reconnexion automatique de Portunia redemande un jeton, sans rien demander à l\'utilisateur tant que la session du bastion est valide.'], s: ['Le jeton à usage unique expire en 30 secondes s\'il n\'est pas utilisé.'] },
+  targets: { t: 'Administration : serveurs et coffre', p: ['Liste filtrable, fiche à droite : adresse, mode, compte, secret.', 'Le secret ne se lit jamais, il se remplace.', '« Oublier l\'empreinte » après la réinstallation d\'un serveur.'], s: ['Génération et installation automatique d\'une clé sur le serveur : voir les questions.'] },
+  users: { t: 'Administration : comptes et groupes', p: ['Création avec un mot de passe provisoire affiché une fois.', 'Rôle, groupes et façon de se connecter (réglage général ou personnalisé).', 'Désactiver, réinitialiser le code, ajouter une clé SSH.'], s: [] },
+  rules: { t: 'Administration : règles', p: ['Formulaire visuel : groupe, serveurs, jours, heures, options, expiration.', 'L\'état de chaque règle se voit d\'un coup d\'œil : active, hors plage, expirée.', 'Effet à la prochaine ouverture de session.'], s: ['Couper les sessions en cours à la modification : étape 3 (vue en direct).'] },
+  audit: { t: 'Journal et sessions', p: ['Journal filtrable, vérifié à l\'ouverture, export CSV.', 'Onglet Sessions : qui, où, quand, combien de temps.', 'La relecture des enregistrements arrive à l\'étape 3.'], s: [] },
+};
+const ADMIN = new Set(['targets', 'users', 'rules', 'audit']);
+const explain = document.getElementById('explain');
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function show(s) {
+  document.querySelectorAll('[data-screen]').forEach((n) => { n.hidden = n.dataset.screen !== s; });
+  document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+  document.getElementById('side-user').hidden = ADMIN.has(s);
+  document.getElementById('side-admin').hidden = !ADMIN.has(s);
+  document.querySelectorAll('.nrow[data-nav]').forEach((r) => r.classList.toggle('sel', r.dataset.nav === s));
+  document.getElementById('t-web').classList.toggle('sel', s === 'open');
+  const before = s === 'add';
+  document.getElementById('btree').hidden = before;
+  document.getElementById('bled').classList.toggle('off', before);
+  document.getElementById('bsub').textContent = before ? 'non connecté' : 'julien · expire dans 7 h 52';
+  const x = TEXT[s];
+  const left = el('div'); left.append(el('h2', null, x.t));
+  const ul = el('ul'); x.p.forEach((t) => ul.append(el('li', null, t))); left.append(ul);
+  const right = el('div', 'scope'); right.append(el('h2', null, 'À noter'));
+  const ul2 = el('ul'); (x.s.length ? x.s : ['Rien de plus.']).forEach((t) => ul2.append(el('li', null, t))); right.append(ul2);
+  explain.replaceChildren(left, right);
+}
+document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+document.querySelectorAll('.nrow[data-nav]').forEach((r) => r.addEventListener('click', () => show(r.dataset.nav)));
+show('list');
+
+function tab(which) {
+  const q = which === 'q';
+  document.getElementById('tab-maq').setAttribute('aria-selected', String(!q));
+  document.getElementById('tab-q').setAttribute('aria-selected', String(q));
+  document.getElementById('pane-maq').hidden = q;
+  document.getElementById('pane-q').hidden = !q;
+}
+document.getElementById('tab-maq').addEventListener('click', () => tab('maq'));
+document.getElementById('tab-q').addEventListener('click', () => tab('q'));
+if (location.hash === '#questions') tab('q');
+
+const SECTIONS = [
+  { title: 'Connexion depuis Portunia', qs: [
+    { id: 'memo', t: 'Portunia peut-il mémoriser le mot de passe du bastion ?', why: 'Il serait chiffré dans le coffre de Portunia ; seul le code serait redemandé chaque jour. Pratique, mais un PC volé et déverrouillé donne alors un facteur.', type: 'one', o: ['Non, mot de passe et code à chaque session du bastion', 'Oui, au choix de l\'utilisateur', 'Oui, si l\'administrateur du bastion l\'autorise'], rec: 2 },
+    { id: 'enrol', t: 'Comment un nouveau compte enrôle-t-il son code TOTP ?', why: 'L\'administrateur ne doit idéalement jamais voir le secret TOTP d\'un autre.', type: 'one', o: ['Mot de passe provisoire, puis code QR à la 1ʳᵉ connexion dans Portunia', 'L\'administrateur montre le code QR (comme aujourd\'hui en ligne de commande)', 'Les deux possibles'], rec: 0 },
+    { id: 'cert', t: 'Certificat HTTPS de l\'API du bastion ?', why: 'Auto-signé avec empreinte vérifiée : rien à configurer. Un certificat d\'entreprise évite la vérification manuelle.', type: 'many', o: ['Auto-signé, empreinte vérifiée dans Portunia', 'Certificat fourni par l\'entreprise', 'Let\'s Encrypt (bastion exposé sur Internet)'], rec: [0, 1] },
+  ]},
+  { title: 'Serveurs du bastion dans Portunia', qs: [
+    { id: 'doublons', t: 'Que faire des sessions Portunia qui pointent vers un serveur désormais protégé par le bastion ?', why: 'Elles contourneraient le bastion si le serveur reste joignable directement.', type: 'one', o: ['Proposer de les remplacer par le serveur du bastion', 'Les signaler seulement', 'Ne rien faire'], rec: 0 },
+    { id: 'cle', t: 'Ajout d\'un serveur en mode coffre : générer et installer la clé automatiquement ?', why: 'L\'administrateur donne une fois un mot de passe du serveur ; Heimdia crée une clé, l\'installe, puis n\'utilise plus que la clé.', type: 'one', o: ['Oui, dès l\'étape 2', 'Plus tard'], rec: 0 },
+  ]},
+  { title: 'Offre', qs: [
+    { id: 'offre', t: 'Dans quelle édition de Portunia l\'intégration est-elle disponible ?', why: 'Heimdia est vendu à part ; Portunia peut le rendre visible partout ou le réserver.', type: 'one', o: ['Utiliser un bastion : toutes les éditions ; administrer : Équipes', 'Tout réservé à Équipes', 'Tout dans toutes les éditions'], rec: 0 },
+  ]},
+];
+const ALL = SECTIONS.flatMap((s) => s.qs);
+let answers = {};
+let db = null, saveTimer = null;
+const saveEl = document.getElementById('save');
+function setSave(text, cls) { saveEl.textContent = text; saveEl.className = 'save' + (cls ? ' ' + cls : ''); }
+function answered(q) { const a = answers[q.id]; return !!a && ((Array.isArray(a.v) ? a.v.length : a.v != null) || !!(a.note || '').trim()); }
+function render() {
+  const list = document.getElementById('qlist');
+  list.replaceChildren();
+  let n = 0;
+  for (const sec of SECTIONS) {
+    const box = el('div', 'qsec'); box.append(el('h2', null, sec.title));
+    for (const q of sec.qs) {
+      n++;
+      const card = el('div', 'q');
+      const head = el('div', 'qt'); head.append(el('span', 'qn', String(n)), el('span', null, q.t));
+      card.append(head, el('p', 'why', q.why));
+      const opts = el('div', 'opts');
+      const cur = answers[q.id] || {};
+      q.o.forEach((label, i) => {
+        const lab = el('label', 'opt');
+        const inp = document.createElement('input');
+        inp.type = q.type === 'many' ? 'checkbox' : 'radio'; inp.name = 'q-' + q.id; inp.id = 'q-' + q.id + '-' + i;
+        inp.checked = q.type === 'many' ? (cur.v || []).includes(i) : cur.v === i;
+        inp.addEventListener('change', () => {
+          const a = answers[q.id] || {};
+          if (q.type === 'many') { const set = new Set(a.v || []); inp.checked ? set.add(i) : set.delete(i); a.v = [...set].sort((x, y) => x - y); } else a.v = i;
+          answers[q.id] = a; changed(card, q);
+        });
+        const span = el('span', null, label);
+        if (Array.isArray(q.rec) ? q.rec.includes(i) : q.rec === i) span.append(el('span', 'rec', 'conseillé'));
+        lab.append(inp, span); opts.append(lab);
+      });
+      const note = document.createElement('textarea');
+      note.className = 'input'; note.id = 'note-' + q.id; note.rows = 1; note.placeholder = 'Précision (facultatif)'; note.value = cur.note || '';
+      note.addEventListener('input', () => { const a = answers[q.id] || {}; a.note = note.value; answers[q.id] = a; changed(card, q); });
+      card.append(opts, note); card.classList.toggle('done', answered(q)); box.append(card);
+    }
+    list.append(box);
+  }
+  progress();
+}
+function progress() {
+  const done = ALL.filter(answered).length;
+  document.getElementById('qdone').textContent = done;
+  document.getElementById('qtotal').textContent = ALL.length;
+  document.getElementById('qcount').textContent = done + ' / ' + ALL.length;
+  document.getElementById('qprog').style.width = (100 * done / ALL.length) + '%';
+}
+function changed(card, q) {
+  card.classList.toggle('done', answered(q)); progress();
+  try { localStorage.setItem('heimdia-etape2', JSON.stringify(answers)); } catch {}
+  clearTimeout(saveTimer);
+  if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
+}
+async function save() {
+  try { await db.doc('questionnaire/etape2').set({ reponses: answers, misAJour: new Date().toISOString() }); setSave('Enregistré. Claude peut lire vos réponses.', 'ok'); }
+  catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
+}
+function summary() {
+  const lines = ['Réponses Heimdia étape 2']; let n = 0;
+  for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
+  return lines.join('\n');
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = summary();
+  try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
+});
+try { answers = JSON.parse(localStorage.getItem('heimdia-etape2') || '{}') || {}; } catch { answers = {}; }
+render();
+(async () => {
+  const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;
+  if (!api) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  db = api;
+  try {
+    const snap = await db.doc('questionnaire/etape2').get();
+    if (snap.exists) {
+      const stored = (snap.data() || {}).reponses || {};
+      answers = Object.assign({}, stored, answers); render();
+      if (JSON.stringify(stored) !== JSON.stringify(answers)) save(); else setSave('Enregistré. Claude peut lire vos réponses.', 'ok');
+    } else if (Object.keys(answers).length) save();
+  } catch { setSave('Lecture impossible : vos réponses restent dans ce navigateur.', 'err'); }
+})();
+</script>
