@@ -48,10 +48,12 @@ pub enum Feature {
     Containers,
     /// Stockage objet S3.
     CloudStorage,
+    /// Administration d'un bastion Heimdia depuis Portunia.
+    BastionAdmin,
 }
 
 impl Feature {
-    pub const ALL: [Feature; 9] = [
+    pub const ALL: [Feature; 10] = [
         Feature::SessionRecording,
         Feature::MonitoringAlerts,
         Feature::Sync,
@@ -61,12 +63,13 @@ impl Feature {
         Feature::MultiExec,
         Feature::Containers,
         Feature::CloudStorage,
+        Feature::BastionAdmin,
     ];
 
     /// Édition minimale qui débloque la fonctionnalité.
     pub fn edition(self) -> Edition {
         match self {
-            Feature::TeamSpaces => Edition::Team,
+            Feature::TeamSpaces | Feature::BastionAdmin => Edition::Team,
             _ => Edition::Pro,
         }
     }
@@ -82,6 +85,7 @@ impl Feature {
             Feature::MultiExec => "Commande sur plusieurs serveurs",
             Feature::Containers => "Conteneurs Docker et Kubernetes",
             Feature::CloudStorage => "Stockage S3",
+            Feature::BastionAdmin => "Administration des bastions Heimdia",
         }
     }
 }

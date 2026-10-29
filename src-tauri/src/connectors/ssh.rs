@@ -745,6 +745,22 @@ impl client::Handler for Handler {
     }
 }
 
+/// Mémorise une empreinte déjà vérifiée par un autre moyen (bastion Heimdia, dont l'API
+/// donne l'empreinte de son serveur SSH) : pas de question à la première connexion.
+/// Une empreinte déjà connue n'est jamais remplacée.
+pub fn remember_host(data_dir: &Path, host_id: &str, fingerprint: &str) {
+    let path = data_dir.join("known_hosts.json");
+    let _guard = KNOWN_HOSTS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut known = read_known(&path);
+    if known.contains_key(host_id) {
+        return;
+    }
+    known.insert(host_id.to_string(), fingerprint.to_string());
+    if let Ok(text) = serde_json::to_string_pretty(&known) {
+        let _ = crate::vault::write(&path, &text);
+    }
+}
+
 fn read_known(path: &Path) -> HashMap<String, String> {
     // Chiffré avec les autres données quand un mot de passe maître est défini.
     crate::vault::load_json(path).0

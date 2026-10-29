@@ -298,6 +298,73 @@ export function connectQuick(protocol: string, name: string, values: Record<stri
   return invoke<ConnectResponse>('connect_quick', { protocol, name, values, cols, rows, onEvent: channel });
 }
 
+// ---------- Bastions Heimdia ----------
+
+export interface BastionServer {
+  nom: string;
+  dossier: string;
+  mode: 'coffre' | 'enregistre' | 'rebond';
+  hote: string;
+  port: number;
+  compte: string | null;
+  sftp: boolean;
+  tunnels: boolean;
+}
+
+export interface Bastion {
+  id: string;
+  name: string;
+  host: string;
+  apiPort: number;
+  sshPort: number;
+  apiFingerprint: string;
+  sshFingerprint: string;
+  login: string;
+  role: 'user' | 'auditor' | 'admin';
+  expires: string;
+  rememberAllowed: boolean;
+  servers: BastionServer[];
+  connected: boolean;
+  passwordSaved: boolean;
+}
+
+export interface BastionLogin {
+  id?: string;
+  host: string;
+  apiPort: number;
+  fingerprint: string;
+  login: string;
+  password?: string;
+  code?: string;
+  newPassword?: string;
+  remember: boolean;
+}
+
+/** Réponse de connexion : « ok » ou l'étape suivante demandée par le bastion. */
+export type BastionLoginAnswer =
+  | { etat: 'ok'; bastion: Bastion }
+  | { etat: 'code_requis' }
+  | { etat: 'changer_mot_de_passe' }
+  | { etat: 'enrolement'; secret: string; uri: string };
+
+export const bastions = {
+  list: () => invoke<Bastion[]>('bastion_list'),
+  probe: (address: string) => invoke<{ host: string; apiPort: number; fingerprint: string; info: { nom: string; version: string; memo_mot_de_passe: boolean } }>('bastion_probe', { address }),
+  login: (request: BastionLogin) => invoke<BastionLoginAnswer>('bastion_login', { request }),
+  logout: (id: string) => invoke<void>('bastion_logout', { id }),
+  remove: (id: string) => invoke<void>('bastion_remove', { id }),
+  servers: (id: string) => invoke<Bastion>('bastion_servers', { id }),
+  admin: <T = any>(id: string, method: string, path: string, body?: unknown) => invoke<T>('bastion_admin', { id, method, path, body: body ?? null }),
+  journalCsv: (id: string, query: string, dest: string) => invoke<void>('bastion_journal_csv', { id, query, dest }),
+  qr: (text: string) => invoke<string>('qr_svg', { text }),
+};
+
+export function connectBastion(id: string, server: string, extra: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+  const channel = new Channel<TermEvent>();
+  channel.onmessage = onEvent;
+  return invoke<ConnectResponse>('bastion_connect', { id, server, extra, cols, rows, onEvent: channel });
+}
+
 // ---------- Clés SSH ----------
 
 export interface KeyInfo {

@@ -2,7 +2,7 @@
 
 Gestionnaire de sessions distantes pour Windows : toutes vos connexions (SSH, Bureau à distance, consoles web, Telnet…) dans une seule fenêtre. Léger (Tauri 2 + Rust, interface sans framework) et extensible (un protocole = une extension).
 
-Portunia s'appelait **Termoria** jusqu'à la version 0.39. La mise à jour vers Portunia retire l'ancienne application et reprend ses données (sessions, coffre, réglages), copiées au premier lancement ; l'ancien dossier `fr.termoria.app` reste comme copie de secours. Le module bastion à venir s'appellera **Heimdia**.
+Portunia s'appelait **Termoria** jusqu'à la version 0.39. La mise à jour vers Portunia retire l'ancienne application et reprend ses données (sessions, coffre, réglages), copiées au premier lancement ; l'ancien dossier `fr.termoria.app` reste comme copie de secours. Le bastion SSH **Heimdia** s'intègre comme une extension (voir ci-dessous).
 
 ## Installer Portunia
 
@@ -48,6 +48,7 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
 | Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console de Windows Terminal livrée avec Portunia (OpenConsole, plus rapide que celle du système : écho de la frappe 47 → 17 ms, sorties volumineuses 11 → 38 Mo/s). Section « Ce PC », menu « + », Ctrl+Maj+T. |
+| Bastion Heimdia (extension) | Onglet terminal | Section « Bastions » de la barre latérale : on ajoute un bastion [Heimdia](https://github.com/jpiperault/Heimdia) (empreinte du certificat vérifiée, mot de passe et code, première connexion avec mot de passe provisoire et enrôlement du code par code QR). Les serveurs autorisés s'affichent par dossier ; chaque ouverture utilise un jeton à usage unique, sans retaper le code. Modes coffre (compte fourni par le bastion), enregistré (identifiants demandés dans le terminal) et rebond (de bout en bout). Signale les sessions qui contournent le bastion. Administration du bastion (serveurs et coffre, comptes, groupes, règles, journal vérifié, sessions, réglages) dans Portunia Équipes. Activable dans Extensions. |
 | FTP / FTPS | Onglet fichiers | Explorateur en pleine largeur (envoi, téléchargement, glisser-déposer, renommage, suppression). FTPS explicite par défaut, avec reprise de session TLS (exigée par FileZilla Server et vsftpd) et certificats vérifiés par Windows ; certificat auto-signé accepté sur demande. Connexion rouverte d'elle-même après inactivité. `ftps://user@hôte` en connexion rapide. |
 | Stockage S3 (Pro) | Onglet fichiers | Amazon S3 et services compatibles (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…) : compartiments, dossiers, envoi et téléchargement (jusqu'à 5 Go par fichier), renommage et suppression de dossiers entiers. Adressage par chemin pour MinIO / Ceph. Client intégré (signature AWS SigV4), sans le SDK d'Amazon. |
 | Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |

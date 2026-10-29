@@ -1,6 +1,7 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, Bastion, BastionServer, connectBastion, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { BastionPanel, HEIMDIA_EXTENSION, renderBastionAdmin } from './bastion';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
@@ -34,7 +35,7 @@ import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
 
 interface Tab {
   id: string;
-  kind: 'session' | 'local' | 'extensions' | 'replay' | 'tools' | 'multi';
+  kind: 'session' | 'local' | 'extensions' | 'replay' | 'tools' | 'multi' | 'admin';
   /** Shell local (onglet « local »). */
   shell?: ShellSpec;
   title: string;
@@ -175,6 +176,56 @@ const sessionTree = new SessionTree(tree, {
 });
 tree.addEventListener('tree-change', () => renderTree());
 
+// ---------- Extension Heimdia (bastions) ----------
+
+const bastionPanel = new BastionPanel($('bastions'), {
+  toast,
+  openServer: (b, s) => openBastionServer(b, s),
+  sessions: () => state.sessions,
+  removeSessions: async (ids) => {
+    for (const id of ids) {
+      for (const t of state.tabs.filter((t) => t.sessionId === id)) closeTab(t.id);
+      await api.deleteSession(id).catch((e) => toast(errorText(e), 'error'));
+    }
+    await reload();
+  },
+  openAdmin: (b) => openBastionAdmin(b),
+  allowsAdmin: () => allows('bastionAdmin'),
+  filter: () => state.filter,
+});
+
+/** Serveur d'un bastion : session SSH par le bastion, avec un jeton à usage unique par connexion. */
+function openBastionServer(b: Bastion, s: BastionServer) {
+  const rebond = s.mode === 'rebond';
+  const session: Session = {
+    id: '', name: `${s.nom} · ${b.name}`, folder: '', protocol: 'ssh', tags: [], secretKeys: [],
+    // Rebond : authentification de bout en bout, identifiants demandés dans le terminal au besoin.
+    values: rebond ? { host: s.hote, port: s.port, username: s.compte ?? '', auth: 'auto' } : { host: b.host, port: b.sshPort, username: `${b.login}%${s.nom}`, auth: 'key' },
+  };
+  const connect = async (typed: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
+    try {
+      return await connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+    } catch (e) {
+      if (errorText(e) !== 'SESSION_EXPIREE') throw e;
+      if (await bastionPanel.reconnect(b.id)) return connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+      throw new Error('Session du bastion expirée : reconnectez-vous (section Bastions).');
+    }
+  };
+  return openSession(session, undefined, { connect, typing: rebond });
+}
+
+function openBastionAdmin(b: Bastion) {
+  if (!allows('bastionAdmin')) return toast('L’administration des bastions fait partie de Portunia Équipes (Paramètres › Licence)', 'error');
+  const title = `Admin · ${b.name}`;
+  const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
+  if (existing) return activate(existing.id);
+  const view = h('div', { class: 'page-view' }, renderBastionAdmin(b, bastionPanel.host));
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
+  state.tabs.push(tab);
+  activate(tab.id);
+}
+
 function promptNewFolder(parent: string) {
   const name = prompt(parent ? `Nouveau sous-dossier dans « ${parent} » :` : 'Nom du nouveau dossier :')?.trim();
   if (name) act(() => api.createFolder(parent ? `${parent}/${name}` : name));
@@ -192,6 +243,7 @@ async function act(action: () => Promise<unknown>) {
 
 function renderTree() {
   sessionTree.render(state.folders, state.sessions, state.filter);
+  if (extensionEnabled('heimdia')) bastionPanel.render();
 }
 
 // ---------- Onglets ----------
@@ -645,7 +697,13 @@ async function sshLogin(tab: Tab, session: Session, typed: Record<string, unknow
   }
 }
 
-async function openSession(session: Session, quick?: QuickTarget) {
+/** Ouverture fournie par une extension (bastion) : connexion et saisie éventuelle dans le terminal. */
+interface CustomOpen {
+  connect: (typed: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => Promise<ConnectResponse>;
+  typing: boolean;
+}
+
+async function openSession(session: Session, quick?: QuickTarget, custom?: CustomOpen) {
   const proto = protocolOf(session.protocol);
   if (!proto) return toast(`Extension « ${session.protocol} » non installée`, 'error');
   if (!extensionEnabled(proto.id)) {
@@ -655,11 +713,13 @@ async function openSession(session: Session, quick?: QuickTarget) {
   // SSH : identifiant et mot de passe manquants saisis dans le terminal (connexion rapide,
   // ou session enregistrée sans eux). `typed` garde les réponses pour les reconnexions.
   const typed: Record<string, unknown> = quick ? quick.values : {};
-  const connectOnce = (cols: number, rows: number, onEvent: (e: TermEvent) => void) => quick
+  const connectOnce = (cols: number, rows: number, onEvent: (e: TermEvent) => void) => custom
+    ? custom.connect(typed, cols, rows, onEvent)
+    : quick
     ? connectQuick(quick.protocol, quick.name, quick.values, cols, rows, onEvent)
     : Object.keys(typed).length ? connectWith(session.id, typed, session.name, cols, rows, onEvent)
     : api.connect(session.id, cols, rows, onEvent);
-  const typing = session.protocol === 'ssh' && (quick ? true : needsTyping(session));
+  const typing = custom ? custom.typing : session.protocol === 'ssh' && (quick ? true : needsTyping(session));
   const opener = !typing ? connectOnce : (cols: number, rows: number, onEvent: (e: TermEvent) => void) =>
     sshLogin(tab, session, typed, () => connectOnce(cols, rows, onEvent), (user) => {
       if (!quick) return;
@@ -679,7 +739,7 @@ async function openSession(session: Session, quick?: QuickTarget) {
     return;
   }
 
-  const existing = !quick && state.tabs.find((t) => t.sessionId === session.id && !t.remoteCommand);
+  const existing = !quick && !custom && state.tabs.find((t) => t.sessionId === session.id && !t.remoteCommand);
   if (existing) return activate(existing.id);
 
   const termEl = h('div', { class: 'term-view' });
@@ -687,7 +747,7 @@ async function openSession(session: Session, quick?: QuickTarget) {
   const view = h('div', { class: 'pane' }, paneHead, termEl);
   views.append(view);
   const tab: Tab = {
-    id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: quick ? undefined : session.id, protocol: session.protocol,
+    id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: quick || custom ? undefined : session.id, protocol: session.protocol,
     quick, view, paneHead, state: 'connecting', receive: true,
   };
   // Cliquer dans un volet de l'écran partagé le rend actif.
@@ -826,9 +886,10 @@ async function removeSession(session: Session) {
 function extensionsPage(): HTMLElement {
   const usage: Record<string, number> = {};
   for (const s of state.sessions) usage[s.protocol] = (usage[s.protocol] ?? 0) + 1;
-  return renderExtensions(state.protocols, usage, extensionEnabled, (id, on) => {
+  usage.heimdia = bastionPanel.list.length;
+  return renderExtensions([...state.protocols, HEIMDIA_EXTENSION], usage, extensionEnabled, (id, on) => {
     setExtension(id, on);
-    toast(`Extension « ${protocolOf(id)?.name ?? id} » ${on ? 'activée' : 'désactivée'}`);
+    toast(`Extension « ${protocolOf(id)?.name ?? (id === 'heimdia' ? HEIMDIA_EXTENSION.name : id)} » ${on ? 'activée' : 'désactivée'}`);
   });
 }
 
@@ -920,6 +981,7 @@ onSettingsChange((s) => {
   const key = s.disabledExtensions.join(',');
   if (key === extensionsKey) return;
   extensionsKey = key;
+  bastionPanel.show(extensionEnabled('heimdia'));
   state.tabs.find((t) => t.kind === 'extensions')?.view.replaceChildren(extensionsPage());
   renderAll();
 });
@@ -933,7 +995,8 @@ onSettingsChange((s) => {
   if (key !== monitorKey) { monitorKey = key; monitor.start(); renderAll(); }
 });
 monitorKey = `${settings().monitoring}|${settings().monitorInterval}`;
-initLock(() => reload());
+initLock(() => { reload(); bastionPanel.show(extensionEnabled('heimdia')); });
+bastionPanel.show(extensionEnabled('heimdia'));
 
 /** Nom du dossier coloré le plus proche (affiché en étiquette dans la barre d'outils). */
 function envFolder(folder: string): string {

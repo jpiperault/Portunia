@@ -38,7 +38,7 @@ pub struct AppState {
     registry: Registry,
     store: Mutex<Store>,
     connections: Mutex<HashMap<String, Box<dyn TerminalConnection>>>,
-    data_dir: PathBuf,
+    pub(crate) data_dir: PathBuf,
     pub license: Mutex<License>,
     lock: Mutex<Lock>,
     /// Enregistrements en cours, par connexion.
@@ -66,14 +66,14 @@ impl AppState {
     }
 
     /// Refuse les actions sensibles tant que Portunia est verrouillé.
-    fn unlocked(&self) -> CmdResult<()> {
+    pub(crate) fn unlocked(&self) -> CmdResult<()> {
         self.lock.lock().unwrap().ensure_unlocked().map_err(err)
     }
 }
 
-type CmdResult<T> = Result<T, String>;
+pub(crate) type CmdResult<T> = Result<T, String>;
 
-fn err(e: impl std::fmt::Display) -> String {
+pub(crate) fn err(e: impl std::fmt::Display) -> String {
     e.to_string()
 }
 
@@ -361,7 +361,7 @@ pub async fn connect_quick(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn start_connection(
+pub(crate) async fn start_connection(
     app: &AppHandle,
     state: &AppState,
     protocol: &str,
@@ -462,7 +462,7 @@ fn files_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteFi
         .ok_or_else(|| "Ce protocole ne propose pas d'explorateur de fichiers".into())
 }
 
-fn full(e: anyhow::Error) -> String {
+pub(crate) fn full(e: anyhow::Error) -> String {
     format!("{e:#}")
 }
 
@@ -1203,10 +1203,11 @@ fn session_values(state: &AppState, session: &Session) -> CmdResult<HashMap<Stri
 /// par des virgules comme ProxyJump) → valeurs complètes dans `jumpHost`.
 fn resolve_jump(state: &AppState, values: &mut HashMap<String, Value>, visited: &mut Vec<String>) -> CmdResult<()> {
     let spec = values.get("jump").and_then(Value::as_str).unwrap_or("").trim().to_string();
-    values.remove("jumpHost");
+    // Sans champ « jump », un rebond déjà préparé (bastion Heimdia) est gardé tel quel.
     if spec.is_empty() {
         return Ok(());
     }
+    values.remove("jumpHost");
     // « a,b » : a d'abord, puis b, puis le serveur.
     let mut previous: Option<HashMap<String, Value>> = None;
     for hop in spec.split(',').map(str::trim).filter(|h| !h.is_empty()) {
