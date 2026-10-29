@@ -386,12 +386,13 @@ function openBypass(host: BastionHost, b: Bastion, list: { session: Session; ser
 
 // ---------- Administration ----------
 
-type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'reglages';
+type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'reglages';
 const SECTIONS: { id: Section; label: string; admin: boolean }[] = [
   { id: 'cibles', label: 'Serveurs et coffre', admin: true },
   { id: 'comptes', label: 'Comptes', admin: true },
   { id: 'groupes', label: 'Groupes', admin: true },
   { id: 'regles', label: 'Règles', admin: true },
+  { id: 'portail', label: 'Portail web', admin: true },
   { id: 'reglages', label: 'Réglages', admin: true },
 ];
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -686,6 +687,69 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       return h('div', { class: 'admin-section' },
         toolbar('Tout ce qu\'aucune règle ne permet est refusé. Une modification s\'applique à la prochaine ouverture de session.', h('button', { class: 'btn primary', onclick: () => ruleDialog() }, 'Nouvelle règle')),
         table(['Règle', 'Groupe', 'Serveurs', 'Quand', 'Options', 'État', ''], rows));
+    },
+
+    portail: async () => {
+      let p: any;
+      try {
+        p = await call<any>('GET', '/admin/portail');
+      } catch (e) {
+        // Bastion antérieur à la 0.7 : pas de portail.
+        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar('Le portail web demande Heimdia 0.7 ou plus récent : mettez le bastion à jour (sudo bash installer.sh mise-a-jour).'));
+        throw e;
+      }
+      const sw = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(p.actif), 'aria-label': 'Portail web' });
+      const state = h('strong', { class: p.actif ? 'ok-text' : 'muted' }, p.actif ? 'activé' : 'désactivé');
+      sw.addEventListener('click', async () => {
+        const on = sw.getAttribute('aria-checked') !== 'true';
+        if (!on && p.sessions_en_cours > 0 && !confirm(`Désactiver le portail ferme les ${p.sessions_en_cours} session(s) web en cours. Continuer ?`)) return;
+        if (on && !p.url) host.toast('Indiquez d\'abord l\'adresse publique du portail, puis enregistrez.', 'info');
+        try { await call('PUT', '/admin/portail', { actif: on }); host.toast(on ? 'Portail web activé' : 'Portail web désactivé'); reload(); } catch (e) { fail(e); }
+      });
+      const tunnel = { relie: ['ok', 'relié'], deconnecte: ['warn', 'installé, non relié'], absent: ['off', 'non installé'] }[p.tunnel as string] ?? ['off', p.tunnel];
+      const stat = (value: string | number, label: string) => h('div', { class: 'portal-stat' }, h('b', {}, String(value)), h('span', {}, label));
+      const closeAll = small('Fermer toutes les sessions web', async () => {
+        if (!confirm('Fermer toutes les sessions web en cours ? Les utilisateurs devront se reconnecter.')) return;
+        try { const r = await call<any>('POST', '/admin/portail/fermer-sessions'); host.toast(`${r.fermees} terminal(aux) fermé(s)`); reload(); } catch (e) { fail(e); }
+      }, true);
+
+      const url = input({ id: 'p-url', value: p.url, placeholder: 'https://acces.votre-domaine.fr' });
+      const groupe = select('p-groupe', [...new Set([p.groupe, ...p.groupes])].filter(Boolean).map((g: string) => [g, g] as [string, string]), p.groupe);
+      const duree = select('p-duree', [['1', '1 heure'], ['4', '4 heures'], ['8', '8 heures']].concat([1, 4, 8].includes(p.duree_h) ? [] : [[String(p.duree_h), `${p.duree_h} heures`]]) as [string, string][], String(p.duree_h));
+      const idle = select('p-idle', [['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 heure']].concat([15, 30, 60].includes(p.inactivite_min) ? [] : [[String(p.inactivite_min), `${p.inactivite_min} minutes`]]) as [string, string][], String(p.inactivite_min));
+      const clip = checkbox('p-clip', 'Copier-coller du texte dans le terminal', p.presse_papiers);
+      const site = input({ id: 'p-site', value: p.turnstile_site, placeholder: '0x4AAAAAA…' });
+      const secret = input({ id: 'p-secret', type: 'password', placeholder: p.turnstile_secret_defini ? 'Garder la clé secrète actuelle' : '0x4AAAAAA…' });
+      const groupMissing = !p.groupes.includes(p.groupe);
+      const save = h('button', { class: 'btn primary', onclick: async () => {
+        const body: Record<string, unknown> = {
+          url: url.value.trim(), groupe: groupe.value, duree_h: Number(duree.value), inactivite_min: Number(idle.value),
+          presse_papiers: clip.box.checked, turnstile_site: site.value.trim(),
+        };
+        if (secret.value.trim()) body.turnstile_secret = secret.value.trim();
+        if (!site.value.trim() && p.turnstile_secret_defini) body.turnstile_secret = '';
+        try { await call('PUT', '/admin/portail', body); host.toast('Portail web enregistré'); reload(); } catch (e) { fail(e); }
+      } }, 'Enregistrer');
+
+      return h('div', { class: 'admin-section form-narrow' },
+        h('div', { class: 'portal-head' }, sw, h('div', {},
+          h('div', {}, h('b', {}, 'Portail web'), ' · ', state),
+          h('p', { class: 'muted small' }, 'Accès aux serveurs SSH depuis un navigateur, sans Portunia, derrière Cloudflare. Désactivé : la page affiche « Portail fermé » et les sessions web en cours se ferment.'))),
+        h('div', { class: 'portal-stats' },
+          stat(p.sessions_en_cours, 'sessions web en cours'), stat(p.connexions_jour, 'connexions aujourd\'hui'), stat(p.echecs_jour, 'échecs aujourd\'hui'),
+          h('div', { class: 'portal-stat' }, h('b', { class: `chip ${tunnel[0]}` }, tunnel[1]), h('span', {}, 'tunnel Cloudflare'))),
+        h('div', {}, closeAll),
+        h('h3', {}, 'Adresse'),
+        field('Adresse publique', url, 'celle que Cloudflare publie ; vérifiée à chaque connexion'),
+        h('p', { class: 'muted small' }, `Le bastion sert le portail sur ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` et ${p.ecoute.proxy} en HTTPS (proxy Cloudflare, adresses de Cloudflare seulement)` : ''}. Installer le tunnel : sudo bash installer.sh portail.`),
+        h('h3', {}, 'Qui et combien de temps'),
+        field('Groupe autorisé', groupe, groupMissing ? `le groupe « ${p.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes` : 'seuls ses membres peuvent se connecter au portail'),
+        h('div', { class: 'row2' }, field('Durée d\'une session web', duree), field('Fermeture après inactivité', idle)),
+        clip.row,
+        h('p', { class: 'muted small' }, 'Toujours exigés sur le portail : mot de passe et code. Première connexion et code perdu se font dans Portunia. Serveurs en mode rebond et Bureau à distance : seulement avec Portunia pour l\'instant.'),
+        h('h3', {}, 'Anti-robots (Cloudflare Turnstile)'),
+        h('div', { class: 'row2' }, field('Clé du site', site), field('Clé secrète', secret, 'gardée chiffrée par le bastion')),
+        h('div', {}, save));
     },
 
     reglages: async () => {

@@ -678,6 +678,16 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .seal { padding: 9px 12px; border-radius: 8px; font-size: 13px; background: rgb(76 195 138 / .12); color: var(--text); }
 .seal.bad { background: rgb(255 123 123 / .16); color: var(--danger); font-weight: 600; }
 .form-narrow { max-width: 620px; }
+/* Portail web (administration du bastion) */
+.portal-head { display: flex; gap: 14px; align-items: flex-start; }
+.portal-head .switch { margin-top: 2px; }
+.portal-head p { margin: 4px 0 0; }
+.ok-text { color: var(--ok); }
+.portal-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.portal-stat { border: 1px solid var(--line-soft); border-radius: 8px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+.portal-stat b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.portal-stat b.chip { font-size: 12px; align-self: flex-start; margin: 0; }
+.portal-stat span { font-size: 12px; color: var(--muted); }
 .sidebar .tree { min-height: 72px; }
 .tbl td strong { white-space: nowrap; }
 .sidebar { min-height: 0; overflow: hidden; }
