@@ -1,0 +1,757 @@
+<title>Heimdia V1</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette fidèle à Portunia (tokens de src/styles.css, sombre par défaut) + questionnaire.
+   Mise en page : onglets Maquette / Questions ; la maquette montre la fenêtre Portunia ou le terminal du serveur. */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --shadow: rgb(0 0 0 / .45);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --shadow: rgb(20 30 50 / .18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --shadow: rgb(20 30 50 / .18); color-scheme: light; }
+:root[data-theme="dark"] {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df; --term-ok: #7fdbaa;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --shadow: rgb(0 0 0 / .45); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.intro { display: flex; flex-direction: column; gap: 4px; }
+.intro h1 { font-size: 21px; font-weight: 650; }
+.intro p { max-width: 75ch; color: var(--text-2); }
+
+.maintabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.maintabs button { border: 0; background: none; padding: 9px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.maintabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.maintabs .count { font-size: 11px; background: var(--chip-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+.steps { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.steps .grp { font-size: 11px; color: var(--muted); padding: 0 2px 0 8px; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Fenêtres */
+.win { display: grid; grid-template-columns: 250px minmax(0, 1fr); min-height: 540px; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+.win.solo { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 760px) { .win { grid-template-columns: minmax(0, 1fr); } .side { border-right: 0 !important; border-bottom: 1px solid var(--line); } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.search { width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--muted); }
+.sec { padding: 8px 4px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bcard { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--panel); }
+.bcard .top { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.led { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.led.off { background: var(--muted); }
+.trow { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); min-width: 0; }
+.trow .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow.folder { color: var(--muted); font-size: 12px; padding-top: 7px; }
+.trow.sel { background: var(--accent-soft); color: var(--text); }
+.trow .tags { margin-left: auto; display: flex; gap: 4px; flex: none; }
+.proto { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; background: var(--b-ssh); color: var(--f-ssh); }
+.mode { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
+.mode.rec { border-color: transparent; background: var(--danger-soft); color: var(--danger); }
+.mode.vault { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
+.mode.ok { border-color: transparent; background: var(--ok-soft); color: var(--ok); }
+.mode.later { border-style: dashed; }
+.nrow { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.nrow.sel { background: var(--accent-soft); color: var(--text); }
+.nrow .c { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.nrow.later { opacity: .55; cursor: default; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; color: var(--muted); border-radius: 6px 6px 0 0; white-space: nowrap; }
+.tab.on { background: var(--work); color: var(--text); border: 1px solid var(--line); border-bottom-color: var(--work); margin-bottom: -1px; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.content { flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.status { display: flex; gap: 14px; flex-wrap: wrap; padding: 6px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); background: var(--bg); }
+.status b { color: var(--text-2); font-weight: 600; }
+
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 8px; font-size: 13px; background: var(--danger-soft); }
+.banner.info { background: var(--accent-soft); }
+.banner .ico { color: var(--danger); font-weight: 700; }
+.banner.info .ico { color: var(--accent); }
+
+.term { background: var(--term); color: var(--term-text); font: 13px/1.6 var(--mono); border-radius: 8px; padding: 14px 16px; overflow-x: auto; white-space: pre; flex: 1; min-height: 260px; }
+.term .d { color: var(--term-dim); }
+.term .h { color: var(--term-host); }
+.term .k { color: var(--term-ok); }
+.term .x { color: #ff8f8f; }
+.term .w { color: #f0c27b; }
+.cursor { display: inline-block; width: 8px; height: 15px; background: var(--term-text); vertical-align: -2px; }
+.qr { display: inline-block; width: 92px; height: 92px; vertical-align: top; background:
+  conic-gradient(from 90deg at 30% 30%, #d6d8dd 25%, transparent 0) 0 0 / 23px 23px,
+  repeating-linear-gradient(45deg, #d6d8dd 0 3px, transparent 3px 7px); border: 5px solid #d6d8dd; border-radius: 3px; }
+
+.card { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.dialog { max-width: 520px; align-self: center; width: 100%; box-shadow: 0 18px 50px var(--shadow); }
+.fld { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-2); }
+.input { padding: 8px 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--text); min-width: 0; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row > .fld { flex: 1 1 160px; }
+.btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 7px 14px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.danger { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.fp { font-family: var(--mono); font-size: 12px; padding: 8px 10px; border-radius: 7px; background: var(--chip-bg); color: var(--text-2); overflow-wrap: anywhere; }
+
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 640px; }
+th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--text-2); font-variant-numeric: tabular-nums; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td code { font-family: var(--mono); font-size: 12px; }
+.acts { display: flex; gap: 6px; }
+
+.rules { display: flex; flex-direction: column; gap: 10px; }
+.rule { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; }
+.rule .who { font-weight: 600; }
+.rule .what { font-size: 13px; color: var(--text-2); }
+.chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip-bg); color: var(--text-2); }
+.chip.no { background: var(--danger-soft); color: var(--danger); }
+.chip.yes { background: var(--ok-soft); color: var(--ok); }
+.chip.w { background: var(--warn-soft); color: var(--warn); }
+
+.player { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 14px; }
+@media (max-width: 900px) { .player { grid-template-columns: minmax(0, 1fr); } }
+.bar { position: relative; height: 24px; border-radius: 6px; background: var(--chip-bg); }
+.bar .done { position: absolute; inset: 0 auto 0 0; width: 40%; background: var(--accent-soft); border-radius: 6px; }
+.bar .mk { position: absolute; top: 5px; bottom: 5px; width: 3px; border-radius: 2px; background: var(--accent); }
+.bar .head { position: absolute; top: -3px; bottom: -3px; left: 40%; width: 2px; background: var(--text); }
+.cmds { display: flex; flex-direction: column; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+.cmd { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 8px; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.cmd:last-child { border-bottom: 0; }
+.cmd code { font-family: var(--mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmd.hit { background: var(--accent-soft); }
+.seal { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; padding: 9px 10px; border-radius: 8px; background: var(--ok-soft); }
+.seal b { color: var(--ok); }
+
+.explain { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 760px) { .explain { grid-template-columns: minmax(0, 1fr); } }
+.explain h2 { font-size: 15px; margin-bottom: 6px; }
+.explain ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); max-width: 65ch; }
+.scope { border-left: 3px solid var(--accent); padding-left: 12px; }
+
+.v1grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.v1col { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; background: var(--panel); }
+.v1col h3 { font-size: 13px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+.v1col ul { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-2); display: flex; flex-direction: column; gap: 3px; }
+
+/* Questionnaire */
+.qbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+.qbar .prog { flex: 1 1 200px; height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; min-width: 120px; }
+.qbar .prog i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.save { font-size: 12px; color: var(--muted); }
+.save.ok { color: var(--ok); }
+.save.err { color: var(--danger); }
+.qsec { display: flex; flex-direction: column; gap: 12px; }
+.qsec > h2 { font-size: 16px; padding-top: 10px; }
+.q { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.q.done { border-color: var(--line); }
+.q .qt { font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.q .qn { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+.q .why { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 11px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 100%; }
+.opt input { margin: 2px 0 0; accent-color: var(--accent); }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.opt .rec { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 4px; }
+.q textarea { min-height: 38px; resize: vertical; width: 100%; }
+@media (prefers-reduced-motion: no-preference) { .rec-dot { animation: pulse 1.6s ease-in-out infinite; } }
+@keyframes pulse { 50% { opacity: .35; } }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="label">Maquette · Heimdia V1 · module bastion de Portunia</p>
+    <h1>La première version de Heimdia, du serveur jusqu'à Portunia</h1>
+    <p>Le premier onglet montre les écrans de la V1, avec ce qui est inclus et ce qui viendra plus tard. Le second rassemble les questions à trancher avant de coder : vos réponses sont enregistrées au fil de l'eau.</p>
+  </div>
+
+  <div class="maintabs" role="tablist">
+    <button role="tab" id="tab-maq" aria-selected="true" aria-controls="pane-maq">Maquette</button>
+    <button role="tab" id="tab-q" aria-selected="false" aria-controls="pane-q">Questions <span class="count" id="qcount">0 / 0</span></button>
+  </div>
+
+  <!-- ============ MAQUETTE ============ -->
+  <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
+    <div class="v1grid">
+      <div class="v1col"><h3><span class="mode ok">V1</span> Inclus</h3><ul>
+        <li>Proxy SSH : rebond, enregistrement, coffre</li>
+        <li>Comptes locaux + code TOTP</li>
+        <li>Groupes et règles d'accès</li>
+        <li>Enregistrement texte, relecture, recherche</li>
+        <li>Journal d'audit chaîné, export syslog</li>
+        <li>Intégration Portunia + clients SSH standards</li>
+      </ul></div>
+      <div class="v1col"><h3><span class="mode later">Plus tard</span> Prévu</h3><ul>
+        <li>Validation par un responsable, vue en direct</li>
+        <li>Bureau à distance (RDP) enregistré</li>
+        <li>Annuaire d'entreprise (AD, Entra, OIDC)</li>
+        <li>Plusieurs nœuds, S3, relais de site</li>
+        <li>Durcissement et certification</li>
+      </ul></div>
+      <div class="v1col"><h3><span class="mode">?</span> À trancher</h3><ul>
+        <li>Blocage de commandes dès la V1 ?</li>
+        <li>Couper une session en direct dès la V1 ?</li>
+        <li>Voir l'onglet Questions</li>
+      </ul></div>
+    </div>
+
+    <div class="steps" role="group" aria-label="Écrans">
+      <span class="grp">Serveur</span>
+      <button data-s="init" aria-pressed="true">1. Installation</button>
+      <span class="grp">Utilisateur</span>
+      <button data-s="add" aria-pressed="false">2. Ajouter le bastion</button>
+      <button data-s="tree" aria-pressed="false">3. Serveurs</button>
+      <button data-s="session" aria-pressed="false">4. Session</button>
+      <button data-s="std" aria-pressed="false">5. Client SSH standard</button>
+      <span class="grp">Administrateur</span>
+      <button data-s="targets" aria-pressed="false">6. Cibles et coffre</button>
+      <button data-s="rights" aria-pressed="false">7. Droits</button>
+      <button data-s="replay" aria-pressed="false">8. Enregistrements</button>
+      <button data-s="audit" aria-pressed="false">9. Journal</button>
+    </div>
+
+    <div class="win" id="win">
+      <aside class="side" id="side-user">
+        <div class="search">Rechercher ou taper une adresse…</div>
+        <div class="sec">Mes sessions</div>
+        <div class="trow"><span class="n">NAS bureau</span><span class="tags"><span class="proto">SSH</span></span></div>
+        <div class="sec">Bastions</div>
+        <div class="bcard" id="bcard"><div class="top"><span class="led" id="bled"></span>Heimdia · bastion.acme.local</div><div class="small muted" id="bsub">julien · code validé · expire dans 7 h 52</div></div>
+        <div id="btree">
+          <div class="trow folder">▾ Production</div>
+          <div class="trow" id="t-web"><span class="n">web-01</span><span class="tags"><span class="mode vault">Coffre</span><span class="proto">SSH</span></span></div>
+          <div class="trow"><span class="n">db-01</span><span class="tags"><span class="mode vault">Coffre</span><span class="proto">SSH</span></span></div>
+          <div class="trow folder">▾ Recette</div>
+          <div class="trow"><span class="n">rec-app</span><span class="tags"><span class="mode rec">Enregistré</span><span class="proto">SSH</span></span></div>
+          <div class="trow folder">▾ Réseau</div>
+          <div class="trow"><span class="n">fw-edge</span><span class="tags"><span class="mode">Rebond</span><span class="proto">SSH</span></span></div>
+        </div>
+      </aside>
+      <aside class="side" id="side-admin" hidden>
+        <div class="sec">Administration Heimdia</div>
+        <div class="bcard"><div class="top"><span class="led"></span>bastion.acme.local</div><div class="small muted">Rôle : administrateur · Heimdia 0.1.0</div></div>
+        <div class="nrow" data-nav="targets">Cibles et coffre<span class="c">12</span></div>
+        <div class="nrow" data-nav="rights">Utilisateurs, groupes et droits<span class="c">9</span></div>
+        <div class="nrow" data-nav="replay">Enregistrements<span class="c">214</span></div>
+        <div class="nrow" data-nav="audit">Journal d'audit</div>
+        <div class="nrow later" title="Prévu après la V1">Sessions en direct <span class="mode later" style="margin-left:auto">plus tard</span></div>
+        <div class="nrow later" title="Prévu après la V1">Validations <span class="mode later" style="margin-left:auto">plus tard</span></div>
+      </aside>
+
+      <section class="main">
+        <!-- 1 Installation -->
+        <div data-screen="init" class="main">
+          <div class="tabs"><div class="tab on">heimdia@bastion : terminal du serveur</div></div>
+          <div class="content">
+<div class="term"><span class="h">heimdia@bastion</span>:~$ docker compose up -d
+<span class="d">✔ Container heimdia-postgres  Started
+✔ Container heimdia           Started</span>
+<span class="h">heimdia@bastion</span>:~$ docker exec -it heimdia heimdia init
+Heimdia 0.1.0, première installation
+
+<span class="k">✓</span> Base PostgreSQL prête (heimdia-postgres)
+<span class="k">✓</span> Clé du coffre créée : /var/lib/heimdia/coffre.key   <span class="w">← à sauvegarder à part</span>
+<span class="k">✓</span> Clé d'hôte SSH       SHA256:9f3KqT0vX8m2LcW1rYp4ZbN6uJd7HsQe2w
+<span class="k">✓</span> Certificat de l'API  SHA256:41AB 7C0E 92D1 F3A8 55B0 6E14 C9D2 08FF
+
+Compte administrateur
+  Identifiant : admin
+  Mot de passe : ••••••••••••
+  Scannez ce code dans votre application d'authentification :
+  <span class="qr" aria-label="Code QR (illustration)"></span>
+
+<span class="k">✓</span> Heimdia écoute   SSH :2222   API Portunia :8443
+
+Dans Portunia : Bastions › Ajouter › bastion.acme.local:8443
+Empreinte à vérifier : 41AB 7C0E 92D1 F3A8
+<span class="h">heimdia@bastion</span>:~$ <span class="cursor"></span></div>
+          </div>
+          <div class="status"><span>Taille : <b>Petite</b> (1 serveur, base locale)</span><span>Docker Compose</span></div>
+        </div>
+
+        <!-- 2 Ajouter -->
+        <div data-screen="add" class="main" hidden>
+          <div class="tabs"><div class="tab on">Accueil</div></div>
+          <div class="content" style="justify-content:center">
+            <div class="card dialog">
+              <h3 style="font-size:15px">Ajouter un bastion Heimdia</h3>
+              <label class="fld">Adresse<input class="input" id="a-addr" value="bastion.acme.local:8443"></label>
+              <div class="fld">Empreinte du certificat, à comparer avec celle affichée à l'installation<div class="fp">SHA256:41AB 7C0E 92D1 F3A8 55B0 6E14 C9D2 08FF</div></div>
+              <div class="row">
+                <label class="fld">Identifiant<input class="input" id="a-user" value="julien"></label>
+                <label class="fld">Mot de passe<input class="input" id="a-pass" type="password" value="xxxxxxxxxx"></label>
+              </div>
+              <label class="fld">Code de l'application d'authentification<input class="input" id="a-otp" value="482 913" inputmode="numeric"></label>
+              <div class="row" style="justify-content:flex-end"><button class="btn">Annuler</button><button class="btn primary">L'empreinte correspond, se connecter</button></div>
+            </div>
+          </div>
+          <div class="status"><span>Le mot de passe sert à ouvrir la session du bastion ; il n'est pas enregistré</span></div>
+        </div>
+
+        <!-- 3 Serveurs -->
+        <div data-screen="tree" class="main" hidden>
+          <div class="tabs"><div class="tab on">Accueil</div></div>
+          <div class="content">
+            <div class="banner info"><span class="ico">i</span><div>Connecté à <b>bastion.acme.local</b>. Vos 4 serveurs autorisés sont dans l'arbre, rangés comme l'administrateur les a classés. Double-clic pour ouvrir.</div></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Mode</th><th>Ce qui se passe</th><th>Mot de passe de la cible</th></tr></thead>
+              <tbody>
+                <tr><td><span class="mode">Rebond</span></td><td>Le bastion relaie la connexion et note qui, quand, où. Le contenu n'est pas enregistré.</td><td>Le vôtre, demandé dans le terminal</td></tr>
+                <tr><td><span class="mode rec">Enregistré</span></td><td>Tout ce qui s'affiche est enregistré et rejouable.</td><td>Le vôtre</td></tr>
+                <tr><td><span class="mode vault">Coffre</span></td><td>Enregistré, et le bastion fournit le compte de la cible.</td><td>Jamais connu de l'utilisateur</td></tr>
+              </tbody>
+            </table></div>
+            <p class="small muted">Session du bastion expirée : la section se grise et Portunia redemande le code à la prochaine ouverture.</p>
+          </div>
+          <div class="status"><span>Bastion : <b>connecté</b></span><span>4 serveurs autorisés</span></div>
+        </div>
+
+        <!-- 4 Session -->
+        <div data-screen="session" class="main" hidden>
+          <div class="tabs"><div class="tab">Accueil</div><div class="tab on"><span class="rec-dot" aria-label="Enregistré"></span>web-01</div></div>
+          <div class="content">
+            <div class="banner"><span class="ico">●</span><div>Session <b>enregistrée</b> par Heimdia. Compte <b>admin@web-01</b> fourni par le coffre.</div></div>
+<div class="term"><span class="d">Connexion à web-01 via bastion.acme.local…</span>
+<span class="d">Heimdia : accès autorisé (Admins Linux → Production) · enregistrement en cours</span>
+<span class="h">admin@web-01</span>:~$ sudo systemctl restart nginx
+<span class="h">admin@web-01</span>:~$ tail -n 2 /var/log/nginx/error.log
+2026/10/29 09:41:02 [notice] 812#812: signal process started
+2026/10/29 09:41:02 [notice] 812#812: using inherited sockets
+<span class="h">admin@web-01</span>:~$ <span class="cursor"></span></div>
+          </div>
+          <div class="status"><span>Via <b>bastion.acme.local</b></span><span>Mode : <b>Coffre</b></span><span>SFTP : autorisé (transferts journalisés)</span><span>Tunnels : interdits</span></div>
+        </div>
+
+        <!-- 5 Client standard -->
+        <div data-screen="std" class="main" hidden>
+          <div class="tabs"><div class="tab on">PowerShell (ou n'importe quel client SSH)</div></div>
+          <div class="content">
+<div class="term"><span class="d">PS C:\Users\marc&gt;</span> ssh marc@bastion.acme.local -p 2222
+<span class="d">(marc@bastion.acme.local) Mot de passe :</span>
+<span class="d">(marc@bastion.acme.local) Code d'authentification :</span> 482913
+
+  Heimdia · bastion.acme.local · bonjour Marc
+  Serveurs autorisés :
+    1  web-01     Production   coffre
+    2  db-01      Production   coffre
+    3  rec-app    Recette      enregistré
+  Votre choix (numéro ou nom) : 1
+
+<span class="d">Heimdia : session enregistrée.</span>
+<span class="h">admin@web-01</span>:~$ <span class="cursor"></span>
+
+<span class="d">PS C:\Users\marc&gt;</span> ssh -p 2222 marc%web-01@bastion.acme.local   <span class="d"># accès direct, sans menu</span></div>
+          </div>
+          <div class="status"><span>Fonctionne avec OpenSSH, PuTTY, MobaXterm, WinSCP (SFTP)</span></div>
+        </div>
+
+        <!-- 6 Cibles -->
+        <div data-screen="targets" class="main" hidden>
+          <div class="tabs"><div class="tab on">Cibles et coffre</div></div>
+          <div class="content">
+            <div class="row" style="justify-content:space-between"><p class="small muted">Une cible = un serveur, un compte et la façon de s'y connecter.</p><button class="btn primary">Ajouter une cible</button></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Cible</th><th>Adresse</th><th>Compte</th><th>Secret</th><th>Mode</th><th>Empreinte</th></tr></thead>
+              <tbody>
+                <tr><td>web-01</td><td><code>10.0.1.11:22</code></td><td>admin</td><td>Clé SSH du coffre</td><td><span class="mode vault">Coffre</span></td><td><span class="mode ok">vérifiée</span></td></tr>
+                <tr><td>db-01</td><td><code>10.0.1.20:22</code></td><td>root</td><td>Mot de passe du coffre</td><td><span class="mode vault">Coffre</span></td><td><span class="mode ok">vérifiée</span></td></tr>
+                <tr><td>rec-app</td><td><code>10.0.2.5:22</code></td><td>celui de l'utilisateur</td><td>—</td><td><span class="mode rec">Enregistré</span></td><td><span class="mode ok">vérifiée</span></td></tr>
+                <tr><td>fw-edge</td><td><code>10.0.0.1:22</code></td><td>celui de l'utilisateur</td><td>—</td><td><span class="mode">Rebond</span></td><td><span class="mode vault">à confirmer</span></td></tr>
+              </tbody>
+            </table></div>
+            <div class="card">
+              <h3 style="font-size:14px">Nouvelle cible</h3>
+              <div class="row"><label class="fld">Nom<input class="input" id="c-name" value="web-02"></label><label class="fld">Adresse<input class="input" id="c-host" value="10.0.1.12"></label><label class="fld" style="flex:0 1 90px">Port<input class="input" id="c-port" value="22"></label></div>
+              <div class="row"><label class="fld">Compte sur la cible<input class="input" id="c-acc" value="admin"></label><label class="fld">Secret<select class="input" id="c-sec"><option>Générer une clé SSH et l'installer sur la cible</option><option>Coller un mot de passe</option><option>Coller une clé privée</option></select></label></div>
+              <p class="small muted">Le secret est chiffré par la clé du coffre ; aucun écran ne le réaffiche ensuite.</p>
+            </div>
+          </div>
+          <div class="status"><span>12 cibles · 9 dans le coffre</span></div>
+        </div>
+
+        <!-- 7 Droits -->
+        <div data-screen="rights" class="main" hidden>
+          <div class="tabs"><div class="tab on">Droits</div></div>
+          <div class="content">
+            <div class="row" style="justify-content:space-between"><p class="small muted">Tout ce qui n'est pas permis par une règle est refusé.</p><button class="btn primary">Nouvelle règle</button></div>
+            <div class="rules">
+              <div class="rule"><div><div class="who">Admins Linux → Production</div><div class="what">web-01, web-02, db-01 · compte du coffre</div></div><button class="btn sm">Modifier</button>
+                <div class="chips"><span class="chip w">Coffre</span><span class="chip">Lun-ven 7 h-20 h</span><span class="chip yes">SFTP</span><span class="chip no">Tunnels</span></div></div>
+              <div class="rule"><div><div class="who">Prestataire Infogérance → db-01</div><div class="what">compte du coffre</div></div><button class="btn sm">Modifier</button>
+                <div class="chips"><span class="chip w">Coffre</span><span class="chip">Expire le 31/12/2026</span><span class="chip no">SFTP</span><span class="chip no">Tunnels</span></div></div>
+              <div class="rule"><div><div class="who">Développeurs → Recette</div><div class="what">rec-app · leurs identifiants</div></div><button class="btn sm">Modifier</button>
+                <div class="chips"><span class="chip">Enregistré</span><span class="chip yes">SFTP</span><span class="chip yes">Tunnels</span></div></div>
+            </div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Utilisateur</th><th>Groupes</th><th>Rôle</th><th>Code TOTP</th><th></th></tr></thead>
+              <tbody>
+                <tr><td>julien</td><td>Admins Linux</td><td>Administrateur</td><td><span class="mode ok">actif</span></td><td><button class="btn sm">Modifier</button></td></tr>
+                <tr><td>claire.a</td><td>—</td><td>Auditeur</td><td><span class="mode ok">actif</span></td><td><button class="btn sm">Modifier</button></td></tr>
+                <tr><td>presta.infog</td><td>Prestataire Infogérance</td><td>Utilisateur</td><td><span class="mode vault">à enrôler</span></td><td><button class="btn sm">Modifier</button></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="status"><span>3 règles · 9 utilisateurs</span><span>Modifications tracées dans le journal</span></div>
+        </div>
+
+        <!-- 8 Enregistrements -->
+        <div data-screen="replay" class="main" hidden>
+          <div class="tabs"><div class="tab on">Relecture · julien → web-01 · 29/10 09:40</div></div>
+          <div class="content">
+            <div class="player">
+              <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+<div class="term" style="min-height:200px"><span class="h">admin@web-01</span>:~$ sudo systemctl restart nginx
+<span class="h">admin@web-01</span>:~$ tail -n 2 /var/log/nginx/error.log
+2026/10/29 09:41:02 [notice] 812#812: signal process started
+<span class="cursor"></span></div>
+                <div class="bar" aria-label="Avancement : 40 %"><span class="done"></span><span class="mk" style="left:9%"></span><span class="mk" style="left:24%"></span><span class="mk" style="left:63%"></span><span class="head"></span></div>
+                <div class="row small muted"><button class="btn sm">❚❚ Pause</button><span>04:50 / 12:04</span><span>×2</span><span>Silences raccourcis</span></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+                <input class="input" id="r-find" value="systemctl" aria-label="Chercher">
+                <div class="cmds">
+                  <div class="cmd"><span class="t">01:05</span><code>cd /etc/nginx</code></div>
+                  <div class="cmd hit"><span class="t">02:54</span><code>sudo systemctl restart nginx</code></div>
+                  <div class="cmd"><span class="t">04:12</span><code>tail -n 2 error.log</code></div>
+                  <div class="cmd"><span class="t">07:40</span><code>exit</code></div>
+                </div>
+                <div class="seal"><span>✓</span><div><b>Intact.</b> Signature Heimdia vérifiée.</div></div>
+                <button class="btn">Exporter pour un audit</button>
+              </div>
+            </div>
+          </div>
+          <div class="status"><span>84 Ko</span><span>Visible par : administrateurs et auditeurs</span></div>
+        </div>
+
+        <!-- 9 Journal -->
+        <div data-screen="audit" class="main" hidden>
+          <div class="tabs"><div class="tab on">Journal d'audit</div></div>
+          <div class="content">
+            <div class="seal"><span>✓</span><div><b>Journal intact.</b> 18 432 événements chaînés depuis l'installation · copie vers syslog 10.0.0.5:514</div></div>
+            <div class="tbl-wrap"><table>
+              <thead><tr><th>Heure</th><th>Qui</th><th>Événement</th><th>Détail</th></tr></thead>
+              <tbody>
+                <tr><td>09:52</td><td>julien</td><td>Session fermée</td><td>web-01 · 12 min · enregistrée</td></tr>
+                <tr><td>09:40</td><td>julien</td><td>Session ouverte</td><td>web-01 via Portunia · coffre</td></tr>
+                <tr><td>09:38</td><td>presta.infog</td><td><span class="mode rec">Accès refusé</span></td><td>web-01 : aucune règle</td></tr>
+                <tr><td>09:31</td><td>julien</td><td>Règle modifiée</td><td>Admins Linux → Production : horaires</td></tr>
+                <tr><td>09:30</td><td>julien</td><td>Connexion au bastion</td><td>code TOTP validé · 192.168.1.20</td></tr>
+                <tr><td>09:12</td><td>marc</td><td><span class="mode vault">Code refusé</span></td><td>2ᵉ essai · 192.168.1.44</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="status"><span>Rôle requis : administrateur ou auditeur</span><span>Export CSV et syslog</span></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="explain" id="explain"></div>
+  </section>
+
+  <!-- ============ QUESTIONS ============ -->
+  <section id="pane-q" role="tabpanel" aria-labelledby="tab-q" hidden>
+    <div class="qbar">
+      <span class="small"><b id="qdone">0</b> réponse(s) sur <span id="qtotal">0</span></span>
+      <div class="prog"><i id="qprog"></i></div>
+      <span class="save" id="save">Les réponses s'enregistrent toutes seules.</span>
+      <button class="btn sm" id="copy">Copier mes réponses</button>
+    </div>
+    <p class="small muted" style="padding-block:10px">La proposition notée « conseillé » est mon choix par défaut si vous ne répondez pas. Une ligne de précision accompagne chaque question.</p>
+    <div id="qlist" class="wrap" style="max-width:none"></div>
+  </section>
+</div>
+
+<script>
+/* ---------- Maquette ---------- */
+const TEXT = {
+  init: { t: 'Installation sur votre serveur', p: [
+    'Livré en Docker Compose : le bastion et sa base PostgreSQL. L\'image de VM viendra avec le durcissement.',
+    'Une seule commande crée la base, la clé du coffre, la clé d\'hôte SSH et le compte administrateur avec son code TOTP.',
+    'L\'empreinte du certificat s\'affiche pour la comparer dans Portunia : aucune confiance aveugle.'],
+    s: ['Clé du coffre : à sauvegarder hors du serveur, sans elle les secrets sont perdus.', 'Ports : 2222 (SSH) et 8443 (API pour Portunia), modifiables.'] },
+  add: { t: 'Ajouter le bastion dans Portunia', p: [
+    'Adresse, puis vérification de l\'empreinte comme pour un nouveau serveur SSH.',
+    'Identifiant, mot de passe et code TOTP. Portunia garde un jeton de session (durée réglable), pas le mot de passe.',
+    'Plusieurs bastions possibles, chacun dans sa section.'],
+    s: ['Comptes du bastion : locaux en V1, annuaire d\'entreprise plus tard.'] },
+  tree: { t: 'Les serveurs du bastion dans l\'arbre', p: [
+    'L\'arbre suit les droits en direct : un accès retiré disparaît.',
+    'Trois modes par cible : Rebond, Enregistré, Coffre.',
+    'À l\'expiration de la session du bastion, Portunia redemande le code.'],
+    s: ['Durée de session du bastion : 8 h par défaut.'] },
+  session: { t: 'Une session à travers Heimdia', p: [
+    'Point rouge dans l\'onglet et bandeau : l\'utilisateur sait qu\'il est enregistré.',
+    'Le compte de la cible vient du coffre, l\'utilisateur ne voit jamais le secret.',
+    'SFTP et tunnels sont autorisés ou non par la règle, les transferts sont journalisés.'],
+    s: ['Le blocage de commandes est une question ouverte pour la V1.'] },
+  std: { t: 'Depuis n\'importe quel client SSH', p: [
+    'Sans Portunia : OpenSSH, PuTTY, MobaXterm, WinSCP pour les fichiers.',
+    'Après mot de passe et code, un menu liste les serveurs autorisés.',
+    'Forme directe « utilisateur%cible@bastion » pour les scripts et les habitués.'],
+    s: ['Indispensable pour l\'adoption : on n\'impose pas un client à une équipe entière.'] },
+  targets: { t: 'Cibles et coffre', p: [
+    'Une cible = adresse, compte et secret. Le secret est chiffré et jamais réaffiché.',
+    'Option conseillée : Heimdia génère une clé SSH et l\'installe sur la cible, puis plus aucun mot de passe ne circule.',
+    'L\'empreinte de chaque cible est vérifiée une fois, comme dans Portunia.'],
+    s: ['Rotation automatique des mots de passe : plus tard.'] },
+  rights: { t: 'Utilisateurs, groupes et droits', p: [
+    'Une règle relie un groupe à des cibles avec ses conditions : horaires, SFTP, tunnels, date d\'expiration.',
+    'Trois rôles : utilisateur, auditeur (relit, ne modifie rien), administrateur.',
+    'Chaque modification est tracée dans le journal.'],
+    s: ['Un administrateur ne peut pas effacer le journal de ses propres actions.'] },
+  replay: { t: 'Enregistrements et relecture', p: [
+    'Relecture accélérée, silences raccourcis, index cliquable des commandes.',
+    'Recherche dans le texte d\'une session ou de toutes.',
+    'Chaque enregistrement est signé : le sceau prouve qu\'il n\'a pas été modifié.'],
+    s: ['Ce qui est enregistré : l\'affichage, et la frappe ? Voir les questions.'] },
+  audit: { t: 'Journal d\'audit', p: [
+    'Connexions, accès refusés, codes faux, changements de droits et de cibles.',
+    'Événements chaînés : une suppression ou une modification se voit.',
+    'Copie en direct vers un syslog (SIEM) et export CSV.'],
+    s: [] },
+};
+const ADMIN = new Set(['targets', 'rights', 'replay', 'audit']);
+const SOLO = new Set(['init', 'std']);
+const explain = document.getElementById('explain');
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function show(s) {
+  document.querySelectorAll('[data-screen]').forEach((n) => { n.hidden = n.dataset.screen !== s; });
+  document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+  const win = document.getElementById('win');
+  win.classList.toggle('solo', SOLO.has(s));
+  document.getElementById('side-user').hidden = SOLO.has(s) || ADMIN.has(s);
+  document.getElementById('side-admin').hidden = !ADMIN.has(s);
+  document.querySelectorAll('.nrow[data-nav]').forEach((r) => r.classList.toggle('sel', r.dataset.nav === s));
+  document.getElementById('t-web').classList.toggle('sel', s === 'session');
+  const before = s === 'add';
+  document.getElementById('btree').hidden = before;
+  document.getElementById('bled').classList.toggle('off', before);
+  document.getElementById('bsub').textContent = before ? 'non connecté' : 'julien · code validé · expire dans 7 h 52';
+  const x = TEXT[s];
+  const left = el('div'); left.append(el('h2', null, x.t));
+  const ul = el('ul'); x.p.forEach((t) => ul.append(el('li', null, t))); left.append(ul);
+  const right = el('div', 'scope'); right.append(el('h2', null, 'À noter'));
+  const ul2 = el('ul'); (x.s.length ? x.s : ['Rien de plus.']).forEach((t) => ul2.append(el('li', null, t))); right.append(ul2);
+  explain.replaceChildren(left, right);
+}
+document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+document.querySelectorAll('.nrow[data-nav]').forEach((r) => r.addEventListener('click', () => show(r.dataset.nav)));
+show('init');
+
+/* ---------- Onglets ---------- */
+function tab(which) {
+  const q = which === 'q';
+  document.getElementById('tab-maq').setAttribute('aria-selected', String(!q));
+  document.getElementById('tab-q').setAttribute('aria-selected', String(q));
+  document.getElementById('pane-maq').hidden = q;
+  document.getElementById('pane-q').hidden = !q;
+  try { localStorage.setItem('heimdia-onglet', which); } catch {}
+}
+document.getElementById('tab-maq').addEventListener('click', () => tab('maq'));
+document.getElementById('tab-q').addEventListener('click', () => tab('q'));
+if (location.hash === '#questions') tab('q');
+else { try { if (localStorage.getItem('heimdia-onglet') === 'q') tab('q'); } catch {} }
+
+/* ---------- Questionnaire ---------- */
+// type: one (choix unique) ou many (plusieurs). rec = choix conseillé.
+const SECTIONS = [
+  { title: 'Clients et usage', qs: [
+    { id: 'cible', t: 'Pour qui la V1 est-elle d\'abord pensée ?', why: 'Change les priorités : un prestataire gère plusieurs clients, une PME gère ses propres serveurs.', type: 'one', o: ['PME qui protège ses propres serveurs', 'Prestataires d\'infogérance (plusieurs clients)', 'Les deux dès le départ'], rec: 0 },
+    { id: 'taille', t: 'Combien d\'utilisateurs et de serveurs pour un client type ?', why: 'Sert à dimensionner la petite taille et les tests de charge.', type: 'one', o: ['Moins de 10 utilisateurs, moins de 50 serveurs', '10 à 50 utilisateurs, 50 à 300 serveurs', 'Plus que ça'], rec: 0 },
+    { id: 'premier', t: 'Avez-vous un premier client ou testeur en vue ?', why: 'Ses contraintes réelles passent avant les miennes.', type: 'one', o: ['Oui, je précise ci-dessous', 'Pas encore, je l\'utiliserai moi-même d\'abord'], rec: 1 },
+  ]},
+  { title: 'Périmètre de la V1', qs: [
+    { id: 'modes', t: 'Quels modes dès la V1 ?', why: 'Rebond = journal seul ; Enregistré = contenu rejouable ; Coffre = le bastion fournit le compte de la cible.', type: 'many', o: ['Rebond', 'Enregistré', 'Coffre'], rec: [0, 1, 2] },
+    { id: 'blocage', t: 'Bloquer certaines commandes dès la V1 ?', why: 'Utile contre l\'erreur (rm -rf, shutdown), contournable par un utilisateur malveillant. Coûte environ une semaine.', type: 'one', o: ['Oui, en V1', 'Plus tard', 'Jamais, trop trompeur'], rec: 1 },
+    { id: 'couper', t: 'Voir et couper une session en direct dès la V1 ?', why: 'Très demandé en audit ; la coupure seule est simple, la vue en direct un peu plus longue.', type: 'one', o: ['Couper seulement', 'Voir et couper', 'Plus tard'], rec: 0 },
+    { id: 'valid', t: 'Validation par un responsable avant l\'accès ?', why: 'Pour les cibles sensibles et les prestataires. Demande des notifications.', type: 'one', o: ['En V1', 'Plus tard'], rec: 1 },
+    { id: 'sftp', t: 'Transferts de fichiers (SFTP, scp) à travers le bastion ?', why: 'Sans eux, beaucoup d\'utilisateurs contourneront le bastion.', type: 'one', o: ['Autorisés selon la règle et journalisés (nom, taille)', 'Autorisés, avec copie des fichiers transférés', 'Interdits en V1'], rec: 0 },
+    { id: 'tunnels', t: 'Tunnels SSH (redirection de ports) ?', why: 'Pratiques mais ouvrent un accès réseau non enregistré.', type: 'one', o: ['Interdits par défaut, autorisables par règle', 'Toujours interdits'], rec: 0 },
+  ]},
+  { title: 'Connexion au bastion', qs: [
+    { id: 'auth', t: 'Comment les utilisateurs prouvent-ils leur identité ?', why: 'Le code TOTP (Google Authenticator, etc.) est simple et sans serveur tiers.', type: 'many', o: ['Mot de passe + code TOTP', 'Clé SSH personnelle (depuis un client standard)', 'Clé de sécurité FIDO2 (YubiKey)'], rec: [0, 1] },
+    { id: 'mfa', t: 'Le second facteur est-il obligatoire ?', why: 'Pour un bastion, le recommander ne suffit pas.', type: 'one', o: ['Obligatoire pour tous', 'Obligatoire pour les administrateurs seulement', 'Au choix de l\'administrateur'], rec: 0 },
+    { id: 'annuaire', t: 'Faut-il un annuaire d\'entreprise rapidement ?', why: 'Active Directory, Entra ID ou OIDC : les clients PME l\'ont souvent, mais c\'est un gros chantier.', type: 'one', o: ['Non, comptes locaux en V1', 'Oui, Active Directory / LDAP en V1', 'Oui, Entra ID / OIDC en V1'], rec: 0 },
+    { id: 'duree', t: 'Durée d\'une session ouverte sur le bastion dans Portunia ?', why: 'Au-delà, le code est redemandé.', type: 'one', o: ['Une journée de travail (8 h)', '1 heure', 'Réglable par l\'administrateur'], rec: 2 },
+    { id: 'multi', t: 'Plusieurs bastions dans un même Portunia ?', why: 'Indispensable pour un prestataire qui a un bastion par client.', type: 'one', o: ['Oui', 'Un seul suffit'], rec: 0 },
+  ]},
+  { title: 'Coffre et cibles', qs: [
+    { id: 'secret', t: 'Comment le bastion se connecte-t-il aux cibles en mode coffre ?', why: 'La clé générée par Heimdia évite qu\'un mot de passe circule ou soit connu.', type: 'many', o: ['Clé SSH générée et installée par Heimdia', 'Mot de passe saisi par l\'administrateur', 'Clé privée existante importée'], rec: [0, 1, 2] },
+    { id: 'rotation', t: 'Changer automatiquement les mots de passe des cibles ?', why: 'Rotation périodique ou après chaque usage. Puissant, mais risqué si elle échoue.', type: 'one', o: ['Plus tard', 'En V1'], rec: 0 },
+    { id: 'import', t: 'Comment remplir la liste des cibles au départ ?', why: 'Gros gain de temps à l\'installation chez un client.', type: 'many', o: ['Saisie à la main', 'Import depuis Portunia (sessions existantes)', 'Import CSV'], rec: [0, 1, 2] },
+  ]},
+  { title: 'Enregistrement et audit', qs: [
+    { id: 'frappe', t: 'Que faut-il enregistrer pendant une session ?', why: 'L\'affichage suffit pour l\'audit. La frappe capte aussi les mots de passe tapés (sudo) : question de sécurité et de RGPD.', type: 'one', o: ['L\'affichage seulement', 'L\'affichage et la frappe', 'Au choix par règle'], rec: 0 },
+    { id: 'retention', t: 'Durée de conservation par défaut ?', why: 'Les obligations varient : 6 mois à 1 an est courant.', type: 'one', o: ['90 jours', '180 jours', '1 an', 'Réglable, sans valeur imposée'], rec: 1 },
+    { id: 'qui', t: 'Qui peut relire les enregistrements ?', why: 'Séparer administrateur et auditeur est attendu en certification.', type: 'one', o: ['Administrateurs et auditeurs', 'Auditeurs seulement', 'Aussi l\'utilisateur, pour ses propres sessions'], rec: 0 },
+    { id: 'avis', t: 'Afficher un avertissement légal à la connexion ?', why: 'En France, les personnes enregistrées doivent être informées (CNIL).', type: 'one', o: ['Oui, texte modifiable par l\'administrateur', 'Non'], rec: 0 },
+    { id: 'siem', t: 'Envoi des événements vers un outil externe ?', why: 'Syslog est universel ; les autres formats peuvent attendre.', type: 'many', o: ['Syslog', 'Export CSV', 'Webhook (Teams, Slack…)', 'E-mail aux administrateurs'], rec: [0, 1] },
+  ]},
+  { title: 'Administration et exploitation', qs: [
+    { id: 'console', t: 'Où se fait l\'administration ?', why: 'Dans Portunia, aucun site web à exposer. Une console web aide un auditeur sans Portunia.', type: 'one', o: ['Dans Portunia seulement', 'Dans Portunia et une console web', 'Console web seulement'], rec: 0 },
+    { id: 'livraison', t: 'Format de livraison de la V1 ?', why: 'Docker Compose est le plus rapide à livrer et à tester ; la VM prête à l\'emploi viendra avec le durcissement.', type: 'one', o: ['Docker Compose', 'Paquet Debian (.deb)', 'Image de VM (OVA, VHDX)'], rec: 0 },
+    { id: 'sauvegarde', t: 'Sauvegardes de la base et des enregistrements ?', why: 'La clé du coffre doit toujours être sauvegardée à part.', type: 'one', o: ['Sauvegarde intégrée chaque nuit (7 jours)', 'Laissée à la sauvegarde du client'], rec: 0 },
+    { id: 'notif', t: 'Prévenir les administrateurs par e-mail ?', why: 'Demande un serveur SMTP à configurer.', type: 'one', o: ['Non, journal et syslog suffisent en V1', 'Oui, pour les accès refusés et les codes faux'], rec: 0 },
+  ]},
+  { title: 'Offre commerciale', qs: [
+    { id: 'prix', t: 'Comment facturer Heimdia ?', why: 'Par cible est simple à comprendre ; par utilisateur suit la taille de l\'équipe.', type: 'one', o: ['Par cible (serveur protégé)', 'Par utilisateur', 'Forfait par bastion', 'À décider plus tard'], rec: 3 },
+    { id: 'gratuit', t: 'Une version gratuite limitée ?', why: 'Par exemple 5 cibles et 2 utilisateurs : un bon moyen de se faire connaître.', type: 'one', o: ['Oui, limitée en cibles et utilisateurs', 'Essai de 30 jours seulement', 'Non'], rec: 0 },
+    { id: 'licence', t: 'Vérification de la licence ?', why: 'Hors ligne avec un fichier signé, comme Portunia : fonctionne dans les réseaux isolés.', type: 'one', o: ['Fichier de licence signé, hors ligne', 'Vérification en ligne'], rec: 0 },
+  ]},
+];
+const ALL = SECTIONS.flatMap((s) => s.qs);
+let answers = {};
+let db = null, saveTimer = null, ready = false;
+const saveEl = document.getElementById('save');
+function setSave(text, cls) { saveEl.textContent = text; saveEl.className = 'save' + (cls ? ' ' + cls : ''); }
+function answered(q) { const a = answers[q.id]; return !!a && ((Array.isArray(a.v) ? a.v.length : a.v != null && a.v !== '') || !!(a.note || '').trim()); }
+
+function render() {
+  const list = document.getElementById('qlist');
+  list.replaceChildren();
+  let n = 0;
+  for (const sec of SECTIONS) {
+    const box = el('div', 'qsec');
+    box.append(el('h2', null, sec.title));
+    for (const q of sec.qs) {
+      n++;
+      const card = el('div', 'q');
+      const head = el('div', 'qt'); head.append(el('span', 'qn', String(n)), el('span', null, q.t));
+      card.append(head, el('p', 'why', q.why));
+      const opts = el('div', 'opts');
+      const cur = answers[q.id] || {};
+      q.o.forEach((label, i) => {
+        const lab = el('label', 'opt');
+        const inp = document.createElement('input');
+        inp.type = q.type === 'many' ? 'checkbox' : 'radio';
+        inp.name = 'q-' + q.id; inp.id = 'q-' + q.id + '-' + i; inp.value = String(i);
+        inp.checked = q.type === 'many' ? (cur.v || []).includes(i) : cur.v === i;
+        inp.addEventListener('change', () => {
+          const a = answers[q.id] || {};
+          if (q.type === 'many') {
+            const set = new Set(a.v || []); inp.checked ? set.add(i) : set.delete(i);
+            a.v = [...set].sort((x, y) => x - y);
+          } else a.v = i;
+          answers[q.id] = a; changed(card, q);
+        });
+        const span = el('span', null, label);
+        const isRec = Array.isArray(q.rec) ? q.rec.includes(i) : q.rec === i;
+        if (isRec) span.append(el('span', 'rec', 'conseillé'));
+        lab.append(inp, span); opts.append(lab);
+      });
+      const note = document.createElement('textarea');
+      note.className = 'input'; note.id = 'note-' + q.id; note.rows = 1;
+      note.placeholder = 'Précision (facultatif)'; note.value = cur.note || '';
+      note.addEventListener('input', () => { const a = answers[q.id] || {}; a.note = note.value; answers[q.id] = a; changed(card, q); });
+      card.append(opts, note);
+      card.classList.toggle('done', answered(q));
+      box.append(card);
+    }
+    list.append(box);
+  }
+  progress();
+}
+function progress() {
+  const done = ALL.filter(answered).length;
+  document.getElementById('qdone').textContent = done;
+  document.getElementById('qtotal').textContent = ALL.length;
+  document.getElementById('qcount').textContent = done + ' / ' + ALL.length;
+  document.getElementById('qprog').style.width = (100 * done / ALL.length) + '%';
+}
+function changed(card, q) {
+  card.classList.toggle('done', answered(q));
+  progress();
+  try { localStorage.setItem('heimdia-reponses', JSON.stringify(answers)); } catch {}
+  clearTimeout(saveTimer);
+  if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses » pour me les envoyer.'); return; }
+  setSave('Enregistrement…');
+  saveTimer = setTimeout(save, 700);
+}
+async function save() {
+  try {
+    await db.doc('questionnaire/v1').set({ reponses: answers, misAJour: new Date().toISOString() });
+    setSave('Enregistré. Claude peut lire vos réponses.', 'ok');
+  } catch (e) {
+    if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; }
+    setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err');
+  }
+}
+function summary() {
+  const lines = ['Réponses Heimdia V1'];
+  let n = 0;
+  for (const sec of SECTIONS) {
+    lines.push('', '## ' + sec.title);
+    for (const q of sec.qs) {
+      n++;
+      const a = answers[q.id] || {};
+      const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : '';
+      lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : ''));
+    }
+  }
+  return lines.join('\n');
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = summary();
+  try { await navigator.clipboard.writeText(text); setSave('Copié : collez-le dans la conversation.', 'ok'); }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove();
+  }
+});
+
+try { answers = JSON.parse(localStorage.getItem('heimdia-reponses') || '{}') || {}; } catch { answers = {}; }
+render();
+(async () => {
+  const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;
+  if (!api) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses » pour me les envoyer.'); return; }
+  db = api;
+  try {
+    const snap = await db.doc('questionnaire/v1').get();
+    if (snap.exists) {
+      const stored = (snap.data() || {}).reponses || {};
+      // Les réponses du serveur l'emportent, sauf celles saisies avant son arrivée.
+      answers = Object.assign({}, stored, answers);
+      render();
+      if (JSON.stringify(stored) !== JSON.stringify(answers)) save();
+      else setSave('Enregistré. Claude peut lire vos réponses.', 'ok');
+    } else if (Object.keys(answers).length) save();
+    else setSave('Les réponses s\'enregistrent toutes seules.');
+  } catch { setSave('Lecture impossible : vos réponses restent dans ce navigateur.', 'err'); }
+})();
+</script>
