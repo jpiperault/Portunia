@@ -1,6 +1,6 @@
 //! Contrat d'une extension (« connecteur »).
 //!
-//! Le cœur de Termoria ne connaît aucun protocole : chaque connecteur décrit
+//! Le cœur de Portunia ne connaît aucun protocole : chaque connecteur décrit
 //! ses champs de formulaire et le type de vue qu'il affiche, puis ouvre la
 //! connexion. Ajouter un protocole = implémenter `Connector` et l'enregistrer
 //! dans `Registry`.

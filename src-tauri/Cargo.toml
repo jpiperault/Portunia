@@ -1,11 +1,11 @@
 [package]
-name = "termoria"
-version = "0.39.0"
+name = "portunia"
+version = "0.40.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 
 [lib]
-name = "termoria_lib"
+name = "portunia_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -30,7 +30,7 @@ quick-xml = "0.42.0"
 serialport = { version = "4.10.1", default-features = false }
 tauri-plugin-single-instance = "2"
 vnc-rs = "0.6"
-# Sans « zip » : Termoria publie un installateur .exe signé, jamais d'archive à extraire
+# Sans « zip » : Portunia publie un installateur .exe signé, jamais d'archive à extraire
 # (la bibliothèque zip avait des failles d'extraction, RUSTSEC-2026-0367 à 0369).
 tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tauri-plugin-process = "2"

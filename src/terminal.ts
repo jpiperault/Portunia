@@ -214,7 +214,7 @@ export class TerminalView {
       this.refit();
     });
 
-    window.addEventListener('termoria-theme', this.onTheme);
+    window.addEventListener('portunia-theme', this.onTheme);
 
     this.observer = new ResizeObserver(() => this.refit());
     this.observer.observe(container);
@@ -428,7 +428,7 @@ export class TerminalView {
     if (this.connectionId) api.disconnect(this.connectionId).catch(() => {});
     this.connectionId = null;
     this.unsubscribe();
-    window.removeEventListener('termoria-theme', this.onTheme);
+    window.removeEventListener('portunia-theme', this.onTheme);
     this.observer.disconnect();
     this.highlighter.dispose();
     this.term.dispose();

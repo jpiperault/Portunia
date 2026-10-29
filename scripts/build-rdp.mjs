@@ -1,5 +1,5 @@
 // Compile le moteur RDP (rdp-helper) et le place là où Tauri l'attend
-// pour l'embarquer à côté de Termoria (« externalBin »).
+// pour l'embarquer à côté de Portunia (« externalBin »).
 import { execSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,10 +13,10 @@ const ext = process.platform === 'win32' ? '.exe' : '';
 
 execSync(`cargo build ${release ? '--release ' : ''}--manifest-path "${join(root, 'rdp-helper', 'Cargo.toml')}"`, { stdio: 'inherit' });
 
-const source = join(root, 'rdp-helper', 'target', profile, `termoria-rdp${ext}`);
-const target = join(root, 'src-tauri', 'binaries', `termoria-rdp-${triple}${ext}`);
+const source = join(root, 'rdp-helper', 'target', profile, `portunia-rdp${ext}`);
+const target = join(root, 'src-tauri', 'binaries', `portunia-rdp-${triple}${ext}`);
 mkdirSync(dirname(target), { recursive: true });
-// Ne recopie que si le moteur a changé (évite de relancer la compilation de Termoria).
+// Ne recopie que si le moteur a changé (évite de relancer la compilation de Portunia).
 if (!existsSync(target) || statSync(source).mtimeMs > statSync(target).mtimeMs) {
   copyFileSync(source, target);
   console.log(`Moteur RDP copié vers ${target}`);

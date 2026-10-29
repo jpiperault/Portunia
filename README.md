@@ -1,10 +1,12 @@
-# Termoria
+# Portunia
 
 Gestionnaire de sessions distantes pour Windows : toutes vos connexions (SSH, Bureau à distance, consoles web, Telnet…) dans une seule fenêtre. Léger (Tauri 2 + Rust, interface sans framework) et extensible (un protocole = une extension).
 
-## Installer Termoria
+Portunia s'appelait **Termoria** jusqu'à la version 0.39. La mise à jour vers Portunia retire l'ancienne application et reprend ses données (sessions, coffre, réglages), copiées au premier lancement ; l'ancien dossier `fr.termoria.app` reste comme copie de secours. Le module bastion à venir s'appellera **Heimdia**.
 
-Téléchargez `Termoria_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Termoria-releases/releases) et lancez-le (installation pour l'utilisateur courant, sans droits administrateur). Termoria se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
+## Installer Portunia
+
+Téléchargez `Portunia_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Portunia-releases/releases) et lancez-le (installation pour l'utilisateur courant, sans droits administrateur). Portunia se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
 
 ## Installer les outils de développement (une seule fois)
 
@@ -30,9 +32,9 @@ La première compilation Rust prend quelques minutes, les suivantes sont rapides
    git tag v0.13.0
    git push origin main --tags
    ```
-3. GitHub Actions (`.github/workflows/release.yml`) compile l'installateur, le signe et publie la release dans le dépôt **public** `jpiperault/Termoria-releases` (le code reste privé), avec `latest.json` que Termoria consulte pour se mettre à jour. Secret supplémentaire : `RELEASES_TOKEN`, jeton d'accès avec le droit « Contents : Read and write » sur ce dépôt.
+3. GitHub Actions (`.github/workflows/release.yml`) compile l'installateur, le signe et publie la release dans le dépôt **public** `jpiperault/Portunia-releases` (le code reste privé), avec `latest.json` que Portunia consulte pour se mettre à jour. Secret supplémentaire : `RELEASES_TOKEN`, jeton d'accès avec le droit « Contents : Read and write » sur ce dépôt.
 
-La signature utilise la clé `~/.tauri/termoria.key` (secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` du dépôt). La clé publique est dans `tauri.conf.json`. **Ne perdez pas la clé privée** : sans elle, les versions installées ne peuvent plus être mises à jour.
+La signature utilise la clé `~/.tauri/termoria.key` (nom d'origine, gardé) (secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` du dépôt). La clé publique est dans `tauri.conf.json`. **Ne perdez pas la clé privée** : sans elle, les versions installées ne peuvent plus être mises à jour.
 
 Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (chemin ou contenu de la clé) et son mot de passe, puis `npm run tauri build`. L'installateur est dans `src-tauri/target/release/bundle/nsis/`.
 
@@ -45,7 +47,7 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 | Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
-| Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console de Windows Terminal livrée avec Termoria (OpenConsole, plus rapide que celle du système : écho de la frappe 47 → 17 ms, sorties volumineuses 11 → 38 Mo/s). Section « Ce PC », menu « + », Ctrl+Maj+T. |
+| Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console de Windows Terminal livrée avec Portunia (OpenConsole, plus rapide que celle du système : écho de la frappe 47 → 17 ms, sorties volumineuses 11 → 38 Mo/s). Section « Ce PC », menu « + », Ctrl+Maj+T. |
 | FTP / FTPS | Onglet fichiers | Explorateur en pleine largeur (envoi, téléchargement, glisser-déposer, renommage, suppression). FTPS explicite par défaut, avec reprise de session TLS (exigée par FileZilla Server et vsftpd) et certificats vérifiés par Windows ; certificat auto-signé accepté sur demande. Connexion rouverte d'elle-même après inactivité. `ftps://user@hôte` en connexion rapide. |
 | Stockage S3 (Pro) | Onglet fichiers | Amazon S3 et services compatibles (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…) : compartiments, dossiers, envoi et téléchargement (jusqu'à 5 Go par fichier), renommage et suppression de dossiers entiers. Adressage par chemin pour MinIO / Ceph. Client intégré (signature AWS SigV4), sans le SDK d'Amazon. |
 | Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
@@ -56,7 +58,7 @@ Autres fonctions :
 - session SSH enregistrée sans identifiant ou sans mot de passe : ils se tapent dans le terminal à chaque connexion (Ctrl+C annule) ;
 - connexion rapide sans créer de session : tapez `ssh deploy@10.0.1.12`, `rdp srv-01`, `vnc nas:5901`, `https://nas:5001` ou `COM3@9600` dans la recherche puis Entrée, ou dans la palette (Ctrl+Maj+O). En SSH, clé par défaut puis agent, sinon le mot de passe est demandé (et jamais enregistré). Historique des connexions récentes, bouton « Enregistrer comme session » ;
 - clés SSH : création Ed25519 ou RSA 4096 dans ~/.ssh (phrase secrète conseillée), copie de la clé publique, installation sur le serveur de l'onglet en un clic (authorized_keys et droits corrigés), puis la session passe à l'authentification par clé (bouton « Clé SSH » ou palette) ;
-- notes par session en Markdown (bouton « Notes », panneau de droite) : titres, listes, cases à cocher cliquables, liens, blocs de code envoyés au terminal d'un clic ; enregistrement automatique, repère dans l'arbre, incluses dans la sauvegarde Termoria ;
+- notes par session en Markdown (bouton « Notes », panneau de droite) : titres, listes, cases à cocher cliquables, liens, blocs de code envoyés au terminal d'un clic ; enregistrement automatique, repère dans l'arbre, incluses dans la sauvegarde Portunia ;
 - outils réseau (onglet, palette ou clic droit sur une session) : ping et traceroute sans droits administrateur, test de ports TCP (listes et plages, services reconnus), résolution DNS, Wake-on-LAN (adresse MAC enregistrée sur la session, « Réveiller » au clic droit) ;
 - identifiants partagés : un compte (utilisateur, mot de passe, clé ou agent, domaine) choisi dans plusieurs sessions SSH, RDP ou VNC ; on change le mot de passe une fois, toutes suivent ;
 - palette globale (Ctrl+Maj+O) : aller à une session, un shell local ou une action en quelques lettres ;
@@ -69,7 +71,7 @@ Autres fonctions :
 - X11 : les applications graphiques lancées sur le serveur s'affichent sur ce PC (avec VcXsrv ou X410) ;
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi et téléchargement de fichiers ou de dossiers entiers (glisser-déposer compris), édition d'un fichier distant dans votre éditeur avec renvoi automatique à chaque enregistrement, création, renommage, suppression, suivi des transferts ;
-- import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Termoria ;
+- import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Portunia ;
 - apparence : thème sombre, clair ou comme Windows, 9 palettes de terminal (Dracula, Nord, Solarized…), couleur par dossier (bandeau sur les sessions, onglets et barre d'outils, étiquette « PRODUCTION ») ;
 - tableau de bord du serveur (Pro, sessions SSH vers Linux) : processeur et mémoire avec courbes, swap, charge, disques, processus les plus actifs, services systemd en échec (« Voir » affiche leur journal), relevé toutes les 5 s quand le panneau est visible ;
 - commande sur plusieurs serveurs (Pro) : choix des sessions SSH ou d'un dossier entier (clic droit), commande ou commande enregistrée, 8 serveurs à la fois, résultats côte à côte (code de sortie, durée, sortie, filtre des échecs, copie), confirmation renforcée pour les dossiers rouges ;
@@ -79,7 +81,7 @@ Autres fonctions :
 - verrouillage par mot de passe maître et Windows Hello, au démarrage et après inactivité (Ctrl+Maj+L) ;
 - éditions Gratuit / Pro / Équipes, licences signées vérifiées hors ligne (Paramètres › Licence) ;
 - mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
-- sessions enregistrées dans `%APPDATA%\fr.termoria.app\sessions.json`.
+- sessions enregistrées dans `%APPDATA%\fr.portunia.app\sessions.json`.
 
 Performances : la sortie des terminaux est regroupée côté cœur et envoyée en binaire (7 fois plus de débit avec une source réseau), le rendu passe par la carte graphique quand elle existe (Paramètres › Terminal), seules les lignes visibles sont colorées, et le code des écrans peu utilisés n'est chargé qu'à la demande. Scripts de mesure : `tools/bench`.
 

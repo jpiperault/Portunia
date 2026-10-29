@@ -107,7 +107,7 @@ async function showLockScreen(onUnlocked: () => void, known?: LockStatus) {
   overlay = h('div', { class: 'lock-screen', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'lock-title' },
     h('form', { class: 'lock-card', onsubmit: (e: Event) => { e.preventDefault(); tryPassword(); } },
       h('div', { class: 'lock-icon' }, icon('lock', 28)),
-      h('h2', { id: 'lock-title' }, 'Termoria est verrouillé'),
+      h('h2', { id: 'lock-title' }, 'Portunia est verrouillé'),
       h('p', { class: 'muted small' }, 'Les sessions ouvertes continuent de tourner en arrière-plan.'),
       input,
       error,
@@ -138,8 +138,8 @@ export function securitySection(toast: Toast, refresh: () => void): HTMLElement 
     };
     box.replaceChildren(...[
       h('p', { class: 'muted small', style: 'margin: 0' }, s.enabled
-        ? 'Termoria demande le mot de passe maître au démarrage et après une période d\'inactivité. Verrouillé, il n\'ouvre aucune session et ne lit aucun mot de passe enregistré.'
-        : 'Protégez Termoria par un mot de passe maître : il sera demandé au démarrage et après une période d\'inactivité, et vos données seront chiffrées sur ce PC.'),
+        ? 'Portunia demande le mot de passe maître au démarrage et après une période d\'inactivité. Verrouillé, il n\'ouvre aucune session et ne lit aucun mot de passe enregistré.'
+        : 'Protégez Portunia par un mot de passe maître : il sera demandé au démarrage et après une période d\'inactivité, et vos données seront chiffrées sur ce PC.'),
       s.enabled && h('p', { class: `small ${s.encrypted ? 'muted' : 'form-error'}`, style: 'margin: 0' }, s.encrypted
         ? 'Sessions, notes, identifiants partagés et empreintes des serveurs sont chiffrés sur ce PC (AES-256). Mot de passe oublié et sans Windows Hello : ils seraient perdus. Exportez de temps en temps une sauvegarde protégée (Importer / exporter).'
         : 'Vos données seront chiffrées au prochain déverrouillage par mot de passe.'),

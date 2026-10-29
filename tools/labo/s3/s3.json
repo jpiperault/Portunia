@@ -1,8 +1,8 @@
 {
   "identities": [
     {
-      "name": "termoria",
-      "credentials": [{ "accessKey": "termoria", "secretKey": "termoria-labo-secret" }],
+      "name": "portunia",
+      "credentials": [{ "accessKey": "portunia", "secretKey": "portunia-labo-secret" }],
       "actions": ["Admin", "Read", "Write", "List", "Tagging"]
     }
   ]

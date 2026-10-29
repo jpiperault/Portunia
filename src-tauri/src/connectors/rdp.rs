@@ -1,5 +1,5 @@
 //! Bureau à distance (RDP), de deux façons :
-//! - dans un onglet, grâce au moteur IronRDP du programme auxiliaire `termoria-rdp.exe` ;
+//! - dans un onglet, grâce au moteur IronRDP du programme auxiliaire `portunia-rdp.exe` ;
 //! - dans le client Bureau à distance de Windows (mstsc), pour ce qu'IronRDP ne gère pas encore.
 
 use std::{
@@ -66,10 +66,10 @@ impl Connector for RdpConnector {
 
 // ---------- Dans un onglet (IronRDP) ----------
 
-/// Emplacement de `termoria-rdp.exe` : à côté de Termoria une fois installé,
+/// Emplacement de `portunia-rdp.exe` : à côté de Portunia une fois installé,
 /// sinon dans le dossier de compilation du programme auxiliaire (développement).
 fn helper_path() -> Option<PathBuf> {
-    let name = if cfg!(windows) { "termoria-rdp.exe" } else { "termoria-rdp" };
+    let name = if cfg!(windows) { "portunia-rdp.exe" } else { "portunia-rdp" };
     let beside = std::env::current_exe().ok()?.parent()?.join(name);
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("rdp-helper").join("target");
     [beside, dev.join("release").join(name), dev.join("debug").join(name)]
@@ -90,7 +90,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     let (domain, username) = split_user(&ctx.str("username").unwrap_or_default());
     let password = ctx.raw("password").unwrap_or_default();
     let helper = helper_path().ok_or_else(|| {
-        anyhow!("Moteur RDP introuvable (termoria-rdp.exe). Réinstallez Termoria, ou choisissez l'affichage « Client Windows ».")
+        anyhow!("Moteur RDP introuvable (portunia-rdp.exe). Réinstallez Portunia, ou choisissez l'affichage « Client Windows ».")
     })?;
 
     let mut command = Command::new(&helper);

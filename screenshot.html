@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Termoria</title>
+  <title>Portunia</title>
   <script>
     // Démonstration pour les captures d'écran : simule le cœur Rust avec des données fictives.
     (function () {
@@ -52,7 +52,7 @@
 
       const prompt = (h) => `\x1b[1;32mdeploy@${h}\x1b[0m:\x1b[1;34m~\x1b[0m$ `;
       const terminalText = (h) => [
-        `\x1b[90m[Termoria] Connecté à ${h} (10.0.1.12:22)\x1b[0m\r\n`,
+        `\x1b[90m[Portunia] Connecté à ${h} (10.0.1.12:22)\x1b[0m\r\n`,
         `Welcome to Debian GNU/Linux 13 (trixie)\r\n\r\n`,
         prompt(h) + 'systemctl status nginx --no-pager\r\n',
         `\x1b[1;32m●\x1b[0m nginx.service - A high performance web server\r\n`,
@@ -95,7 +95,7 @@
             if (s.name === 'recette-app') {
               const id = chId(args.onEvent);
               window.__mockConfirm = (accept) => accept ? send(id, bytes(terminalText(s.name))) : send(id, { event: 'closed', data: 'Clé du serveur non confirmée : connexion annulée.' });
-              setTimeout(() => send(id, { event: 'confirm', data: { id: 'q1', question: { title: 'Nouveau serveur : recette.dupont.example:22', message: 'Termoria ne connaît pas encore ce serveur. Vérifiez que l’empreinte ci-dessous est bien celle du serveur (son administrateur peut l’obtenir avec « ssh-keygen -lf » sur la clé de l’hôte). Elle sera mémorisée : un changement futur bloquera la connexion.', detail: 'ssh-ed25519 SHA256:fi111SBeLJCCWkbnrVt90w0E72Z2bW4rRWilXUkm4R4', accept: 'Faire confiance et se connecter', reject: 'Annuler' } } }), 150);
+              setTimeout(() => send(id, { event: 'confirm', data: { id: 'q1', question: { title: 'Nouveau serveur : recette.dupont.example:22', message: 'Portunia ne connaît pas encore ce serveur. Vérifiez que l’empreinte ci-dessous est bien celle du serveur (son administrateur peut l’obtenir avec « ssh-keygen -lf » sur la clé de l’hôte). Elle sera mémorisée : un changement futur bloquera la connexion.', detail: 'ssh-ed25519 SHA256:fi111SBeLJCCWkbnrVt90w0E72Z2bW4rRWilXUkm4R4', accept: 'Faire confiance et se connecter', reject: 'Annuler' } } }), 150);
               return { connectionId: 'c-' + args.sessionId, view: 'terminal', message: null };
             }
             const id = chId(args.onEvent);

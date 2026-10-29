@@ -28,7 +28,7 @@ export function renderExtensions(
     const el = h('div', { class: `ext-row${on ? '' : ' off'}` });
     const toggle = h('button', {
       type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(on), 'aria-label': `Activer ${p.name}`,
-      disabled: core, title: core ? 'Fait partie du cœur de Termoria' : on ? 'Désactiver' : 'Activer',
+      disabled: core, title: core ? 'Fait partie du cœur de Portunia' : on ? 'Désactiver' : 'Activer',
       onclick: () => {
         // Désactiver une extension utilisée : on prévient d'abord, dans la ligne.
         if (on && count > 0) return confirmOff();
@@ -65,5 +65,5 @@ export function renderExtensions(
     h('h3', { class: 'label' }, `${active} activée(s) sur ${protocols.length}`),
     list,
     h('h3', { class: 'label' }, 'Catalogue'),
-    h('p', { class: 'muted' }, 'Bientôt : de nouvelles extensions publiées et signées par Termoria, à installer en un clic.'));
+    h('p', { class: 'muted' }, 'Bientôt : de nouvelles extensions publiées et signées par Portunia, à installer en un clic.'));
 }

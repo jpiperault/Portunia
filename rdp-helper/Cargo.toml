@@ -1,7 +1,7 @@
 [package]
-name = "termoria-rdp"
+name = "portunia-rdp"
 version = "0.1.0"
-description = "Moteur RDP de Termoria (IronRDP), lanc?? par l'application pour chaque session"
+description = "Moteur RDP de Portunia (IronRDP), lanc?? par l'application pour chaque session"
 edition = "2021"
 
 # Programme s??par?? : les d??pendances d'IronRDP (versions pr??liminaires de

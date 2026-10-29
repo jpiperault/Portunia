@@ -21,9 +21,47 @@ mod vault;
 
 use tauri::Manager;
 
+/// Le logiciel s'appelait Termoria : au premier lancement de Portunia, ses données (sessions,
+/// coffre, réglages de l'interface dans EBWebView) sont copiées vers les nouveaux dossiers.
+/// L'ancien dossier reste en place, comme copie de secours.
+#[cfg(not(debug_assertions))]
+fn migrate_from_termoria() {
+    fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(to)?;
+        for entry in std::fs::read_dir(from)? {
+            let entry = entry?;
+            let target = to.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_dir(&entry.path(), &target)?;
+            } else {
+                std::fs::copy(entry.path(), target)?;
+            }
+        }
+        Ok(())
+    }
+    for var in ["APPDATA", "LOCALAPPDATA"] {
+        let Some(base) = std::env::var_os(var).map(std::path::PathBuf::from) else { continue };
+        let (old, new) = (base.join("fr.termoria.app"), base.join("fr.portunia.app"));
+        if !old.is_dir() || new.exists() {
+            continue;
+        }
+        // Copie dans un dossier temporaire puis renommage : une copie interrompue ne laisse
+        // pas un dossier à moitié rempli que Portunia prendrait pour le sien.
+        let partial = base.join("fr.portunia.app.migration");
+        let _ = std::fs::remove_dir_all(&partial);
+        if copy_dir(&old, &partial).is_ok() {
+            let _ = std::fs::rename(&partial, &new);
+        } else {
+            let _ = std::fs::remove_dir_all(&partial);
+        }
+    }
+}
+
 pub fn run() {
+    #[cfg(not(debug_assertions))]
+    migrate_from_termoria();
     let builder = tauri::Builder::default();
-    // Relancer Termoria ramène la fenêtre déjà ouverte au lieu d'en ouvrir une seconde.
+    // Relancer Portunia ramène la fenêtre déjà ouverte au lieu d'en ouvrir une seconde.
     // Versions publiées seulement : une version de développement peut tourner à côté.
     #[cfg(not(debug_assertions))]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -41,10 +79,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
-            // Développement : dossier de données séparé (TERMORIA_DATA_DIR) pour ne jamais
-            // toucher aux vraies données d'une Termoria installée pendant les essais.
+            // Développement : dossier de données séparé (PORTUNIA_DATA_DIR) pour ne jamais
+            // toucher aux vraies données d'une Portunia installée pendant les essais.
             #[cfg(debug_assertions)]
-            let data_dir = std::env::var_os("TERMORIA_DATA_DIR").map(std::path::PathBuf::from).unwrap_or(data_dir);
+            let data_dir = std::env::var_os("PORTUNIA_DATA_DIR").map(std::path::PathBuf::from).unwrap_or(data_dir);
             std::fs::create_dir_all(&data_dir)?;
             let store = store::Store::load(data_dir.join("sessions.json"));
             app.manage(commands::AppState::new(
@@ -142,5 +180,5 @@ pub fn run() {
             commands::confirm_answer,
         ])
         .run(tauri::generate_context!())
-        .expect("erreur au démarrage de Termoria");
+        .expect("erreur au démarrage de Portunia");
 }

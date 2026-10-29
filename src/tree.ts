@@ -50,6 +50,7 @@ interface FolderNode {
   total: number;
 }
 
+// Clé à l'ancien nom du logiciel, gardée pour retrouver les réglages existants.
 const COLLAPSED_KEY = 'termoria.collapsed';
 const INDENT = 14;
 

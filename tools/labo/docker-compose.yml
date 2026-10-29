@@ -1,7 +1,7 @@
-# Labo de test de Termoria : des serveurs jetables sur votre PC, pour la recette.
+# Labo de test de Portunia : des serveurs jetables sur votre PC, pour la recette.
 # Mode d'emploi : LISEZMOI.md. Tous les ports n'écoutent que sur 127.0.0.1 (rien n'est
-# exposé au réseau). Identifiant de test partout : test / termoria-test.
-name: termoria-labo
+# exposé au réseau). Identifiant de test partout : test / portunia-test.
+name: portunia-labo
 
 services:
   # Linux avec SSH (mot de passe et clé), SFTP, telnet, X11, Docker du labo (via le socket).
@@ -97,7 +97,7 @@ services:
     restart: "no"
     networks: [public]
 
-  # Bureau Linux accessible en VNC (mot de passe : termoria).
+  # Bureau Linux accessible en VNC (mot de passe : portunia).
   bureau:
     build: ./bureau
     hostname: bureau

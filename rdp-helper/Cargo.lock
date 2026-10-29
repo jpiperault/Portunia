@@ -2134,6 +2134,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "portunia-rdp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "ironrdp-client",
+ "ironrdp-pdu",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "tokio",
+ "windows",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2903,21 +2918,6 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "termoria-rdp"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "ironrdp-client",
- "ironrdp-pdu",
- "serde",
- "serde_json",
- "smallvec",
- "tokio",
- "windows",
 ]
 
 [[package]]

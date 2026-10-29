@@ -421,7 +421,7 @@ function showSide(tab: Tab, side: Exclude<SidePanel, ''>) {
 
 /** Tableau de bord du serveur de l'onglet (Pro). */
 function toggleServer(tab: Tab) {
-  if (!allows('serverDashboard')) return toast('Le tableau de bord des serveurs fait partie de Termoria Pro (Paramètres › Licence)', 'error');
+  if (!allows('serverDashboard')) return toast('Le tableau de bord des serveurs fait partie de Portunia Pro (Paramètres › Licence)', 'error');
   const id = tab.term?.connection;
   if (!id) return;
   if (!tab.server || tab.server.connectionId !== id) {
@@ -1073,7 +1073,7 @@ function paletteEntries(): PaletteEntry[] {
     { label: 'Commande sur plusieurs serveurs', group: 'Action', icon: 'commands', hint: 'Pro', keywords: 'multi exec lancer tous serveurs parallèle ansible', action: () => openMultiExec() },
     { label: 'Outils réseau', group: 'Action', icon: 'broadcast', hint: 'Ping, traceroute, ports, DNS, Wake-on-LAN', keywords: 'ping tracert traceroute port scan dns nslookup wol wake', action: () => openNetTools() },
     { label: 'Paramètres', group: 'Action', icon: 'settings', action: () => openSettingsDialog(toast) },
-    { label: 'Verrouiller Termoria', group: 'Action', icon: 'lock', hint: 'Ctrl+Maj+L', action: () => lockNow(toast, () => reload()) },
+    { label: 'Verrouiller Portunia', group: 'Action', icon: 'lock', hint: 'Ctrl+Maj+L', action: () => lockNow(toast, () => reload()) },
   ];
   return [...sessionEntries, ...shellEntries, ...actions];
 }
@@ -1163,7 +1163,7 @@ function isSensitive(s: Session): boolean {
 }
 
 function openMultiExec(folder: string | null = null, ids?: string[]) {
-  if (!allows('multiExec')) return toast('La commande sur plusieurs serveurs fait partie de Termoria Pro (Paramètres › Licence)', 'error');
+  if (!allows('multiExec')) return toast('La commande sur plusieurs serveurs fait partie de Portunia Pro (Paramètres › Licence)', 'error');
   let tab = state.tabs.find((t) => t.kind === 'multi');
   if (!tab?.multi) {
     const multi = createMultiExec(() => state.sessions, () => state.snippets, isSensitive, toast);
@@ -1179,7 +1179,7 @@ function openMultiExec(folder: string | null = null, ids?: string[]) {
 // ---------- Conteneurs (Pro) ----------
 
 function toggleContainers(tab: Tab) {
-  if (!allows('containers')) return toast('Les conteneurs Docker et Kubernetes font partie de Termoria Pro (Paramètres › Licence)', 'error');
+  if (!allows('containers')) return toast('Les conteneurs Docker et Kubernetes font partie de Portunia Pro (Paramètres › Licence)', 'error');
   const id = tab.term?.connection;
   if (!id) return;
   if (!tab.containers || tab.containers.connectionId !== id) {

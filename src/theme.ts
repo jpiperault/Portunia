@@ -19,7 +19,7 @@ export function applyTheme() {
   // Barre de titre Windows assortie.
   getCurrentWindow().setTheme(theme).catch(() => {});
   // Les terminaux ouverts suivent (palette « auto » quand Windows change de thème).
-  window.dispatchEvent(new Event('termoria-theme'));
+  window.dispatchEvent(new Event('portunia-theme'));
 }
 
 export function initTheme() {
@@ -31,8 +31,8 @@ export function initTheme() {
 // ---------- Palettes du terminal ----------
 
 export const TERMINAL_THEMES: Record<string, ITheme & { label: string }> = {
-  termoria: {
-    label: 'Termoria',
+  portunia: {
+    label: 'Portunia',
     background: '#111215', foreground: '#D6D8DD', cursor: '#5B9BFF', selectionBackground: '#2F4A75',
   },
   campbell: {
@@ -88,8 +88,8 @@ export const TERMINAL_THEMES: Record<string, ITheme & { label: string }> = {
 /** Palette du terminal ; « auto » suit le thème de l'interface. */
 export function terminalTheme(): ITheme {
   const name = settings().termTheme;
-  if (name === 'auto') return resolvedTheme() === 'light' ? TERMINAL_THEMES.light : TERMINAL_THEMES.termoria;
-  return TERMINAL_THEMES[name] ?? TERMINAL_THEMES.termoria;
+  if (name === 'auto') return resolvedTheme() === 'light' ? TERMINAL_THEMES.light : TERMINAL_THEMES.portunia;
+  return TERMINAL_THEMES[name] ?? TERMINAL_THEMES.portunia;
 }
 
 // ---------- Couleurs de dossier ----------

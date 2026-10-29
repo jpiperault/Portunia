@@ -329,7 +329,7 @@ mod reseau {
             let list = inner.list(&home).unwrap();
             println!("TLS={tls} home={home} {:?}", list.iter().map(|e| (&e.name, e.is_dir, e.size)).collect::<Vec<_>>());
             assert!(list.iter().any(|e| e.name == "readme.txt" && !e.is_dir));
-            let local = std::env::temp_dir().join(format!("termoria-ftp-{tls}.txt"));
+            let local = std::env::temp_dir().join(format!("portunia-ftp-{tls}.txt"));
             let p: Progress = Arc::new(|_, _| {});
             inner.with(|ftp| {
                 let mut out = File::create(&local)?;

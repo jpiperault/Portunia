@@ -166,7 +166,7 @@ impl Credentials {
 
     fn persist(&self) -> Result<()> {
         if self.locked {
-            bail!("Termoria est verrouillé : les identifiants ne sont pas chargés");
+            bail!("Portunia est verrouillé : les identifiants ne sont pas chargés");
         }
         crate::vault::write(&self.path, &serde_json::to_string_pretty(&self.list)?)
     }
@@ -178,7 +178,7 @@ mod tests {
     use std::fs;
 
     fn store() -> (Credentials, PathBuf) {
-        let path = std::env::temp_dir().join(format!("termoria-cred-{}.json", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("portunia-cred-{}.json", uuid::Uuid::new_v4()));
         (Credentials::load(path.clone()), path)
     }
 

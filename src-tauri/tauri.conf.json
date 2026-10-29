@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Termoria",
-  "version": "0.39.0",
-  "identifier": "fr.termoria.app",
+  "productName": "Portunia",
+  "version": "0.40.0",
+  "identifier": "fr.portunia.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Termoria",
+        "title": "Portunia",
         "width": 1280,
         "height": 800,
         "minWidth": 820,
@@ -28,12 +28,12 @@
     "active": true,
     "targets": ["nsis"],
     "icon": ["icons/icon.png", "icons/icon.ico"],
-    "publisher": "Termoria",
+    "publisher": "Portunia",
     "shortDescription": "Gestionnaire de sessions distantes",
     "longDescription": "SSH, Bureau à distance, VNC, Telnet, port série et consoles web dans une seule fenêtre.",
-    "homepage": "https://github.com/jpiperault/Termoria-releases",
+    "homepage": "https://github.com/jpiperault/Portunia-releases",
     "category": "Utility",
-    "externalBin": ["binaries/termoria-rdp"],
+    "externalBin": ["binaries/portunia-rdp"],
     "resources": {
       "conpty/conpty.dll": "conpty.dll",
       "conpty/OpenConsole.exe": "OpenConsole.exe"
@@ -43,14 +43,15 @@
       "nsis": {
         "installMode": "currentUser",
         "languages": ["French", "English"],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerHooks": "./windows/hooks.nsi"
       }
     }
   },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERCRkMxMURBNTVEMTEyQzIKUldUQ0V0RlYyaEg4MjliQ3B6TnZzRGZIaDFLcGdJczNGclJIeS9tbkd4ZFVSMGppbHhBaHdNTEgK",
-      "endpoints": ["https://github.com/jpiperault/Termoria-releases/releases/latest/download/latest.json"],
+      "endpoints": ["https://github.com/jpiperault/Portunia-releases/releases/latest/download/latest.json"],
       "windows": { "installMode": "passive" }
     }
   }

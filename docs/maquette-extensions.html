@@ -1,4 +1,4 @@
-<title>Termoria Extensions</title>
+<title>Portunia Extensions</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Maquette fidèle à l'application : tokens repris de src/styles.css (sombre par défaut, clair en option). */
@@ -129,7 +129,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .switch, .switch::after { transition: none; } }
 </style>
 
-<div class="note"><span class="pill">Maquette</span><span><strong>Page Extensions de Termoria.</strong> Tout est cliquable : interrupteurs, onglets, installation. Les extensions du catalogue sont des exemples.</span></div>
+<div class="note"><span class="pill">Maquette</span><span><strong>Page Extensions de Portunia.</strong> Tout est cliquable : interrupteurs, onglets, installation. Les extensions du catalogue sont des exemples.</span></div>
 
 <div class="win">
   <div class="tabs" aria-hidden="true">
@@ -213,7 +213,7 @@ function renderInstalled() {
 
 function renderCatalog() {
   const items = catalog.filter((x) => !search || (x.name + x.desc).toLowerCase().includes(search.toLowerCase()));
-  return `<div class="toolbar" style="margin-bottom:12px"><input class="search" id="q" type="search" placeholder="Rechercher une extension" value="${esc(search)}" aria-label="Rechercher une extension"><span class="muted" style="font-size:12px">Publiées et signées par Termoria</span></div>
+  return `<div class="toolbar" style="margin-bottom:12px"><input class="search" id="q" type="search" placeholder="Rechercher une extension" value="${esc(search)}" aria-label="Rechercher une extension"><span class="muted" style="font-size:12px">Publiées et signées par Portunia</span></div>
   <div class="cards">${items.map((x) => {
     const done = installed.some((i) => i.id === x.id);
     return `<article class="card">
@@ -225,7 +225,7 @@ function renderCatalog() {
 }
 
 function renderUpdates() {
-  if (updated) return '<div class="list"><div class="row"><div class="meta" style="grid-column:1/-1"><h4>Tout est à jour</h4><p>Les extensions se mettent à jour avec Termoria ou séparément, selon leur éditeur.</p></div></div></div>';
+  if (updated) return '<div class="list"><div class="row"><div class="meta" style="grid-column:1/-1"><h4>Tout est à jour</h4><p>Les extensions se mettent à jour avec Portunia ou séparément, selon leur éditeur.</p></div></div></div>';
   return `<div class="list"><div class="row">
     <div class="ico ftp">FTP</div>
     <div class="meta"><h4>FTP / FTPS <span class="tag">0.36.1 → 0.36.2</span></h4><p>Corrige la reprise d'un transfert interrompu sur certains serveurs IIS.</p></div>
@@ -248,9 +248,9 @@ function render() {
 
 function openInstall(x) {
   $('overlay').innerHTML = `<div class="sheet-back" id="back"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-t">
-    <div class="card-head"><div class="ico ex-ico">${esc(x.code)}</div><div class="meta"><h3 id="sh-t">Installer ${esc(x.name)} ?</h3><p>Éditeur : Termoria · signature vérifiée · ${x.size}</p></div></div>
+    <div class="card-head"><div class="ico ex-ico">${esc(x.code)}</div><div class="meta"><h3 id="sh-t">Installer ${esc(x.name)} ?</h3><p>Éditeur : Portunia · signature vérifiée · ${x.size}</p></div></div>
     <div><p class="label" style="margin-bottom:6px">Cette extension pourra</p><ul class="perm">${x.perms.map((p) => `<li>${esc(p)}</li>`).join('')}</ul></div>
-    ${x.plan === 'pro' ? '<p class="muted" style="margin:0;font-size:13px">Extension de Termoria Pro : elle s\'installe, et s\'utilise avec une licence Pro ou Équipes.</p>' : ''}
+    ${x.plan === 'pro' ? '<p class="muted" style="margin:0;font-size:13px">Extension de Portunia Pro : elle s\'installe, et s\'utilise avec une licence Pro ou Équipes.</p>' : ''}
     <div class="actions"><button class="btn" id="sh-no" type="button">Annuler</button><button class="btn primary" id="sh-yes" type="button">Installer</button></div>
   </div></div>`;
   $('sh-yes').focus();
@@ -268,7 +268,7 @@ document.addEventListener('click', (e) => {
   if (t.id === 't-inst') { tab = 'inst'; pending = null; render(); }
   else if (t.id === 't-cat') { tab = 'cat'; render(); }
   else if (t.id === 't-upd') { tab = 'upd'; render(); }
-  else if (t.id === 'from-file') toast('Choix d\'un fichier .termoria-ext : signature vérifiée avant installation');
+  else if (t.id === 'from-file') toast('Choix d\'un fichier .portunia-ext : signature vérifiée avant installation');
   else if (t.id === 'do-update') { updated = true; render(); toast('FTP / FTPS mise à jour en 0.36.2'); }
   else if (t.dataset.sw) {
     const x = installed.find((i) => i.id === t.dataset.sw);

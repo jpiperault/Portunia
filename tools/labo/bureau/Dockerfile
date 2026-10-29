@@ -1,4 +1,4 @@
-# Bureau Linux léger accessible en VNC (mot de passe : termoria).
+# Bureau Linux léger accessible en VNC (mot de passe : portunia).
 FROM debian:bookworm-slim
 
 RUN apt-get update \

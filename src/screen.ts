@@ -52,7 +52,7 @@ export class ScreenView {
   private lastMove = 0;
   /** true : l'image s'adapte à l'onglet ; false : taille réelle avec défilement. */
   fit = true;
-  /** La session s'est ouverte hors de Termoria (message à afficher). */
+  /** La session s'est ouverte hors de Portunia (message à afficher). */
   onDetached?: (message: string) => void;
   private observer: ResizeObserver;
   private resizeTimer = 0;
@@ -216,7 +216,7 @@ export class ScreenView {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
 
     c.addEventListener('keydown', (e) => {
-      // Ctrl+Maj+… reste aux raccourcis de Termoria.
+      // Ctrl+Maj+… reste aux raccourcis de Portunia.
       if (e.ctrlKey && e.shiftKey && !e.altKey) return;
       const keysym = keysymOf(e);
       if (keysym === null) return;

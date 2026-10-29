@@ -1,7 +1,7 @@
 //! Outil de l'éditeur (ne pas distribuer).
 //!
 //!   license-tool keygen <dossier>
-//!       Crée la clé privée de signature (termoria-licences.pk8, À GARDER SECRÈTE)
+//!       Crée la clé privée de signature (portunia-licences.pk8, À GARDER SECRÈTE)
 //!       et affiche la clé publique à inscrire dans src-tauri/src/license.rs.
 //!
 //!   license-tool sign <clé.pk8> <édition: pro|team> <nom> <email> [--expires AAAA-MM-JJ] [--seats N] [--id ID]
@@ -17,7 +17,7 @@ use ring::{
 };
 use serde::Serialize;
 
-/// Doit rester identique à `LicenseData` dans Termoria (même ordre des champs).
+/// Doit rester identique à `LicenseData` dans Portunia (même ordre des champs).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct LicenseData {
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
     match args.first().map(String::as_str) {
         Some("keygen") => {
             let dir = PathBuf::from(args.get(1).context("Indiquez le dossier où créer la clé")?);
-            let path = dir.join("termoria-licences.pk8");
+            let path = dir.join("portunia-licences.pk8");
             if path.exists() {
                 bail!("{} existe déjà : refus de l'écraser", path.display());
             }

@@ -74,7 +74,7 @@ pub struct Store {
     folders: Vec<String>,
     snippets: Vec<Snippet>,
     folder_colors: HashMap<String, String>,
-    /// Fichier chiffré non lu (Termoria verrouillé) : aucune écriture tant qu'il n'est pas relu.
+    /// Fichier chiffré non lu (Portunia verrouillé) : aucune écriture tant qu'il n'est pas relu.
     locked: bool,
 }
 
@@ -147,7 +147,7 @@ impl Store {
 
     fn persist(&self) -> Result<()> {
         if self.locked {
-            bail!("Termoria est verrouillé : les sessions ne sont pas chargées");
+            bail!("Portunia est verrouillé : les sessions ne sont pas chargées");
         }
         let file = FileFormat {
             version: 4,
@@ -419,7 +419,7 @@ mod tests {
     #[test]
     fn fichier_chiffre_jamais_ecrase_avant_deverrouillage() {
         let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let dir = std::env::temp_dir().join(format!("termoria-store-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-store-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("sessions.json");
         let key = crate::vault::random_bytes::<32>().unwrap();
@@ -444,7 +444,7 @@ mod tests {
     }
 
     fn store_with(folders: &[&str], sessions: &[(&str, &str)]) -> (Store, PathBuf) {
-        let dir = std::env::temp_dir().join(format!("termoria-test-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-test-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let mut store = Store::load(dir.join("sessions.json"));
         store.folders = folders.iter().map(|f| f.to_string()).collect();

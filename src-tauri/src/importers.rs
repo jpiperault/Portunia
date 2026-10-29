@@ -1,4 +1,4 @@
-//! Import de sessions (~/.ssh/config, PuTTY, mRemoteNG) et sauvegarde Termoria.
+//! Import de sessions (~/.ssh/config, PuTTY, mRemoteNG) et sauvegarde Portunia.
 //! Les mots de passe ne sont jamais importés ni exportés.
 
 use std::{collections::HashMap, fs, path::PathBuf};
@@ -427,7 +427,7 @@ pub fn mremoteng(path: &PathBuf, folder: &str) -> Result<Vec<Candidate>> {
     parse_mremoteng(&xml, folder)
 }
 
-// ---------- Sauvegarde Termoria ----------
+// ---------- Sauvegarde Portunia ----------
 
 #[derive(Serialize, Deserialize)]
 pub struct Backup {
@@ -461,7 +461,12 @@ struct EncryptedPayload {
     donnees: String,
 }
 
+// Ancien nom du logiciel, gardé : il fait partie du format des sauvegardes chiffrées.
 const BACKUP_AAD: &[u8] = b"termoria-sauvegarde";
+/// Les sauvegardes faites avant le changement de nom portent « termoria ».
+fn is_backup_app(app: &str) -> bool {
+    app == "portunia" || app == "termoria"
+}
 const BACKUP_ITERATIONS: u32 = if cfg!(test) { 1_000 } else { 600_000 };
 /// Début du message d'erreur quand la phrase de passe manque (l'interface la demande alors).
 pub const PASSPHRASE_REQUIRED: &str = "PHRASE_REQUISE";
@@ -478,7 +483,7 @@ pub fn backup_text(backup: &Backup, passphrase: Option<&str>) -> Result<String> 
     let key = crate::vault::derive_key(passphrase, &salt, BACKUP_ITERATIONS);
     let sealed = crate::vault::seal(&key, json.as_bytes(), BACKUP_AAD)?;
     let wrapper = EncryptedBackup {
-        app: "termoria".into(),
+        app: "portunia".into(),
         chiffre: EncryptedPayload { sel: B64.encode(salt), iterations: BACKUP_ITERATIONS, donnees: B64.encode(sealed) },
     };
     Ok(serde_json::to_string_pretty(&wrapper)?)
@@ -487,7 +492,7 @@ pub fn backup_text(backup: &Backup, passphrase: Option<&str>) -> Result<String> 
 pub fn read_backup(path: &PathBuf, passphrase: Option<&str>) -> Result<Backup> {
     let raw = fs::read_to_string(path).with_context(|| format!("Lecture impossible : {}", path.display()))?;
     let text = match serde_json::from_str::<EncryptedBackup>(&raw) {
-        Ok(wrapper) if wrapper.app == "termoria" => {
+        Ok(wrapper) if is_backup_app(&wrapper.app) => {
             let Some(passphrase) = passphrase.filter(|p| !p.is_empty()) else {
                 bail!("{PASSPHRASE_REQUIRED} : cette sauvegarde est protégée par une phrase de passe");
             };
@@ -500,9 +505,9 @@ pub fn read_backup(path: &PathBuf, passphrase: Option<&str>) -> Result<Backup> {
         }
         _ => raw,
     };
-    let backup: Backup = serde_json::from_str(&text).context("Ce fichier n'est pas une sauvegarde Termoria")?;
-    if backup.app != "termoria" {
-        bail!("Ce fichier n'est pas une sauvegarde Termoria");
+    let backup: Backup = serde_json::from_str(&text).context("Ce fichier n'est pas une sauvegarde Portunia")?;
+    if !is_backup_app(&backup.app) {
+        bail!("Ce fichier n'est pas une sauvegarde Portunia");
     }
     Ok(backup)
 }
@@ -514,7 +519,7 @@ mod tests {
     #[test]
     fn sauvegarde_chiffree() {
         let backup = Backup {
-            app: "termoria".into(),
+            app: "portunia".into(),
             version: 1,
             sessions: parse_ssh_config("Host prod
     HostName 10.9.8.7
@@ -525,7 +530,7 @@ mod tests {
             notes: Default::default(),
             credentials: vec![],
         };
-        let path = std::env::temp_dir().join(format!("termoria-sauvegarde-{}.json", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("portunia-sauvegarde-{}.json", uuid::Uuid::new_v4()));
         fs::write(&path, backup_text(&backup, Some("une phrase de passe")).unwrap()).unwrap();
         assert!(!fs::read_to_string(&path).unwrap().contains("10.9.8.7"), "rien en clair");
         assert!(read_backup(&path, None).err().unwrap().to_string().starts_with(PASSPHRASE_REQUIRED));

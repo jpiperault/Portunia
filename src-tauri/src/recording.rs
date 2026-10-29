@@ -182,7 +182,7 @@ pub fn read(dir: &Path, path: &str) -> Result<String> {
     let dir = fs::canonicalize(dir)?;
     let real = fs::canonicalize(&file).context("Enregistrement introuvable")?;
     if !real.starts_with(&dir) || real.extension().is_none_or(|x| x != "cast") {
-        anyhow::bail!("Ce fichier n'est pas un enregistrement de Termoria");
+        anyhow::bail!("Ce fichier n'est pas un enregistrement de Portunia");
     }
     Ok(fs::read_to_string(real)?)
 }
@@ -207,7 +207,7 @@ mod tests {
 
     #[test]
     fn enregistre_et_convertit() {
-        let dir = std::env::temp_dir().join(format!("termoria-rec-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-rec-{}", uuid::Uuid::new_v4()));
         let mut rec = Recorder::start(&dir, "2026-10-24_10-00-00", "srv web", 80, 24).unwrap();
         rec.output("bonjour \x1b[31m".as_bytes());
         // « é » coupé entre deux blocs

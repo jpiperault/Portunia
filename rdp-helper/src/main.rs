@@ -1,4 +1,4 @@
-//! termoria-rdp : client RDP sans fenêtre, piloté par Termoria.
+//! portunia-rdp : client RDP sans fenêtre, piloté par Portunia.
 //!
 //! Entrée standard, une ligne JSON par message :
 //!   1re ligne : la configuration { host, port, username, domain, password, width, height }
@@ -94,7 +94,7 @@ async fn run() -> Result<()> {
         .with_desktop_height(s.height.max(480))
         .with_server_pointer(true)
         .with_pointer_software_rendering(false)
-        .with_client_name("Termoria")
+        .with_client_name("Portunia")
         // Identité du client annoncée au serveur (valeurs habituelles d'un client Windows).
         .with_client_build(0)
         .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
@@ -122,7 +122,7 @@ async fn run() -> Result<()> {
         }
     });
 
-    // Saisie venant de Termoria.
+    // Saisie venant de Portunia.
     let keys = input.clone();
     tokio::spawn(async move {
         let mut last_buttons = 0u8;
@@ -195,7 +195,7 @@ async fn run() -> Result<()> {
                 break;
             }
         }
-        // Termoria fermé : on ferme la session.
+        // Portunia fermé : on ferme la session.
         let _ = keys.send(RdpInputEvent::Close);
     });
 

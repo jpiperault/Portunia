@@ -128,7 +128,7 @@ impl Connector for SerialConnector {
         let writer = Arc::new(Mutex::new(port));
         let (connection, rx) = WorkerConnection::new();
 
-        ctx.sink.data(format!("\x1b[90m[Termoria] {name} ouvert à {baud} bauds\x1b[0m\r\n").as_bytes());
+        ctx.sink.data(format!("\x1b[90m[Portunia] {name} ouvert à {baud} bauds\x1b[0m\r\n").as_bytes());
 
         let sink = ctx.sink.clone();
         let stop = Arc::new(Mutex::new(false));

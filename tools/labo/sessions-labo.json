@@ -1,5 +1,5 @@
 {
-  "app": "termoria",
+  "app": "portunia",
   "version": 1,
   "folders": ["Labo", "Labo/Rebonds"],
   "snippets": [],
@@ -7,7 +7,7 @@
     { "id": "labo-identifiant", "name": "Labo", "username": "test", "auth": "password", "keyPath": "", "domain": "", "secretKeys": [] }
   ],
   "notes": {
-    "labo-serveur": "# Labo — serveur\n\nCompte : `test` / `termoria-test` (identifiant partagé « Labo »).\n\n- [ ] Mot de passe\n- [ ] Clé SSH (assistant « Clé SSH »)\n- [ ] Fichiers SFTP\n- [ ] Tableau de bord, conteneurs\n\n```\ndocker ps\n```\n",
+    "labo-serveur": "# Labo — serveur\n\nCompte : `test` / `portunia-test` (identifiant partagé « Labo »).\n\n- [ ] Mot de passe\n- [ ] Clé SSH (assistant « Clé SSH »)\n- [ ] Fichiers SFTP\n- [ ] Tableau de bord, conteneurs\n\n```\ndocker ps\n```\n",
     "labo-deuxfacteurs": "# Double authentification\n\nCode du moment, sur le PC :\n\n```\ndocker compose exec deuxfacteurs oathtool --totp -b JBSWY3DPEHPK3PXP\n```\n"
   },
   "sessions": [
@@ -35,7 +35,7 @@
     { "id": "labo-ftp", "name": "Labo — FTP non chiffré", "folder": "Labo", "protocol": "ftp", "tags": ["labo"], "secretKeys": [],
       "values": { "host": "127.0.0.1", "port": 2121, "security": "none", "credential": "Labo" } },
     { "id": "labo-s3", "name": "Labo — S3", "folder": "Labo", "protocol": "s3", "tags": ["labo"], "secretKeys": [],
-      "values": { "endpoint": "http://127.0.0.1:9000", "region": "us-east-1", "bucket": "labo", "accessKey": "termoria", "pathStyle": true } },
+      "values": { "endpoint": "http://127.0.0.1:9000", "region": "us-east-1", "bucket": "labo", "accessKey": "portunia", "pathStyle": true } },
     { "id": "labo-vnc", "name": "Labo — bureau VNC", "folder": "Labo", "protocol": "vnc", "tags": ["labo"], "secretKeys": [],
       "values": { "host": "127.0.0.1", "port": 5901 } },
     { "id": "labo-telnet", "name": "Labo — telnet", "folder": "Labo", "protocol": "telnet", "tags": ["labo"], "secretKeys": [],

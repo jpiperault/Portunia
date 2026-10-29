@@ -4,6 +4,7 @@
 use anyhow::Result;
 use keyring::Entry;
 
+// Ancien nom du logiciel, gardé : les mots de passe déjà rangés sont sous ce nom.
 const SERVICE: &str = "Termoria";
 
 fn entry(session_id: &str, key: &str) -> Result<Entry> {

@@ -3636,6 +3636,43 @@ dependencies = [
 ]
 
 [[package]]
+name = "portunia"
+version = "0.40.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "futures-util",
+ "keyring",
+ "portable-pty",
+ "quick-xml",
+ "rand 0.10.3",
+ "reqwest",
+ "ring",
+ "russh",
+ "russh-sftp",
+ "rustls",
+ "rustls-platform-verifier",
+ "serde",
+ "serde_json",
+ "serialport",
+ "suppaftp",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-process",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tokio",
+ "uuid",
+ "vnc-rs",
+ "windows",
+ "windows-future",
+ "winreg 0.56.0",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5506,43 +5543,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fed54709c5b3a53d09bb1c113ea4f5ceafd1e772ddcb0030a82e1d56c087b08"
 dependencies = [
  "new_debug_unreachable",
-]
-
-[[package]]
-name = "termoria"
-version = "0.39.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "futures-util",
- "keyring",
- "portable-pty",
- "quick-xml",
- "rand 0.10.3",
- "reqwest",
- "ring",
- "russh",
- "russh-sftp",
- "rustls",
- "rustls-platform-verifier",
- "serde",
- "serde_json",
- "serialport",
- "suppaftp",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-process",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tokio",
- "uuid",
- "vnc-rs",
- "windows",
- "windows-future",
- "winreg 0.56.0",
 ]
 
 [[package]]

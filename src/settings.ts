@@ -22,7 +22,7 @@ export interface Settings {
   autoUpdate: boolean;
   /** Enregistrer automatiquement chaque session terminal (Pro). */
   autoRecord: boolean;
-  /** Dossier des enregistrements (vide = DocumentsTermorianregistrements). */
+  /** Dossier des enregistrements (vide = DocumentsPortunianregistrements). */
   recordingDir: string;
   /** Supervision : vérifier régulièrement que les serveurs répondent. */
   monitoring: boolean;
@@ -74,6 +74,7 @@ export const DEFAULTS: Settings = {
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
 
+// Clé à l'ancien nom du logiciel, gardée pour retrouver les réglages existants.
 const KEY = 'termoria.settings';
 const listeners = new Set<(s: Settings) => void>();
 let current: Settings = load();
@@ -155,7 +156,7 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         h('h3', { class: 'label' }, 'Mise en évidence'),
         highlightSettings(),
         h('h3', { class: 'label' }, 'Connexion'),
-        check('autoReconnect', 'Reconnexion automatique', 'Après une coupure réseau ou une mise en veille, Termoria se reconnecte tout seul.'),
+        check('autoReconnect', 'Reconnexion automatique', 'Après une coupure réseau ou une mise en veille, Portunia se reconnecte tout seul.'),
         h('h3', { class: 'label' }, 'Sécurité'),
         securitySection(toastFn, () => {}),
         h('h3', { class: 'label' }, 'Licence'),
@@ -173,7 +174,7 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
             ...[[30, 'Toutes les 30 secondes'], [60, 'Toutes les minutes'], [300, 'Toutes les 5 minutes']].map(([v, l]) => h('option', { value: String(v), selected: v === s.monitorInterval }, String(l))))),
         h('label', { class: 'check setting' },
           h('input', { type: 'checkbox', checked: s.monitorAlerts, onchange: (e: Event) => updateSettings({ monitorAlerts: (e.target as HTMLInputElement).checked }) }),
-          h('span', {}, 'Me prévenir quand un serveur tombe ou revient ', proChip('monitoringAlerts'), h('span', { class: 'muted small block' }, 'Notification Windows, même quand Termoria est en arrière-plan.'))),
+          h('span', {}, 'Me prévenir quand un serveur tombe ou revient ', proChip('monitoringAlerts'), h('span', { class: 'muted small block' }, 'Notification Windows, même quand Portunia est en arrière-plan.'))),
         h('h3', { class: 'label' }, 'Mises à jour'),
         check('autoUpdate', 'Vérifier les mises à jour au démarrage', 'Une bannière propose la nouvelle version ; rien ne s’installe sans votre accord.'),
         h('button', { type: 'button', class: 'btn', style: 'align-self: flex-start', onclick: () => checkForUpdates(toastFn) }, icon('refresh', 14), 'Rechercher maintenant'),

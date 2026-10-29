@@ -1,4 +1,4 @@
-//! Éditions de Termoria (Gratuit, Pro, Équipes) et vérification des licences.
+//! Éditions de Portunia (Gratuit, Pro, Équipes) et vérification des licences.
 //!
 //! Point de contrôle unique : toute fonctionnalité payante appelle
 //! `License::allows(Feature::…)`. Une licence est un petit texte JSON signé
@@ -160,7 +160,7 @@ fn today() -> String {
 
 /// Vérifie la signature d'une licence et renvoie ses données.
 pub fn verify(text: &str, public_key_b64: &str) -> Result<LicenseData> {
-    let signed: SignedLicense = serde_json::from_str(text.trim()).context("Ce texte n'est pas une licence Termoria")?;
+    let signed: SignedLicense = serde_json::from_str(text.trim()).context("Ce texte n'est pas une licence Portunia")?;
     let key = B64.decode(public_key_b64).map_err(|_| anyhow!("Clé publique de licence invalide"))?;
     let signature = B64.decode(&signed.signature).map_err(|_| anyhow!("Signature de licence illisible"))?;
     let message = serde_json::to_vec(&signed.data)?;
@@ -281,7 +281,7 @@ mod tests {
     }
 
     /// Licence produite par `tools/license-tool` avec une clé de TEST (pas la clé de vente) :
-    /// garantit que l'outil vendeur et Termoria parlent le même format.
+    /// garantit que l'outil vendeur et Portunia parlent le même format.
     #[test]
     fn licence_de_l_outil_vendeur() {
         let key = "2YHQHCTM2oI1vUVzoUj8aOy2vsSftD3lTQozieBTZ9I=";

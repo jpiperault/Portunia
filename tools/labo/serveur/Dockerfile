@@ -11,9 +11,9 @@ RUN apt-get update \
 RUN curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz \
     | tar -xz -C /usr/local/bin --strip-components=1 docker/docker
 
-# Compte de test : test / termoria-test, sudo sans mot de passe.
+# Compte de test : test / portunia-test, sudo sans mot de passe.
 RUN useradd -m -s /bin/bash test \
- && echo 'test:termoria-test' | chpasswd \
+ && echo 'test:portunia-test' | chpasswd \
  && echo 'test ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/test \
  && mkdir -p /home/test/.ssh && chmod 700 /home/test/.ssh && chown -R test:test /home/test/.ssh
 

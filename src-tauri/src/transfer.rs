@@ -119,10 +119,10 @@ pub async fn upload_tree(files: &dyn RemoteFiles, local: &Path, remote_parent: &
     Ok(count)
 }
 
-/// Copie locale d'un fichier distant pour l'éditer : `%TEMP%\termoria-edition\<id>\<nom>`.
+/// Copie locale d'un fichier distant pour l'éditer : `%TEMP%\portunia-edition\<id>\<nom>`.
 pub fn edit_copy_path(id: &str, remote: &str) -> PathBuf {
     let name = remote.rsplit('/').next().unwrap_or("fichier");
-    std::env::temp_dir().join("termoria-edition").join(id).join(windows_name(name))
+    std::env::temp_dir().join("portunia-edition").join(id).join(windows_name(name))
 }
 
 pub fn modified(path: &Path) -> Option<(SystemTime, u64)> {
@@ -225,7 +225,7 @@ mod tests {
 
     #[tokio::test]
     async fn aller_retour_d_un_dossier() {
-        let base = std::env::temp_dir().join(format!("termoria-tree-{}", uuid::Uuid::new_v4()));
+        let base = std::env::temp_dir().join(format!("portunia-tree-{}", uuid::Uuid::new_v4()));
         let src = base.join("site");
         std::fs::create_dir_all(src.join("css")).unwrap();
         std::fs::write(src.join("index.html"), b"<h1>ok</h1>").unwrap();

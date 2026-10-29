@@ -99,7 +99,7 @@ export function shellSettings(toast: (m: string, k?: 'info' | 'error') => void):
         }, 'Ajouter')),
       h('label', { class: 'check setting' },
         h('input', { type: 'checkbox', checked: cfg.atStartup, onchange: (e: Event) => setLocal({ atStartup: (e.target as HTMLInputElement).checked }) }),
-        h('span', {}, 'Ouvrir le shell par défaut au démarrage de Termoria', h('span', { class: 'muted small block' }, 'Pratique si Termoria remplace Windows Terminal.'))));
+        h('span', {}, 'Ouvrir le shell par défaut au démarrage de Portunia', h('span', { class: 'muted small block' }, 'Pratique si Portunia remplace Windows Terminal.'))));
   };
 
   if (detected.length) render();

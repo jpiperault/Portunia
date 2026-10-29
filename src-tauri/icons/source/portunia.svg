@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Logo Termoria : invite de terminal « >_ ». Source de toutes les icônes (npx tauri icon). -->
+  <!-- Logo Portunia : invite de terminal « >_ ». Source de toutes les icônes (npx tauri icon). -->
   <!-- Fond anthracite plutôt que noir, avec un liseré plus clair : visible sur une barre des tâches sombre. -->
   <rect x="40" y="40" width="944" height="944" rx="212" fill="#17191e"/>
   <rect x="52" y="52" width="920" height="920" rx="200" fill="none" stroke="#343a44" stroke-width="24"/>

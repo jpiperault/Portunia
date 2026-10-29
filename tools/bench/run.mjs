@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 const [label = 'mesure', hl = 'on', size = 'gros'] = process.argv.slice(2);
 const edge = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const port = 9333;
-const dir = `${process.env.TEMP}/termoria-bench-profile`;
+const dir = `${process.env.TEMP}/portunia-bench-profile`;
 const proc = spawn(edge, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${dir}`, '--window-size=1400,860', '--enable-gpu', '--use-angle=d3d11', 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let target;

@@ -1,4 +1,4 @@
-//! Verrouillage de Termoria : mot de passe maître et, en option, Windows Hello.
+//! Verrouillage de Portunia : mot de passe maître et, en option, Windows Hello.
 //! Verrouillé, l'application refuse d'ouvrir des sessions et de lire les mots
 //! de passe enregistrés ; l'interface masque tout derrière l'écran de déverrouillage.
 
@@ -50,7 +50,7 @@ pub enum DataChange {
     Decrypt,
 }
 
-/// Donnée associée de l'enveloppe de la clé de données.
+/// Donnée associée de l'enveloppe de la clé de données (ancien nom du logiciel, gardé : format).
 const WRAP_AAD: &[u8] = b"termoria-cle-de-donnees";
 
 fn wrap(password: &str, salt: &[u8], iterations: u32, key: &[u8; 32]) -> Result<String> {
@@ -124,7 +124,7 @@ impl Lock {
     /// Erreur si l'application est verrouillée (point de contrôle des actions sensibles).
     pub fn ensure_unlocked(&self) -> Result<()> {
         if self.is_locked() {
-            bail!("Termoria est verrouillé");
+            bail!("Portunia est verrouillé");
         }
         Ok(())
     }
@@ -284,7 +284,7 @@ impl Lock {
     /// Appelé après une vérification Windows Hello réussie.
     pub fn unlock_with_hello(&self) -> Result<()> {
         if !self.hello_enabled() {
-            bail!("Windows Hello n'est pas activé pour Termoria");
+            bail!("Windows Hello n'est pas activé pour Portunia");
         }
         let config = self.config.as_ref().unwrap();
         match (&config.hello_key, &config.data_key) {
@@ -322,7 +322,7 @@ pub mod hello {
             .unwrap_or(false)
     }
 
-    /// Demande la vérification, rattachée à la fenêtre de Termoria. Bloquant.
+    /// Demande la vérification, rattachée à la fenêtre de Portunia. Bloquant.
     #[cfg(windows)]
     pub fn verify(hwnd: *mut core::ffi::c_void, message: &str) -> anyhow::Result<bool> {
         use windows::{
@@ -352,7 +352,7 @@ pub mod hello {
 mod tests {
     use super::*;
 
-    /// Remet l'état global du chiffrement à zéro (comme un redémarrage de Termoria).
+    /// Remet l'état global du chiffrement à zéro (comme un redémarrage de Portunia).
     fn restart(dir: &std::path::Path) -> Lock {
         vault::set_key(None);
         vault::set_enabled(false);
@@ -364,7 +364,7 @@ mod tests {
         let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         vault::set_key(None);
         vault::set_enabled(false);
-        let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-lock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let data = dir.join("sessions.json");
         let mut lock = Lock::load(&dir);
@@ -404,7 +404,7 @@ mod tests {
         let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         vault::set_key(None);
         vault::set_enabled(false);
-        let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-lock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let mut lock = Lock::load(&dir);
         lock.set_password("", "un bon mot de passe").unwrap();
@@ -433,7 +433,7 @@ mod tests {
         let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         vault::set_key(None);
         vault::set_enabled(false);
-        let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-lock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let mut lock = Lock::load(&dir);
         lock.set_password("", "un bon mot de passe").unwrap();
@@ -449,7 +449,7 @@ mod tests {
     }
 
     fn temp_lock() -> Lock {
-        let dir = std::env::temp_dir().join(format!("termoria-lock-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-lock-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         Lock::load(&dir)
     }

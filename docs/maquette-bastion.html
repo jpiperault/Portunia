@@ -1,0 +1,520 @@
+<title>Termoria Bastion</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette fidèle à l'application : tokens repris de src/styles.css (sombre par défaut, clair en option).
+   Mise en page : un sélecteur d'écrans, la fenêtre Termoria, puis l'explication de l'écran. */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --b-rdp: #24324d; --f-rdp: #9cc0ff; --shadow: rgb(0 0 0 / .45);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1f4fa8; --shadow: rgb(20 30 50 / .18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd; --term-dim: #8a8f99; --term-host: #6fc3df;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1f4fa8; --shadow: rgb(20 30 50 / .18); color-scheme: light; }
+:root[data-theme="dark"] {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd; --term-dim: #7d828c; --term-host: #6fc3df;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --b-rdp: #24324d; --f-rdp: #9cc0ff; --shadow: rgb(0 0 0 / .45); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1140px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.intro { display: flex; flex-direction: column; gap: 4px; }
+.intro h1 { font-size: 20px; font-weight: 650; }
+.steps { display: flex; gap: 8px; flex-wrap: wrap; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.steps .grp { font-size: 11px; color: var(--muted); align-self: center; padding: 0 4px 0 8px; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Fenêtre */
+.win { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 560px; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+@media (max-width: 760px) { .win { grid-template-columns: minmax(0, 1fr); } .side { border-right: 0; border-bottom: 1px solid var(--line); } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.search { width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--muted); }
+.sec { display: flex; align-items: center; gap: 6px; padding: 8px 4px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bastion-card { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--panel); }
+.bastion-card .top { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.led { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.tree-row { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); min-width: 0; }
+.tree-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-row.folder { color: var(--muted); font-size: 12px; padding-top: 7px; }
+.tree-row.sel { background: var(--accent-soft); color: var(--text); }
+.tree-row.off { opacity: .5; }
+.tree-row .tags { margin-left: auto; display: flex; gap: 4px; flex: none; }
+.proto { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; background: var(--b-ssh); color: var(--f-ssh); }
+.proto.rdp { background: var(--b-rdp); color: var(--f-rdp); }
+.mode { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); }
+.mode.rec { border-color: transparent; background: var(--danger-soft); color: var(--danger); }
+.mode.vault { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
+.mode.ok { border-color: transparent; background: var(--ok-soft); color: var(--ok); }
+.nav-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); }
+.nav-row.sel { background: var(--accent-soft); color: var(--text); }
+.nav-row .count { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.main { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; color: var(--muted); border-radius: 6px 6px 0 0; white-space: nowrap; }
+.tab.on { background: var(--work); color: var(--text); border: 1px solid var(--line); border-bottom-color: var(--work); margin-bottom: -1px; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+.content { flex: 1; padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.status { display: flex; gap: 14px; flex-wrap: wrap; padding: 6px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); background: var(--bg); }
+.status b { color: var(--text-2); font-weight: 600; }
+
+.banner { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-radius: 8px; font-size: 13px; background: var(--danger-soft); color: var(--text); }
+.banner.info { background: var(--accent-soft); }
+.banner .ico { color: var(--danger); font-weight: 700; }
+.banner.info .ico { color: var(--accent); }
+
+.term { background: var(--term); color: var(--term-text); font: 13px/1.6 var(--mono); border-radius: 8px; padding: 14px 16px; overflow-x: auto; white-space: pre; flex: 1; min-height: 260px; }
+.term .dim { color: var(--term-dim); }
+.term .host { color: var(--term-host); }
+.term .blk { color: #ff8f8f; }
+.cursor { display: inline-block; width: 8px; height: 15px; background: var(--term-text); vertical-align: -2px; }
+
+.card { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.fld { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-2); }
+.input { padding: 8px 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--text); }
+textarea.input { resize: vertical; min-height: 60px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.row > .fld { flex: 1 1 160px; }
+.btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 7px 14px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.danger { color: var(--danger); border-color: var(--danger-soft); background: var(--danger-soft); }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+
+.timeline { display: flex; flex-direction: column; gap: 0; }
+.tl { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding-bottom: 14px; position: relative; }
+.tl::before { content: ""; position: absolute; left: 10px; top: 20px; bottom: 0; width: 2px; background: var(--line-soft); }
+.tl:last-child::before { display: none; }
+.tl .pt { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; background: var(--chip-bg); color: var(--muted); }
+.tl.done .pt { background: var(--ok-soft); color: var(--ok); }
+.tl.wait .pt { background: var(--warn-soft); color: var(--warn); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.kpi .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi.alert .v { color: var(--warn); }
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 640px; }
+th { text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--text-2); font-variant-numeric: tabular-nums; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+td .actions { display: flex; gap: 6px; }
+
+.player { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 14px; }
+@media (max-width: 900px) { .player { grid-template-columns: minmax(0, 1fr); } }
+.bar { position: relative; height: 26px; border-radius: 6px; background: var(--chip-bg); }
+.bar .done { position: absolute; inset: 0 auto 0 0; width: 46%; background: var(--accent-soft); border-radius: 6px; }
+.bar .mk { position: absolute; top: 5px; bottom: 5px; width: 3px; border-radius: 2px; background: var(--accent); }
+.bar .mk.blk { background: var(--danger); }
+.bar .head { position: absolute; top: -3px; bottom: -3px; left: 46%; width: 2px; background: var(--text); }
+.ctrl { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.speed { display: flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.speed span { padding: 3px 8px; font-size: 12px; }
+.speed span.on { background: var(--accent-soft); color: var(--text); }
+.cmds { display: flex; flex-direction: column; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+.cmd { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 8px; padding: 6px 10px; font-size: 12px; border-bottom: 1px solid var(--line); }
+.cmd:last-child { border-bottom: 0; }
+.cmd code { font-family: var(--mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmd.hit { background: var(--accent-soft); }
+.cmd.blk code { color: var(--danger); }
+.seal { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; padding: 9px 10px; border-radius: 8px; background: var(--ok-soft); }
+.seal b { color: var(--ok); }
+
+.rules { display: flex; flex-direction: column; gap: 10px; }
+.rule { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 14px; }
+.rule .who { font-weight: 600; font-size: 14px; }
+.rule .what { font-size: 13px; color: var(--text-2); }
+.chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip-bg); color: var(--text-2); }
+.chip.no { background: var(--danger-soft); color: var(--danger); }
+.chip.yes { background: var(--ok-soft); color: var(--ok); }
+.chip.w { background: var(--warn-soft); color: var(--warn); }
+
+.sizes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .sizes { grid-template-columns: minmax(0, 1fr); } }
+.size { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); }
+.size.on { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.size h3 { font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.size ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 2px; }
+.topo { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.node { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.node .top { display: flex; gap: 6px; align-items: center; font-weight: 600; }
+.meter { height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--accent); }
+.kv { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--muted); }
+.kv b { color: var(--text-2); font-weight: 500; text-align: right; }
+.node.add { border-style: dashed; color: var(--muted); align-items: center; justify-content: center; min-height: 110px; }
+
+.explain { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 760px) { .explain { grid-template-columns: minmax(0, 1fr); } }
+.explain h2 { font-size: 15px; margin-bottom: 6px; }
+.explain ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); max-width: 65ch; }
+.decide { border-left: 3px solid var(--warn); padding-left: 12px; }
+.example { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .rec-dot { animation: pulse 1.6s ease-in-out infinite; } }
+@keyframes pulse { 50% { opacity: .35; } }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="label">Maquette · Termoria Bastion V1 (SSH)</p>
+    <h1>Le bastion vu depuis Termoria : côté utilisateur, puis côté administrateur</h1>
+    <p class="example">Les noms de serveurs, de personnes et les chiffres sont des exemples.</p>
+  </div>
+
+  <div class="steps" role="group" aria-label="Écrans">
+    <span class="grp">Utilisateur</span>
+    <button data-s="tree" aria-pressed="true">1. Serveurs du bastion</button>
+    <button data-s="session" aria-pressed="false">2. Session enregistrée</button>
+    <button data-s="approve" aria-pressed="false">3. Validation d'accès</button>
+    <span class="grp">Administrateur</span>
+    <button data-s="live" aria-pressed="false">4. Sessions en direct</button>
+    <button data-s="replay" aria-pressed="false">5. Relecture</button>
+    <button data-s="rights" aria-pressed="false">6. Droits</button>
+    <button data-s="system" aria-pressed="false">7. Système et taille</button>
+  </div>
+
+  <div class="win">
+    <!-- Barre latérale utilisateur -->
+    <aside class="side" id="side-user">
+      <div class="search">Rechercher ou taper une adresse…</div>
+      <div class="sec">Mes sessions</div>
+      <div class="tree-row"><span class="name">Raspberry maison</span><span class="tags"><span class="proto">SSH</span></span></div>
+      <div class="tree-row"><span class="name">NAS bureau</span><span class="tags"><span class="proto">SSH</span></span></div>
+      <div class="sec">Bastion</div>
+      <div class="bastion-card">
+        <div class="top"><span class="led"></span>bastion.acme.local</div>
+        <div class="small muted">julien · MFA validé · expire dans 7 h 52</div>
+      </div>
+      <div class="tree-row folder">▾ Production</div>
+      <div class="tree-row" id="t-web"><span class="name">web-01</span><span class="tags"><span class="mode vault" title="Coffre : mot de passe fourni par le bastion">Coffre</span><span class="proto">SSH</span></span></div>
+      <div class="tree-row" id="t-db"><span class="name">db-01</span><span class="tags"><span class="mode vault">Coffre</span><span class="mode" title="Validation d'un responsable avant l'accès">Validation</span><span class="proto">SSH</span></span></div>
+      <div class="tree-row folder">▾ Recette</div>
+      <div class="tree-row"><span class="name">rec-app</span><span class="tags"><span class="mode rec">Enregistré</span><span class="proto">SSH</span></span></div>
+      <div class="tree-row folder">▾ Réseau</div>
+      <div class="tree-row"><span class="name">fw-edge</span><span class="tags"><span class="mode" title="Rebond : journal des connexions sans enregistrement du contenu">Rebond</span><span class="proto">SSH</span></span></div>
+      <div class="tree-row folder">▾ Windows</div>
+      <div class="tree-row off" title="Arrive avec la V2"><span class="name">ad-01</span><span class="tags"><span class="mode">V2</span><span class="proto rdp">RDP</span></span></div>
+    </aside>
+
+    <!-- Barre latérale administrateur -->
+    <aside class="side" id="side-admin" hidden>
+      <div class="sec">Administration du bastion</div>
+      <div class="bastion-card">
+        <div class="top"><span class="led"></span>bastion.acme.local</div>
+        <div class="small muted">Rôle : administrateur · v1.0.0</div>
+      </div>
+      <div class="nav-row" data-nav="live">Sessions en direct<span class="count">7</span></div>
+      <div class="nav-row" data-nav="replay">Enregistrements<span class="count">1 284</span></div>
+      <div class="nav-row" data-nav="rights">Droits</div>
+      <div class="nav-row">Cibles et coffre<span class="count">42</span></div>
+      <div class="nav-row">Utilisateurs et groupes<span class="count">18</span></div>
+      <div class="nav-row">Journal d'audit</div>
+      <div class="nav-row" data-nav="system">Système</div>
+    </aside>
+
+    <section class="main">
+      <!-- 1. Arbre -->
+      <div data-screen="tree" class="main">
+        <div class="tabs"><div class="tab on">Accueil</div></div>
+        <div class="content">
+          <div class="banner info"><span class="ico">i</span><div>Connecté au bastion <b>bastion.acme.local</b>. Les 5 serveurs auxquels vous avez droit apparaissent dans l'arbre. Double-cliquez pour ouvrir : pas de mot de passe à connaître pour les serveurs en mode Coffre.</div></div>
+          <div class="card">
+            <h3 style="font-size:14px">Se connecter à un bastion</h3>
+            <div class="row">
+              <label class="fld">Adresse du bastion<input class="input" id="b-addr" value="bastion.acme.local"></label>
+              <label class="fld">Identifiant<input class="input" id="b-user" value="julien"></label>
+            </div>
+            <div class="row">
+              <label class="fld">Code à usage unique (TOTP)<input class="input" id="b-otp" value="482 913"></label>
+              <label class="fld">Ou<select class="input" id="b-sso"><option>Connexion par l'annuaire de l'entreprise (V3)</option></select></label>
+            </div>
+            <div class="row" style="justify-content:flex-end"><button class="btn">Annuler</button><button class="btn primary">Se connecter</button></div>
+          </div>
+          <p class="small muted">La liste se met à jour toute seule quand l'administrateur change vos droits. Hors connexion au bastion, la section Bastion est grisée.</p>
+        </div>
+        <div class="status"><span>Bastion : <b>connecté</b></span><span>5 serveurs autorisés</span><span>v0.40.0</span></div>
+      </div>
+
+      <!-- 2. Session -->
+      <div data-screen="session" class="main" hidden>
+        <div class="tabs"><div class="tab">Accueil</div><div class="tab on"><span class="rec-dot" aria-label="Enregistré"></span>web-01</div></div>
+        <div class="content">
+          <div class="banner"><span class="ico">●</span><div>Session <b>enregistrée</b> par le bastion. Le mot de passe de <b>admin@web-01</b> est fourni par le coffre : vous ne le voyez pas.</div></div>
+<div class="term"><span class="dim">Connexion à web-01 via bastion.acme.local…</span>
+<span class="dim">Bastion : accès autorisé (groupe Admins Linux, lun-ven 7 h-20 h)</span>
+<span class="host">admin@web-01</span>:~$ sudo systemctl restart nginx
+<span class="host">admin@web-01</span>:~$ tail -n 2 /var/log/nginx/error.log
+2026/10/29 09:41:02 [notice] 812#812: signal process started
+2026/10/29 09:41:02 [notice] 812#812: using inherited sockets
+<span class="host">admin@web-01</span>:~$ rm -rf /var/www
+<span class="blk">✖ Commande bloquée par la règle « Suppression récursive » (Production).</span>
+<span class="blk">  L'équipe Sécurité est prévenue.</span>
+<span class="host">admin@web-01</span>:~$ <span class="cursor"></span></div>
+        </div>
+        <div class="status"><span>Via <b>bastion.acme.local</b></span><span>Mode : <b>Coffre</b> · enregistré</span><span>SFTP : autorisé</span><span>Tunnels : interdits</span></div>
+      </div>
+
+      <!-- 3. Validation -->
+      <div data-screen="approve" class="main" hidden>
+        <div class="tabs"><div class="tab">Accueil</div><div class="tab on">db-01</div></div>
+        <div class="content">
+          <div class="card">
+            <h3 style="font-size:14px">db-01 demande une validation</h3>
+            <p class="small muted">La règle « Base de production » impose l'accord d'un membre de l'équipe Sécurité avant l'ouverture.</p>
+            <label class="fld">Motif<textarea class="input" id="a-why">Ticket INC-4821 : index manquant sur la table commandes</textarea></label>
+            <div class="row">
+              <label class="fld">Durée d'accès<select class="input" id="a-dur"><option>1 heure</option><option>2 heures (maximum)</option></select></label>
+              <label class="fld">Valideurs<input class="input" id="a-who" value="Équipe Sécurité (3 personnes)"></label>
+            </div>
+            <div class="row" style="justify-content:flex-end"><button class="btn">Annuler</button><button class="btn primary">Demander l'accès</button></div>
+          </div>
+          <div class="timeline">
+            <div class="tl done"><span class="pt">✓</span><div><b>Demande envoyée</b> <span class="muted small">09:52</span><p class="small muted">Les valideurs la voient dans Termoria (bandeau) et par e-mail.</p></div></div>
+            <div class="tl wait"><span class="pt">…</span><div><b>En attente d'un valideur</b><p class="small muted">Vous pouvez fermer l'onglet : une notification arrive à la réponse.</p></div></div>
+            <div class="tl"><span class="pt">3</span><div><b>Session ouverte pour 1 heure</b><p class="small muted">Puis coupée automatiquement, avec un avertissement 5 minutes avant.</p></div></div>
+          </div>
+        </div>
+        <div class="status"><span>Via <b>bastion.acme.local</b></span><span>Validation : <b>en attente</b></span></div>
+      </div>
+
+      <!-- 4. Sessions en direct -->
+      <div data-screen="live" class="main" hidden>
+        <div class="tabs"><div class="tab on">Sessions en direct</div></div>
+        <div class="content">
+          <div class="kpis">
+            <div class="kpi"><span class="label">En cours</span><span class="v">7</span></div>
+            <div class="kpi alert"><span class="label">Validations en attente</span><span class="v">1</span></div>
+            <div class="kpi"><span class="label">Commandes bloquées aujourd'hui</span><span class="v">2</span></div>
+            <div class="kpi"><span class="label">Nœuds</span><span class="v">1 / 1</span></div>
+          </div>
+          <div class="banner info"><span class="ico">!</span><div><b>Marc D.</b> demande db-01 pour 1 heure : « Ticket INC-4821 : index manquant… » <span style="margin-left:8px"><button class="btn sm primary">Accorder</button> <button class="btn sm">Refuser</button></span></div></div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Utilisateur</th><th>Cible</th><th>Mode</th><th>Depuis</th><th>Nœud</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>julien</td><td>admin@web-01</td><td><span class="mode vault">Coffre</span></td><td>12 min</td><td>bastion-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+              <tr><td>sophie.l</td><td>deploy@rec-app</td><td><span class="mode rec">Enregistré</span></td><td>48 min</td><td>bastion-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+              <tr><td>presta.infog</td><td>root@web-02</td><td><span class="mode vault">Coffre</span></td><td>1 h 05</td><td>bastion-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+              <tr><td>karim.b</td><td>netadmin@fw-edge</td><td><span class="mode">Rebond</span></td><td>3 min</td><td>bastion-1</td><td><div class="actions"><button class="btn sm" disabled title="Rebond : contenu non enregistré">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="status"><span>Rôle : <b>administrateur</b></span><span>Mise à jour en direct</span></div>
+      </div>
+
+      <!-- 5. Relecture -->
+      <div data-screen="replay" class="main" hidden>
+        <div class="tabs"><div class="tab on">Relecture · julien → web-01 · 29/10 09:40</div></div>
+        <div class="content">
+          <div class="player">
+            <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+<div class="term" style="min-height:220px"><span class="host">admin@web-01</span>:~$ sudo systemctl restart nginx
+<span class="host">admin@web-01</span>:~$ tail -n 2 /var/log/nginx/error.log
+2026/10/29 09:41:02 [notice] 812#812: signal process started
+<span class="cursor"></span></div>
+              <div class="bar" aria-label="Avancement de la relecture : 46 %">
+                <span class="done"></span>
+                <span class="mk" style="left:8%"></span><span class="mk" style="left:21%"></span><span class="mk blk" style="left:58%"></span><span class="mk" style="left:77%"></span>
+                <span class="head"></span>
+              </div>
+              <div class="ctrl"><button class="btn sm">❚❚ Pause</button><span>05:31 / 12:04</span><div class="speed"><span>×1</span><span class="on">×2</span><span>×8</span></div><span>Les silences de plus de 2 s sont raccourcis</span></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;min-width:0">
+              <input class="input" id="r-find" value="systemctl" aria-label="Chercher dans l'enregistrement">
+              <div class="cmds">
+                <div class="cmd"><span class="t">00:58</span><code>cd /etc/nginx</code></div>
+                <div class="cmd hit"><span class="t">02:31</span><code>sudo systemctl restart nginx</code></div>
+                <div class="cmd"><span class="t">04:12</span><code>tail -n 2 /var/log/nginx/error.log</code></div>
+                <div class="cmd blk"><span class="t">07:03</span><code>rm -rf /var/www (bloquée)</code></div>
+                <div class="cmd"><span class="t">09:20</span><code>exit</code></div>
+              </div>
+              <div class="seal"><span>✓</span><div><b>Enregistrement intact.</b> Signature du bastion vérifiée, chaînage du journal continu.</div></div>
+              <button class="btn">Exporter pour un audit</button>
+            </div>
+          </div>
+        </div>
+        <div class="status"><span>Taille : <b>84 Ko</b></span><span>Rôle requis : auditeur ou administrateur</span></div>
+      </div>
+
+      <!-- 6. Droits -->
+      <div data-screen="rights" class="main" hidden>
+        <div class="tabs"><div class="tab on">Droits</div></div>
+        <div class="content">
+          <div class="row" style="justify-content:space-between"><p class="small muted">Une règle relie un groupe à des cibles, avec ses conditions. Tout ce qui n'est pas permis est refusé.</p><button class="btn primary">Nouvelle règle</button></div>
+          <div class="rules">
+            <div class="rule">
+              <div><div class="who">Admins Linux → Production</div><div class="what">web-01, web-02, db-01 · compte admin du coffre</div></div><button class="btn sm">Modifier</button>
+              <div class="chips"><span class="chip w">Coffre</span><span class="chip">Lun-ven 7 h-20 h</span><span class="chip yes">SFTP</span><span class="chip no">Tunnels</span><span class="chip no">Commandes : suppression récursive, arrêt</span></div>
+            </div>
+            <div class="rule">
+              <div><div class="who">Prestataire Infogérance → Base de production</div><div class="what">db-01 · compte root du coffre</div></div><button class="btn sm">Modifier</button>
+              <div class="chips"><span class="chip w">Coffre</span><span class="chip w">Validation : équipe Sécurité</span><span class="chip">2 h maximum</span><span class="chip no">SFTP</span><span class="chip no">Tunnels</span><span class="chip">Expire le 31/12/2026</span></div>
+            </div>
+            <div class="rule">
+              <div><div class="who">Développeurs → Recette</div><div class="what">rec-app · leurs propres identifiants</div></div><button class="btn sm">Modifier</button>
+              <div class="chips"><span class="chip">Enregistré</span><span class="chip">Tous les jours</span><span class="chip yes">SFTP</span><span class="chip yes">Tunnels</span></div>
+            </div>
+            <div class="rule">
+              <div><div class="who">Réseau → Équipements</div><div class="what">fw-edge · leurs propres identifiants</div></div><button class="btn sm">Modifier</button>
+              <div class="chips"><span class="chip">Rebond (journal seul)</span><span class="chip">Tous les jours</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="status"><span>4 règles</span><span>Modifications tracées dans le journal d'audit</span></div>
+      </div>
+
+      <!-- 7. Système -->
+      <div data-screen="system" class="main" hidden>
+        <div class="tabs"><div class="tab on">Système</div></div>
+        <div class="content">
+          <div class="sizes">
+            <div class="size on"><h3>Petite <span class="mode ok">actuelle</span></h3><ul><li>1 VM avec tout dedans</li><li>PostgreSQL sur la VM</li><li>Enregistrements sur disque</li></ul></div>
+            <div class="size"><h3>Moyenne</h3><ul><li>2 nœuds (secours)</li><li>PostgreSQL séparé</li><li>Partage réseau ou S3</li></ul></div>
+            <div class="size"><h3>Grande</h3><ul><li>N nœuds + répartiteur</li><li>PostgreSQL haute dispo.</li><li>S3 + relais de site</li></ul></div>
+          </div>
+          <div class="topo">
+            <div class="node">
+              <div class="top"><span class="led"></span>bastion-1</div>
+              <div class="kv">Sessions<b>7</b></div>
+              <div class="kv">CPU (2 vCPU)<b>6 %</b></div><div class="meter"><i style="width:6%"></i></div>
+              <div class="kv">Mémoire (4 Go)<b>0,9 Go</b></div><div class="meter"><i style="width:22%"></i></div>
+            </div>
+            <div class="node">
+              <div class="top"><span class="led"></span>Base PostgreSQL</div>
+              <div class="kv">Emplacement<b>locale (bastion-1)</b></div>
+              <div class="kv">Sauvegarde<b>chaque nuit, 7 jours</b></div>
+            </div>
+            <div class="node">
+              <div class="top"><span class="led"></span>Enregistrements</div>
+              <div class="kv">Stockage<b>disque local</b></div>
+              <div class="kv">Occupé<b>12,4 / 60 Go</b></div><div class="meter"><i style="width:21%"></i></div>
+              <div class="kv">Conservation<b>180 jours</b></div>
+            </div>
+            <div class="node add">+ Ajouter un nœud<span class="small">Passe en taille Moyenne</span></div>
+          </div>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Sécurité</th><th>État</th><th>Détail</th></tr></thead>
+            <tbody>
+              <tr><td>Mode durci</td><td><span class="mode ok">Activé</span></td><td>Seuls les algorithmes conformes au guide de l'ANSSI sont acceptés</td></tr>
+              <tr><td>Mises à jour</td><td><span class="mode ok">À jour</span></td><td>v1.0.0, paquets signés, installation la nuit</td></tr>
+              <tr><td>Journal d'audit</td><td><span class="mode ok">Intact</span></td><td>Chaînage vérifié · copie vers syslog 10.0.0.5</td></tr>
+              <tr><td>Clé du coffre</td><td><span class="mode vault">Sur disque</span></td><td>Passer sur la puce TPM de la VM pour plus de sécurité</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="status"><span>Taille : <b>Petite</b></span><span>Debian 12 · bastion v1.0.0</span></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="explain" id="explain"></div>
+</div>
+
+<script>
+const TEXT = {
+  tree: {
+    t: 'Le bastion devient une section de l\'arbre',
+    p: ['On ajoute un bastion une fois (adresse, identifiant, code TOTP). Ses serveurs autorisés apparaissent sous vos sessions personnelles.',
+        'Chaque serveur affiche son mode : Rebond (journal seul), Enregistré, Coffre (mot de passe jamais montré), Validation.',
+        'Les droits suivent l\'administrateur en direct : un accès retiré disparaît de l\'arbre.'],
+    d: ['Un seul bastion par Termoria, ou plusieurs (un par client pour les prestataires) ?',
+        'Le Bureau à distance apparaît grisé avec « V2 » ou reste caché jusque-là ?'] },
+  session: {
+    t: 'Une session ouverte par le bastion',
+    p: ['Le point rouge dans l\'onglet et le bandeau rappellent que tout est enregistré.',
+        'La commande bloquée est arrêtée avant d\'atteindre le serveur, avec le nom de la règle.',
+        'La barre d\'état résume ce qui est permis : SFTP, tunnels.'],
+    d: ['Le bandeau reste affiché, ou disparaît après quelques secondes en gardant le point rouge ?',
+        'Bloquer des commandes reste un garde-fou contre l\'erreur : on l\'écrit tel quel dans l\'interface ?'] },
+  approve: {
+    t: 'Accès soumis à validation',
+    p: ['Pour les cibles sensibles, l\'utilisateur donne un motif et une durée.',
+        'Les valideurs répondent depuis leur Termoria (écran 4) ou par e-mail.',
+        'L\'accès se coupe seul à la fin de la durée accordée.'],
+    d: ['Notifications par e-mail dès la V1, ou seulement dans Termoria ?',
+        'Faut-il aussi un accès d\'urgence (« bris de glace ») qui ouvre sans attendre mais alerte tout le monde ?'] },
+  live: {
+    t: 'Console d\'administration : sessions en direct',
+    p: ['La console d\'administration est dans Termoria lui-même : pas de site web à installer en plus.',
+        '« Regarder » affiche la session en direct, en lecture seule. « Couper » la ferme immédiatement, sur n\'importe quel nœud.',
+        'Les sessions en mode Rebond ne sont pas regardables : leur contenu n\'est pas enregistré.'],
+    d: ['Une console web en plus de Termoria (pour un auditeur sans Termoria), dès la V1 ou plus tard ?'] },
+  replay: {
+    t: 'Relecture d\'un enregistrement',
+    p: ['Les commandes tapées forment un index cliquable ; la commande bloquée est en rouge sur la barre de temps.',
+        'La recherche porte sur tout le texte de la session, et sur toutes les sessions depuis la liste des enregistrements.',
+        'Chaque enregistrement est signé : le sceau vert prouve qu\'il n\'a pas été modifié. Utile pour un audit et pour la certification.'],
+    d: ['Durée de conservation par défaut : 180 jours vous paraît bien ?'] },
+  rights: {
+    t: 'Droits : des règles lisibles',
+    p: ['Une règle = un groupe, des cibles, un compte (du coffre ou le sien) et des conditions.',
+        'Tout ce qui n\'est pas explicitement permis est refusé.',
+        'Les accès de prestataires peuvent expirer à une date donnée.'],
+    d: ['Les groupes viennent-ils seulement du bastion en V1, l\'annuaire de l\'entreprise (Active Directory, Entra) arrivant en V3 ?'] },
+  system: {
+    t: 'Système : la même installation grandit',
+    p: ['La taille Petite tourne sur votre VM (2 vCPU, 4 Go). Ajouter un nœud fait passer en Moyenne, sans réinstaller.',
+        'Les chiffres de charge viendront des mesures réelles sur votre VM, pas d\'estimations.',
+        'Le tableau Sécurité prépare la certification : mode durci, mises à jour signées, journal chaîné, clé du coffre.'],
+    d: ['Sauvegardes : gérées par le bastion (comme ici) ou laissées à la sauvegarde de VM du client ?'] },
+};
+const ADMIN = new Set(['live', 'replay', 'rights', 'system']);
+const explain = document.getElementById('explain');
+function show(s) {
+  document.querySelectorAll('[data-screen]').forEach((el) => { el.hidden = el.dataset.screen !== s; });
+  document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+  document.getElementById('side-user').hidden = ADMIN.has(s);
+  document.getElementById('side-admin').hidden = !ADMIN.has(s);
+  document.querySelectorAll('.nav-row').forEach((r) => r.classList.toggle('sel', r.dataset.nav === s));
+  document.getElementById('t-web').classList.toggle('sel', s === 'session');
+  document.getElementById('t-db').classList.toggle('sel', s === 'approve');
+  const x = TEXT[s];
+  explain.replaceChildren();
+  const left = document.createElement('div');
+  const h = document.createElement('h2'); h.textContent = x.t;
+  const ul = document.createElement('ul'); x.p.forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul.append(li); });
+  left.append(h, ul);
+  const right = document.createElement('div'); right.className = 'decide';
+  const h2 = document.createElement('h2'); h2.textContent = 'À décider';
+  const ul2 = document.createElement('ul'); x.d.forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul2.append(li); });
+  right.append(h2, ul2);
+  explain.append(left, right);
+  try { localStorage.setItem('bastion-maquette', s); } catch {}
+}
+document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+document.querySelectorAll('.nav-row[data-nav]').forEach((r) => { r.style.cursor = 'pointer'; r.addEventListener('click', () => show(r.dataset.nav)); });
+let start = 'tree';
+try { const v = localStorage.getItem('bastion-maquette'); if (v && TEXT[v]) start = v; } catch {}
+show(start);
+</script>

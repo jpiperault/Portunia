@@ -59,7 +59,7 @@ impl Notes {
 
     fn save(&self) -> Result<()> {
         if self.locked {
-            anyhow::bail!("Termoria est verrouillé : les notes ne sont pas chargées");
+            anyhow::bail!("Portunia est verrouillé : les notes ne sont pas chargées");
         }
         // Écriture atomique (fichier temporaire puis remplacement), chiffrée si besoin.
         crate::vault::write(&self.path, &serde_json::to_string_pretty(&self.notes)?)
@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn enregistre_relit_et_supprime() {
         let _g = crate::vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let path = std::env::temp_dir().join(format!("termoria-notes-{}.json", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("portunia-notes-{}.json", uuid::Uuid::new_v4()));
         let mut notes = Notes::load(path.clone());
         notes.set("a", "# Prod\n- [ ] sauvegarde").unwrap();
         notes.set("b", "x").unwrap();

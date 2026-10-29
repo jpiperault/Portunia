@@ -21,7 +21,7 @@ export function stamp(date = new Date()): string {
 
 export function recordingSettings(toast: Toast): HTMLElement {
   const s = settings();
-  const dir = h('input', { type: 'text', class: 'imp-path', value: s.recordingDir, spellcheck: 'false', placeholder: 'Documents\\Termoria\\Enregistrements' });
+  const dir = h('input', { type: 'text', class: 'imp-path', value: s.recordingDir, spellcheck: 'false', placeholder: 'Documents\\Portunia\\Enregistrements' });
   dir.addEventListener('change', () => updateSettings({ recordingDir: dir.value.trim() }));
   recordings.defaultDir().then((d) => { dir.placeholder = d; }).catch(() => {});
   return h('div', { class: 'settings-block' },

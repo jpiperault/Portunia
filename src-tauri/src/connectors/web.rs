@@ -32,7 +32,7 @@ impl Connector for WebConnector {
 
         let label = format!("web-{}", uuid::Uuid::new_v4().simple());
         WebviewWindowBuilder::new(&ctx.app, label, WebviewUrl::External(url))
-            .title(format!("{} — Termoria", ctx.session_name))
+            .title(format!("{} — Portunia", ctx.session_name))
             .inner_size(1200.0, 800.0)
             .build()?;
         Ok(Outcome::Detached(format!("{} ouvert dans une nouvelle fenêtre", ctx.session_name)))

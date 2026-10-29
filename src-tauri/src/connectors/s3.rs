@@ -624,29 +624,29 @@ mod reseau {
     use super::*;
 
     /// Essai réel avec vos clés, dans un compartiment existant (préfixe temporaire supprimé à la fin) :
-    /// TERMORIA_S3_ACCESS, TERMORIA_S3_SECRET, TERMORIA_S3_BUCKET, et selon le service
-    /// TERMORIA_S3_ENDPOINT, TERMORIA_S3_REGION, TERMORIA_S3_PATH_STYLE=1, puis
+    /// PORTUNIA_S3_ACCESS, PORTUNIA_S3_SECRET, PORTUNIA_S3_BUCKET, et selon le service
+    /// PORTUNIA_S3_ENDPOINT, PORTUNIA_S3_REGION, PORTUNIA_S3_PATH_STYLE=1, puis
     /// cargo test --lib s3_reel -- --ignored --nocapture
     #[test]
     #[ignore = "nécessite des clés S3"]
     fn s3_reel() {
         let env = |k: &str| std::env::var(k).ok().filter(|v| !v.is_empty());
-        let (Some(access), Some(secret), Some(bucket)) = (env("TERMORIA_S3_ACCESS"), env("TERMORIA_S3_SECRET"), env("TERMORIA_S3_BUCKET")) else {
-            println!("Variables TERMORIA_S3_* absentes : essai ignoré");
+        let (Some(access), Some(secret), Some(bucket)) = (env("PORTUNIA_S3_ACCESS"), env("PORTUNIA_S3_SECRET"), env("PORTUNIA_S3_BUCKET")) else {
+            println!("Variables PORTUNIA_S3_* absentes : essai ignoré");
             return;
         };
         tauri::async_runtime::block_on(async {
             let client = Client {
                 http: reqwest::Client::builder().tls_backend_preconfigured((*crate::tls::tls_config(false).unwrap()).clone()).build().unwrap(),
-                endpoint: env("TERMORIA_S3_ENDPOINT"),
-                region: env("TERMORIA_S3_REGION").unwrap_or_else(|| "us-east-1".into()),
+                endpoint: env("PORTUNIA_S3_ENDPOINT"),
+                region: env("PORTUNIA_S3_REGION").unwrap_or_else(|| "us-east-1".into()),
                 access,
                 secret,
-                path_style: env("TERMORIA_S3_PATH_STYLE").is_some(),
+                path_style: env("PORTUNIA_S3_PATH_STYLE").is_some(),
             };
             let files = S3Files { client: Arc::new(client), bucket: Some(bucket.clone()) };
-            let base = format!("/{bucket}/termoria-test-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]);
-            let local = std::env::temp_dir().join("termoria-s3-envoi.txt");
+            let base = format!("/{bucket}/portunia-test-{}", &uuid::Uuid::new_v4().simple().to_string()[..12]);
+            let local = std::env::temp_dir().join("portunia-s3-envoi.txt");
             std::fs::write(&local, "Bonjour S3 — été 2026\n".repeat(1000)).unwrap();
             let p: Progress = Arc::new(|_, _| {});
             files.mkdir(format!("{base}/dossier")).await.unwrap();
@@ -655,7 +655,7 @@ mod reseau {
             println!("{:?}", listed.iter().map(|e| (&e.name, e.size, e.modified)).collect::<Vec<_>>());
             assert!(listed.iter().any(|e| e.name == "été 1.txt" && e.size == std::fs::metadata(&local).unwrap().len()));
             files.rename(format!("{base}/dossier"), format!("{base}/renommé")).await.unwrap();
-            let back = std::env::temp_dir().join("termoria-s3-retour.txt");
+            let back = std::env::temp_dir().join("portunia-s3-retour.txt");
             files.download(format!("{base}/renommé/été 1.txt"), back.clone(), p).await.unwrap();
             assert_eq!(std::fs::read(&back).unwrap(), std::fs::read(&local).unwrap());
             files.remove(base.clone(), true).await.unwrap();

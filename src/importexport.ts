@@ -1,4 +1,4 @@
-// Import (~/.ssh/config, PuTTY, mRemoteNG) et sauvegarde / restauration Termoria.
+// Import (~/.ssh/config, PuTTY, mRemoteNG) et sauvegarde / restauration Portunia.
 import { open, save } from '@tauri-apps/plugin-dialog';
 import { api, errorText, ImportCandidate, ImportSource } from './api';
 import { badge, h, icon } from './dom';
@@ -62,14 +62,14 @@ export function openImportExport(done: (message: string) => void, toast: (m: str
       h('p', { class: 'muted small', style: 'margin: 0' }, 'Les mots de passe ne sont jamais importés ni exportés : ils restent dans le Gestionnaire d\'identifiants Windows.'),
       ...cards,
       h('section', { class: 'ext-fields' },
-        h('div', { class: 'ext-head' }, h('h3', {}, 'Sauvegarde Termoria')),
+        h('div', { class: 'ext-head' }, h('h3', {}, 'Sauvegarde Portunia')),
         h('p', { class: 'muted small', style: 'margin: 0' }, 'Un fichier avec toutes vos sessions, dossiers, notes et commandes, pour les sauvegarder ou les copier sur un autre PC. Protégez-le par une phrase de passe : sans elle, il est lisible par quiconque l\'ouvre.'),
         h('label', { class: 'fld' }, 'Phrase de passe (recommandée, 8 caractères min.)', exportPass),
         h('div', { class: 'imp-actions' },
           h('button', {
             type: 'button', class: 'btn', onclick: async () => {
               const date = new Date().toISOString().slice(0, 10);
-              const path = await save({ defaultPath: `termoria-sauvegarde-${date}.json`, filters: [{ name: 'Sauvegarde Termoria', extensions: ['json'] }] });
+              const path = await save({ defaultPath: `portunia-sauvegarde-${date}.json`, filters: [{ name: 'Sauvegarde Portunia', extensions: ['json'] }] });
               if (!path) return;
               try {
                 const n = await api.exportBackup(path, exportPass.value || null);
@@ -80,7 +80,7 @@ export function openImportExport(done: (message: string) => void, toast: (m: str
           }, icon('download', 14), 'Exporter…'),
           h('button', {
             type: 'button', class: 'btn', onclick: async () => {
-              const path = await open({ multiple: false, directory: false, filters: [{ name: 'Sauvegarde Termoria', extensions: ['json'] }] });
+              const path = await open({ multiple: false, directory: false, filters: [{ name: 'Sauvegarde Portunia', extensions: ['json'] }] });
               if (typeof path !== 'string') return;
               try {
                 let r;

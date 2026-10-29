@@ -1,8 +1,8 @@
 //! Serveur SSH de test, sur ce PC (127.0.0.1:2222), pour essayer la saisie des identifiants
 //! dans le terminal sans Docker ni vrai serveur.
 //!
-//! - refuse toutes les clés et l'agent : Termoria doit demander le mot de passe ;
-//! - accepte seulement `test` / `termoria-test` ;
+//! - refuse toutes les clés et l'agent : Portunia doit demander le mot de passe ;
+//! - accepte seulement `test` / `portunia-test` ;
 //! - ouvre un faux shell qui répète ce qu'on tape.
 //!
 //! Lancement (clé d'hôte créée avant par ssh-keygen) :
@@ -14,7 +14,7 @@ use russh::server::{Auth, Msg, Server as _, Session};
 use russh::{Channel, ChannelId};
 
 const USER: &str = "test";
-const PASSWORD: &str = "termoria-test";
+const PASSWORD: &str = "portunia-test";
 
 #[derive(Clone, Default)]
 struct Server {
@@ -76,7 +76,7 @@ impl russh::server::Handler for Server {
     async fn shell_request(&mut self, channel: ChannelId, session: &mut Session) -> Result<(), Self::Error> {
         self.shell = Some(channel);
         session.channel_success(channel)?;
-        session.data(channel, format!("Serveur de test Termoria : connecté en tant que {USER}.\r\n{USER}@test:~$ ").into_bytes())?;
+        session.data(channel, format!("Serveur de test Portunia : connecté en tant que {USER}.\r\n{USER}@test:~$ ").into_bytes())?;
         Ok(())
     }
 

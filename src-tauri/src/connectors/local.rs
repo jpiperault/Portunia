@@ -126,7 +126,7 @@ pub fn open(shell: &ShellSpec, cols: u16, rows: u16, sink: Arc<dyn Sink>) -> Res
     command.args(&shell.args);
     let cwd = if shell.cwd.trim().is_empty() { home() } else { PathBuf::from(shell.cwd.trim()) };
     command.cwd(if cwd.is_dir() { cwd } else { home() });
-    command.env("TERM_PROGRAM", "Termoria");
+    command.env("TERM_PROGRAM", "Portunia");
     let child = pty
         .slave
         .spawn_command(command)
@@ -193,7 +193,7 @@ impl Drop for LocalShell {
 }
 
 /// Lance le shell en administrateur, dans sa propre fenêtre Windows (l'élévation
-/// ne peut pas se faire à l'intérieur de Termoria sans l'élever tout entier).
+/// ne peut pas se faire à l'intérieur de Portunia sans l'élever tout entier).
 pub fn open_elevated(shell: &ShellSpec) -> Result<()> {
     let quote = |s: &str| format!("'{}'", s.replace('\'', "''"));
     let mut script = format!("Start-Process -Verb RunAs -FilePath {}", quote(&shell.command));
@@ -309,7 +309,7 @@ mod tests {
 
     /// Lance réellement l'Invite de commandes dans une ConPTY et lit sa réponse.
     /// (Au démarrage, la console demande la position du curseur : xterm.js y répond
-    /// tout seul dans Termoria ; ici, le test répond comme lui.)
+    /// tout seul dans Portunia ; ici, le test répond comme lui.)
     #[cfg(windows)]
     #[test]
     fn execute_une_commande() {
@@ -334,10 +334,10 @@ mod tests {
                 answered += 1;
             }
             if !sent && (!text.is_empty() || start.elapsed().as_secs() > 3) {
-                shell.write(b"echo termoria-ok\r").unwrap();
+                shell.write(b"echo portunia-ok\r").unwrap();
                 sent = true;
             }
-            if text.matches("termoria-ok").count() >= 2 {
+            if text.matches("portunia-ok").count() >= 2 {
                 break; // la commande tapée, puis son résultat
             }
             assert!(start.elapsed().as_secs() < 15, "pas de réponse du shell ; reçu : {text:?}");
@@ -353,11 +353,11 @@ mod debit {
     use std::sync::Mutex;
 
     /// Débit de la console Windows seule (sans interface) :
-    /// TERMORIA_BENCH_FILE=chemin cargo test --lib debit_console -- --ignored --nocapture
+    /// PORTUNIA_BENCH_FILE=chemin cargo test --lib debit_console -- --ignored --nocapture
     #[test]
     #[ignore = "mesure à la demande"]
     fn debit_console() {
-        let Ok(file) = std::env::var("TERMORIA_BENCH_FILE") else { return };
+        let Ok(file) = std::env::var("PORTUNIA_BENCH_FILE") else { return };
         struct Count(Mutex<(usize, usize, Vec<u8>)>);
         impl Sink for Count {
             fn data(&self, bytes: &[u8]) {
@@ -380,8 +380,8 @@ mod debit {
         std::thread::sleep(std::time::Duration::from_millis(300));
         sink.0.lock().unwrap().0 = 0;
         let start = std::time::Instant::now();
-        // Commande mesurée : `type` par défaut, ou TERMORIA_BENCH_CMD ({file} remplacé).
-        let command = std::env::var("TERMORIA_BENCH_CMD")
+        // Commande mesurée : `type` par défaut, ou PORTUNIA_BENCH_CMD ({file} remplacé).
+        let command = std::env::var("PORTUNIA_BENCH_CMD")
             .map(|c| c.replace("{file}", &file))
             .unwrap_or_else(|_| format!("type \"{file}\""));
         shell.write(format!("{command}\r").as_bytes()).unwrap();

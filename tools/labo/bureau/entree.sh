@@ -6,4 +6,4 @@ export DISPLAY=:1
 fluxbox >/dev/null 2>&1 &
 xterm -geometry 100x30+40+40 &
 xclock -geometry 160x160+900+40 &
-exec x11vnc -display :1 -rfbport 5901 -passwd termoria -forever -shared -quiet
+exec x11vnc -display :1 -rfbport 5901 -passwd portunia -forever -shared -quiet

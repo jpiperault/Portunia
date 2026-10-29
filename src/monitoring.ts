@@ -114,7 +114,7 @@ export class Monitor {
         body: c.up ? 'Le serveur est de nouveau joignable.' : (c.error ?? 'Le serveur est injoignable.'),
       });
     }
-    if (changes.length > 5) sendNotification({ title: 'Termoria', body: `${changes.length - 5} autre(s) changement(s) d'état.` });
+    if (changes.length > 5) sendNotification({ title: 'Portunia', body: `${changes.length - 5} autre(s) changement(s) d'état.` });
   }
 
   /** Vue d'ensemble : tous les serveurs supervisés. */

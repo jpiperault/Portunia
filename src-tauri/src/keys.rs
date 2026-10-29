@@ -167,10 +167,10 @@ fn install_command(line: &str) -> String {
     [
         "umask 077".to_string(),
         format!("mkdir -p ~/.ssh && touch {file} && chmod 700 ~/.ssh && chmod 600 {file} || exit 1"),
-        format!("if grep -qxF '{line}' {file}; then echo TERMORIA_DEJA; exit 0; fi"),
+        format!("if grep -qxF '{line}' {file}; then echo PORTUNIA_DEJA; exit 0; fi"),
         // Dernière ligne sans retour à la ligne : on en ajoute un avant la clé.
         format!("if [ -s {file} ] && [ -n \"$(tail -c1 {file})\" ]; then echo >> {file}; fi"),
-        format!("echo '{line}' >> {file} && echo TERMORIA_AJOUT"),
+        format!("echo '{line}' >> {file} && echo PORTUNIA_AJOUT"),
     ]
     .join("; ")
 }
@@ -178,9 +178,9 @@ fn install_command(line: &str) -> String {
 pub async fn install(exec: &dyn RemoteExec, public: &str) -> Result<Installed> {
     let line = safe_public_line(public).ok_or_else(|| anyhow!("Clé publique illisible"))?;
     let out = exec.run(install_command(&line)).await?;
-    if out.stdout.contains("TERMORIA_DEJA") {
+    if out.stdout.contains("PORTUNIA_DEJA") {
         Ok(Installed::AlreadyThere)
-    } else if out.stdout.contains("TERMORIA_AJOUT") {
+    } else if out.stdout.contains("PORTUNIA_AJOUT") {
         Ok(Installed::Added)
     } else {
         let code = out.status.map(|c| format!(" (code {c})")).unwrap_or_default();
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn cree_une_cle_chiffree_et_la_relit() {
-        let dir = std::env::temp_dir().join(format!("termoria-keys-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-keys-{}", uuid::Uuid::new_v4()));
         let info = generate_in(&dir, "id_test", "ed25519", "julien@PC;rm -rf", Some("phrase"), &mut rand::rng()).unwrap();
         assert_eq!(info.algorithm, "Ed25519");
         assert!(info.encrypted);
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     #[ignore = "lent en debug : cargo test --release -- --ignored"]
     fn cree_une_cle_rsa() {
-        let dir = std::env::temp_dir().join(format!("termoria-keys-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-keys-{}", uuid::Uuid::new_v4()));
         let info = generate_in(&dir, "id_rsa", "rsa", "", None, &mut rand::rng()).unwrap();
         assert_eq!(info.algorithm, "RSA");
         assert!(!info.encrypted);

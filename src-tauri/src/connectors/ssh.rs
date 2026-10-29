@@ -117,8 +117,8 @@ impl Connector for SshConnector {
             .unwrap_or_default();
         for spec in tunnels.into_iter().filter(|t| t.auto_start) {
             let line = match tauri::async_runtime::block_on(forwarder.start(spec.clone())) {
-                Ok(()) => format!("\x1b[90m[Termoria] Tunnel ouvert : {}\x1b[0m\r\n", spec.describe()),
-                Err(e) => format!("\x1b[33m[Termoria] Tunnel {} impossible : {e:#}\x1b[0m\r\n", spec.describe()),
+                Ok(()) => format!("\x1b[90m[Portunia] Tunnel ouvert : {}\x1b[0m\r\n", spec.describe()),
+                Err(e) => format!("\x1b[33m[Portunia] Tunnel {} impossible : {e:#}\x1b[0m\r\n", spec.describe()),
             };
             sink.data(line.as_bytes());
         }
@@ -339,7 +339,7 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
                 let (bastion, earlier) = session(&hop, depth + 1, None)
                     .await
                     .with_context(|| format!("Serveur de rebond {via}"))?;
-                ctx.sink.data(format!("\x1b[90m[Termoria] Rebond par {via} vers {host}:{port}\x1b[0m\r\n").as_bytes());
+                ctx.sink.data(format!("\x1b[90m[Portunia] Rebond par {via} vers {host}:{port}\x1b[0m\r\n").as_bytes());
                 let tunnel = bastion
                     .channel_open_direct_tcpip(host.clone(), port as u32, "127.0.0.1", 0)
                     .await
@@ -631,7 +631,7 @@ impl client::Handler for Handler {
                 }
                 Err(_) if !warned.swap(true, std::sync::atomic::Ordering::Relaxed) => {
                     sink.data(format!(
-                        "\r\n\x1b[33m[Termoria] Une application graphique veut s'afficher, mais aucun serveur X ne répond sur {display}.\r\n\
+                        "\r\n\x1b[33m[Portunia] Une application graphique veut s'afficher, mais aucun serveur X ne répond sur {display}.\r\n\
                          Démarrez VcXsrv (« Disable access control » coché) ou X410, puis relancez l'application.\x1b[0m\r\n"
                     ).as_bytes());
                 }
@@ -652,7 +652,7 @@ impl client::Handler for Handler {
         if !weak.is_empty() {
             self.sink.data(
                 format!(
-                    "\x1b[33m[Termoria] Attention : connexion peu sûre ({}). \
+                    "\x1b[33m[Portunia] Attention : connexion peu sûre ({}). \
                      Mettez à jour l'équipement si possible.\x1b[0m\r\n",
                     weak.join(", ")
                 )
@@ -692,11 +692,11 @@ impl client::Handler for Handler {
             None => {}
         }
 
-        // Serveur jamais vu par Termoria : déjà vérifié avec OpenSSH (~/.ssh/known_hosts) ?
+        // Serveur jamais vu par Portunia : déjà vérifié avec OpenSSH (~/.ssh/known_hosts) ?
         let (host, port) = self.host_id.rsplit_once(':').map(|(h, p)| (h.to_string(), p.parse().unwrap_or(22))).unwrap_or((self.host_id.clone(), 22));
         let openssh = openssh_fingerprints(&host, port);
         let accepted = if openssh.contains(&fingerprint) {
-            self.sink.data(b"\x1b[90m[Termoria] Serveur reconnu (~/.ssh/known_hosts)\x1b[0m\r\n");
+            self.sink.data(b"\x1b[90m[Portunia] Serveur reconnu (~/.ssh/known_hosts)\x1b[0m\r\n");
             true
         } else if !openssh.is_empty() {
             *self.rejection.lock().unwrap() = Some(format!(
@@ -709,7 +709,7 @@ impl client::Handler for Handler {
             // Première connexion : l'utilisateur confirme l'empreinte, comme avec OpenSSH.
             let question = Confirm {
                 title: format!("Nouveau serveur : {}", self.host_id),
-                message: "Termoria ne connaît pas encore ce serveur. Vérifiez que l'empreinte ci-dessous est bien celle du \
+                message: "Portunia ne connaît pas encore ce serveur. Vérifiez que l'empreinte ci-dessous est bien celle du \
                           serveur (son administrateur peut l'obtenir avec « ssh-keygen -lf » sur la clé de l'hôte). \
                           Elle sera mémorisée : un changement futur bloquera la connexion."
                     .into(),
@@ -739,7 +739,7 @@ impl client::Handler for Handler {
             if let Ok(text) = serde_json::to_string_pretty(&known) {
                 let _ = crate::vault::write(&self.known_hosts, &text);
             }
-            self.sink.data(format!("\x1b[90m[Termoria] Nouveau serveur mémorisé ({fingerprint})\x1b[0m\r\n").as_bytes());
+            self.sink.data(format!("\x1b[90m[Portunia] Nouveau serveur mémorisé ({fingerprint})\x1b[0m\r\n").as_bytes());
         }
         Ok(accepted)
     }

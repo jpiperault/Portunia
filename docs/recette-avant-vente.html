@@ -1,4 +1,4 @@
-<title>Recette Termoria</title>
+<title>Recette Portunia</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
@@ -91,8 +91,8 @@ h2 { font-size: 17px; margin: 0; text-wrap: balance; }
 <div class="page">
   <header>
     <div class="eyebrow">Avant la mise en vente</div>
-    <h1>Recette Termoria</h1>
-    <p class="lead">Les tests à passer avant de vendre Termoria. Marquez chaque test, et décrivez ce qui coince : Claude lit ces résultats pour corriger. La plupart se font avec le labo du projet (<code>tools/labo</code>, mode d’emploi dans son LISEZMOI) : des serveurs de test sur votre PC, lancés par Docker Desktop.</p>
+    <h1>Recette Portunia</h1>
+    <p class="lead">Les tests à passer avant de vendre Portunia. Marquez chaque test, et décrivez ce qui coince : Claude lit ces résultats pour corriger. La plupart se font avec le labo du projet (<code>tools/labo</code>, mode d’emploi dans son LISEZMOI) : des serveurs de test sur votre PC, lancés par Docker Desktop.</p>
   </header>
 
   <section class="summary" aria-label="Avancement">
@@ -113,13 +113,13 @@ h2 { font-size: 17px; margin: 0; text-wrap: balance; }
 // Liste des tests : contenu fixe de la page. Les résultats (statut, note) vivent dans la base.
 const SECTIONS = [
   { id: 'inst', title: 'Installation et mises à jour', tests: [
-    ['inst-1', 'bloquant', 'Installer sur un PC propre', 'Télécharger <code>setup.exe</code> depuis Termoria-releases sur un PC (ou une machine virtuelle) qui n’a jamais eu Termoria. Noter ce que dit Windows SmartScreen.', 'Installation sans droits administrateur, Termoria démarre.'],
-    ['inst-2', 'bloquant', 'Mise à jour automatique', 'Depuis une version plus ancienne, attendre ou demander la vérification des mises à jour.', 'La nouvelle version est proposée, s’installe et relance Termoria.'],
+    ['inst-1', 'bloquant', 'Installer sur un PC propre', 'Télécharger <code>setup.exe</code> depuis Portunia-releases sur un PC (ou une machine virtuelle) qui n’a jamais eu Portunia. Noter ce que dit Windows SmartScreen.', 'Installation sans droits administrateur, Portunia démarre.'],
+    ['inst-2', 'bloquant', 'Mise à jour automatique', 'Depuis une version plus ancienne, attendre ou demander la vérification des mises à jour.', 'La nouvelle version est proposée, s’installe et relance Portunia.'],
     ['inst-3', 'bloquant', 'Données conservées à la mise à jour', 'Avant la mise à jour : quelques sessions avec mot de passe enregistré, une note, une commande enregistrée.', 'Tout est là après la mise à jour, connexions comprises.'],
-    ['inst-4', 'important', 'Console de Windows Terminal installée', 'Ouvrir le dossier <code>%LOCALAPPDATA%\\Termoria</code>.', '<code>conpty.dll</code> et <code>OpenConsole.exe</code> sont à côté de <code>termoria.exe</code>.'],
-    ['inst-5', 'important', 'Désinstallation', 'Désinstaller depuis les Paramètres Windows.', 'Plus de raccourci ni de programme ; décider si les données dans <code>%APPDATA%\\fr.termoria.app</code> doivent rester.'],
+    ['inst-4', 'important', 'Console de Windows Terminal installée', 'Ouvrir le dossier <code>%LOCALAPPDATA%\\Portunia</code>.', '<code>conpty.dll</code> et <code>OpenConsole.exe</code> sont à côté de <code>portunia.exe</code>.'],
+    ['inst-5', 'important', 'Désinstallation', 'Désinstaller depuis les Paramètres Windows.', 'Plus de raccourci ni de programme ; décider si les données dans <code>%APPDATA%\\fr.portunia.app</code> doivent rester.'],
     ['inst-6', 'important', 'Windows 10 et compte standard', 'Installer et utiliser sur Windows 10, avec un compte sans droits administrateur.', 'Tout fonctionne comme sur Windows 11.'],
-    ['inst-7', 'important', 'Antivirus', 'Avec Defender (et si possible un autre antivirus) actif.', 'Ni <code>termoria.exe</code>, ni <code>OpenConsole.exe</code>, ni <code>termoria-rdp.exe</code> ne sont bloqués ou mis en quarantaine.'],
+    ['inst-7', 'important', 'Antivirus', 'Avec Defender (et si possible un autre antivirus) actif.', 'Ni <code>portunia.exe</code>, ni <code>OpenConsole.exe</code>, ni <code>portunia-rdp.exe</code> ne sont bloqués ou mis en quarantaine.'],
   ]},
   { id: 'ssh', title: 'SSH', tests: [
     ['ssh-1', 'bloquant', 'Mot de passe', 'Se connecter à un Linux récent (OpenSSH 9 ou 10) par mot de passe.', 'Terminal ouvert, saisie et affichage normaux.'],
@@ -132,7 +132,7 @@ const SECTIONS = [
     ['ssh-8', 'important', 'Coupure et veille', 'Couper le Wi-Fi 30 s pendant une session, puis mettre le PC en veille.', 'Reconnexion automatique.'],
     ['ssh-9', 'bloquant', 'Assistant de clé', 'Depuis une session par mot de passe : « Clé SSH », créer une clé, l’installer, accepter « utiliser cette clé ».', 'Reconnexion suivante sans mot de passe.'],
     ['ssh-10', 'important', 'Identifiants partagés', 'Un identifiant utilisé par deux sessions ; changer son mot de passe.', 'Les deux sessions se connectent avec le nouveau.'],
-    ['ssh-12', 'bloquant', 'Double authentification', 'Se connecter à un serveur qui demande un code à 6 chiffres après le mot de passe.', 'Termoria affiche la question du serveur et laisse saisir le code. Défaut connu : aujourd’hui le mot de passe est renvoyé à la place du code.'],
+    ['ssh-12', 'bloquant', 'Double authentification', 'Se connecter à un serveur qui demande un code à 6 chiffres après le mot de passe.', 'Portunia affiche la question du serveur et laisse saisir le code. Défaut connu : aujourd’hui le mot de passe est renvoyé à la place du code.'],
     ['ssh-11', 'important', 'Connexion rapide', 'Taper <code>ssh user@hôte</code> dans la recherche puis Entrée, avec et sans clé.', 'Connexion ; mot de passe demandé s’il n’y a pas de clé ; « Enregistrer comme session » fonctionne.'],
   ]},
   { id: 'fichiers', title: 'Fichiers', tests: [
@@ -166,9 +166,9 @@ const SECTIONS = [
     ['net-1', 'confort', 'Outils réseau', 'Ping, traceroute, test de ports ; Wake-on-LAN sur une vraie machine.', 'Résultats cohérents ; la machine se réveille.'],
   ]},
   { id: 'securite', title: 'Sécurité et données', tests: [
-    ['sec-1', 'bloquant', 'Mot de passe maître', 'L’activer, redémarrer Termoria, déverrouiller ; puis avec Windows Hello.', 'Verrouillé au démarrage ; déverrouillage par mot de passe et par Windows Hello.'],
+    ['sec-1', 'bloquant', 'Mot de passe maître', 'L’activer, redémarrer Portunia, déverrouiller ; puis avec Windows Hello.', 'Verrouillé au démarrage ; déverrouillage par mot de passe et par Windows Hello.'],
     ['sec-2', 'bloquant', 'Verrouillage étanche', 'Verrouiller avec une session ouverte, essayer Tab, Ctrl+Maj+P, cliquer derrière.', 'Rien n’est accessible ni envoyé au serveur.'],
-    ['sec-3', 'bloquant', 'Données chiffrées', 'Mot de passe maître actif : ouvrir <code>sessions.json</code> et <code>notes.json</code> dans <code>%APPDATA%\\fr.termoria.app</code> avec le Bloc-notes.', 'Contenu illisible (commence par <code>TERMORIA-CHIFFRE-1</code>).'],
+    ['sec-3', 'bloquant', 'Données chiffrées', 'Mot de passe maître actif : ouvrir <code>sessions.json</code> et <code>notes.json</code> dans <code>%APPDATA%\\fr.portunia.app</code> avec le Bloc-notes.', 'Contenu illisible (commence par <code>PORTUNIA-CHIFFRE-1</code>).'],
     ['sec-4', 'bloquant', 'Sauvegarde protégée', 'Exporter avec une phrase de passe, importer sur un autre PC.', 'Phrase demandée ; sessions, notes et commandes restaurées.'],
     ['sec-5', 'important', 'Ancien mot de passe maître', 'Sur un PC qui avait un mot de passe maître avant la 0.36 : mettre à jour, déverrouiller.', 'Données chiffrées ensuite, rien de perdu.'],
     ['sec-6', 'important', 'Collage de plusieurs lignes', 'Coller trois lignes dans un terminal.', 'Confirmation avec l’aperçu ; rien n’est envoyé si on annule.'],
@@ -180,8 +180,8 @@ const SECTIONS = [
   ]},
   { id: 'vente', title: 'Prêt à vendre', tests: [
     ['vente-1', 'bloquant', 'Licences', 'Générer une vraie licence Pro, l’activer ; vérifier qu’en version vendue (aperçu coupé) les fonctions Pro sont bloquées sans licence.', 'Pro débloqué avec la licence, bloqué sans.'],
-    ['vente-2', 'bloquant', 'Installateur signé', 'Après achat du certificat de signature de code : installer depuis un téléchargement.', 'Éditeur « Termoria » affiché, pas d’alerte SmartScreen bloquante.'],
-    ['vente-3', 'important', 'Premier lancement', 'Faire installer Termoria par quelqu’un qui ne le connaît pas, sans aide.', 'Il crée une session et s’y connecte seul ; noter où il hésite.'],
+    ['vente-2', 'bloquant', 'Installateur signé', 'Après achat du certificat de signature de code : installer depuis un téléchargement.', 'Éditeur « Portunia » affiché, pas d’alerte SmartScreen bloquante.'],
+    ['vente-3', 'important', 'Premier lancement', 'Faire installer Portunia par quelqu’un qui ne le connaît pas, sans aide.', 'Il crée une session et s’y connecte seul ; noter où il hésite.'],
   ]},
 ];
 
@@ -189,7 +189,7 @@ const STATUS = [['ok', 'OK'], ['ko', 'Problème'], ['na', 'Non applicable']];
 const PRIO = { bloquant: 'Bloquant', important: 'Important', confort: 'Confort' };
 const WHERE = { labo: 'Labo', vm: 'Machine virtuelle', pc: 'Votre PC', vente: 'Vente' };
 // Où passer chaque test : labo (tools/labo), machine virtuelle Windows, votre PC, préparation à la vente.
-const OU = {"inst-1":["vm","Machine virtuelle Windows (PC propre)"],"inst-2":["pc","Votre PC"],"inst-3":["pc","Votre PC"],"inst-4":["pc","Votre PC"],"inst-5":["vm","Machine virtuelle Windows"],"inst-6":["vm","Machine virtuelle Windows 10 (Hyper-V, version d’évaluation)"],"inst-7":["pc","Votre PC (Defender) ; autres antivirus : non applicable"],"ssh-1":["labo","Labo — serveur"],"ssh-2":["labo","Labo — serveur (clés publiques dans tools/labo/cles)"],"ssh-3":["labo","Labo — serveur + Pageant ou agent OpenSSH"],"ssh-4":["labo","Labo — serveur (première connexion)"],"ssh-5":["labo","Labo — serveur, recréé avec docker compose up -d --force-recreate serveur"],"ssh-6":["labo","Labo — ancien équipement"],"ssh-7":["labo","Labo — interne (via bastion) puis Labo — interne (2 bastions)"],"ssh-8":["labo","Labo — serveur (docker compose restart serveur, puis veille du PC)"],"ssh-9":["labo","Labo — serveur"],"ssh-10":["labo","Identifiant partagé « Labo » (utilisé par toutes les sessions du labo)"],"ssh-11":["labo","ssh test@127.0.0.1:2201 dans la recherche"],"ssh-12":["labo","Labo — double authentification (code : voir LISEZMOI du labo)"],"sftp-1":["labo","Labo — serveur"],"sftp-2":["labo","Labo — serveur"],"sftp-3":["labo","Labo — serveur (créer un fichier test.bat)"],"ftp-1":["labo","Labo — FTPS et Labo — FTP non chiffré"],"s3-1":["labo","Labo — S3"],"rdp-1":["vm","Machine virtuelle Windows (Hyper-V)"],"rdp-2":["vm","Machine virtuelle Windows (Hyper-V)"],"rdp-3":["vm","Machine virtuelle Windows (Hyper-V)"],"vnc-1":["labo","Labo — bureau VNC"],"local-1":["pc","Votre PC"],"local-2":["pc","Votre PC"],"proto-1":["labo","Labo — telnet, Labo — web ; port série : com0com ou non applicable"],"pro-1":["labo","Labo — serveur"],"pro-2":["labo","Dossier « Labo » (arrêter ancien avant : docker compose stop ancien)"],"pro-3":["labo","Labo — serveur (Docker du labo) ; Kubernetes : non applicable ou vrai cluster"],"pro-4":["labo","Labo — serveur"],"pro-5":["labo","docker compose stop web, puis start web"],"tun-1":["labo","Labo — serveur (tunnels déjà préparés : 8081 → web, SOCKS 1080)"],"tun-2":["labo","Labo — serveur (tunnel inverse 9090) + VcXsrv"],"net-1":["labo","Sessions du labo ; Wake-on-LAN : vraie machine ou non applicable"],"sec-1":["pc","Votre PC"],"sec-2":["labo","Votre PC, avec une session du labo ouverte"],"sec-3":["pc","Votre PC"],"sec-4":["vm","Votre PC puis machine virtuelle (ou un second PC)"],"sec-5":["pc","Votre PC (Termoria installée avec mot de passe maître)"],"sec-6":["labo","Labo — serveur"],"imp-1":["pc","Votre PC (vos vrais fichiers)"],"ux-1":["pc","Votre PC"],"ux-2":["pc","Votre PC (et un second écran si possible)"],"vente-1":["vente","Préparation à la vente"],"vente-2":["vente","Préparation à la vente (certificat à acheter)"],"vente-3":["pc","Un proche, sur son PC"]};
+const OU = {"inst-1":["vm","Machine virtuelle Windows (PC propre)"],"inst-2":["pc","Votre PC"],"inst-3":["pc","Votre PC"],"inst-4":["pc","Votre PC"],"inst-5":["vm","Machine virtuelle Windows"],"inst-6":["vm","Machine virtuelle Windows 10 (Hyper-V, version d’évaluation)"],"inst-7":["pc","Votre PC (Defender) ; autres antivirus : non applicable"],"ssh-1":["labo","Labo — serveur"],"ssh-2":["labo","Labo — serveur (clés publiques dans tools/labo/cles)"],"ssh-3":["labo","Labo — serveur + Pageant ou agent OpenSSH"],"ssh-4":["labo","Labo — serveur (première connexion)"],"ssh-5":["labo","Labo — serveur, recréé avec docker compose up -d --force-recreate serveur"],"ssh-6":["labo","Labo — ancien équipement"],"ssh-7":["labo","Labo — interne (via bastion) puis Labo — interne (2 bastions)"],"ssh-8":["labo","Labo — serveur (docker compose restart serveur, puis veille du PC)"],"ssh-9":["labo","Labo — serveur"],"ssh-10":["labo","Identifiant partagé « Labo » (utilisé par toutes les sessions du labo)"],"ssh-11":["labo","ssh test@127.0.0.1:2201 dans la recherche"],"ssh-12":["labo","Labo — double authentification (code : voir LISEZMOI du labo)"],"sftp-1":["labo","Labo — serveur"],"sftp-2":["labo","Labo — serveur"],"sftp-3":["labo","Labo — serveur (créer un fichier test.bat)"],"ftp-1":["labo","Labo — FTPS et Labo — FTP non chiffré"],"s3-1":["labo","Labo — S3"],"rdp-1":["vm","Machine virtuelle Windows (Hyper-V)"],"rdp-2":["vm","Machine virtuelle Windows (Hyper-V)"],"rdp-3":["vm","Machine virtuelle Windows (Hyper-V)"],"vnc-1":["labo","Labo — bureau VNC"],"local-1":["pc","Votre PC"],"local-2":["pc","Votre PC"],"proto-1":["labo","Labo — telnet, Labo — web ; port série : com0com ou non applicable"],"pro-1":["labo","Labo — serveur"],"pro-2":["labo","Dossier « Labo » (arrêter ancien avant : docker compose stop ancien)"],"pro-3":["labo","Labo — serveur (Docker du labo) ; Kubernetes : non applicable ou vrai cluster"],"pro-4":["labo","Labo — serveur"],"pro-5":["labo","docker compose stop web, puis start web"],"tun-1":["labo","Labo — serveur (tunnels déjà préparés : 8081 → web, SOCKS 1080)"],"tun-2":["labo","Labo — serveur (tunnel inverse 9090) + VcXsrv"],"net-1":["labo","Sessions du labo ; Wake-on-LAN : vraie machine ou non applicable"],"sec-1":["pc","Votre PC"],"sec-2":["labo","Votre PC, avec une session du labo ouverte"],"sec-3":["pc","Votre PC"],"sec-4":["vm","Votre PC puis machine virtuelle (ou un second PC)"],"sec-5":["pc","Votre PC (Portunia installée avec mot de passe maître)"],"sec-6":["labo","Labo — serveur"],"imp-1":["pc","Votre PC (vos vrais fichiers)"],"ux-1":["pc","Votre PC"],"ux-2":["pc","Votre PC (et un second écran si possible)"],"vente-1":["vente","Préparation à la vente"],"vente-2":["vente","Préparation à la vente (certificat à acheter)"],"vente-3":["pc","Un proche, sur son PC"]};
 const ALL = SECTIONS.flatMap((s) => s.tests.map((t) => ({ section: s.id, id: t[0], prio: t[1], title: t[2], how: t[3], expect: t[4], ou: OU[t[0]] || ['pc', 'Votre PC'] })));
 
 let results = {};      // id du test → { statut, note, maj }
@@ -282,7 +282,7 @@ function renderAll() {
 }
 
 // ---------- Enregistrement ----------
-const LS = 'recette-termoria';
+const LS = 'recette-portunia';
 function saveLocal() { try { localStorage.setItem(LS, JSON.stringify({ results, infos })); } catch {} }
 
 async function saveResult(id, patch) {

@@ -102,6 +102,7 @@ export const QUICK_HELP = 'adresse seule (fenêtre de connexion) · ssh user@hô
 
 // ---------- Historique des connexions rapides ----------
 
+// Clé à l'ancien nom du logiciel, gardée pour retrouver les réglages existants.
 const HISTORY_KEY = 'termoria.quickHistory';
 const HISTORY_MAX = 8;
 

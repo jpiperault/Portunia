@@ -1,7 +1,7 @@
 [package]
 name = "license-tool"
 version = "0.1.0"
-description = "Outil de l'éditeur : crée la clé de signature et génère les licences Termoria"
+description = "Outil de l'éditeur : crée la clé de signature et génère les licences Portunia"
 edition = "2021"
 publish = false
 

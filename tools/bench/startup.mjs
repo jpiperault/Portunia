@@ -9,7 +9,7 @@ const page = readFileSync(new URL('../../screenshot.html', import.meta.url), 'ut
 const mock = page.slice(page.indexOf('<script>') + 8, page.indexOf('</script>'));
 const runs = [];
 for (let run = 0; run < 5; run++) {
-  const proc = spawn(edge, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${process.env.TEMP}/termoria-start-${run}`, '--window-size=1400,860', 'about:blank'], { stdio: 'ignore' });
+  const proc = spawn(edge, ['--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${process.env.TEMP}/portunia-start-${run}`, '--window-size=1400,860', 'about:blank'], { stdio: 'ignore' });
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   let t; for (let i = 0; i < 50 && !t; i++) { await sleep(200); try { t = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).find((x) => x.type === 'page'); } catch {} }
   const ws = new WebSocket(t.webSocketDebuggerUrl); await new Promise((r) => (ws.onopen = r));

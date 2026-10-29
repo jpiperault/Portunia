@@ -1,4 +1,4 @@
-//! Chiffrement au repos des données de Termoria quand un mot de passe maître est défini.
+//! Chiffrement au repos des données de Portunia quand un mot de passe maître est défini.
 //!
 //! Schéma :
 //! - une **clé de données** aléatoire (256 bits) chiffre les fichiers sessions.json,
@@ -29,7 +29,7 @@ use ring::{
     rand::{SecureRandom, SystemRandom},
 };
 
-/// En-tête d'un fichier chiffré.
+/// En-tête d'un fichier chiffré (ancien nom du logiciel, gardé : c'est le format des fichiers).
 const MAGIC: &[u8] = b"TERMORIA-CHIFFRE-1\n";
 
 /// Clé de données en mémoire (présente une fois déverrouillé).
@@ -104,7 +104,7 @@ pub fn derive_key(passphrase: &str, salt: &[u8], iterations: u32) -> [u8; 32] {
 pub enum Content {
     Missing,
     Text(String),
-    /// Chiffré, mais Termoria est verrouillé (clé absente).
+    /// Chiffré, mais Portunia est verrouillé (clé absente).
     Locked,
 }
 
@@ -131,7 +131,7 @@ pub fn read(path: &Path) -> Result<Content> {
 /// Écrit un fichier (atomiquement), chiffré si le chiffrement est actif.
 pub fn write(path: &Path, text: &str) -> Result<()> {
     let bytes = if enabled() {
-        let key = key().ok_or_else(|| anyhow!("Termoria est verrouillé : écriture refusée"))?;
+        let key = key().ok_or_else(|| anyhow!("Portunia est verrouillé : écriture refusée"))?;
         let mut out = MAGIC.to_vec();
         out.extend_from_slice(B64.encode(seal(&key, text.as_bytes(), &aad(path))?).as_bytes());
         out.push(b'\n');
@@ -170,7 +170,7 @@ pub mod dpapi {
         let mut output = CRYPT_INTEGER_BLOB::default();
         unsafe {
             if protect {
-                CryptProtectData(&input, windows::core::w!("Termoria"), None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut output)?;
+                CryptProtectData(&input, windows::core::w!("Portunia"), None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut output)?;
             } else {
                 CryptUnprotectData(&input, None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut output)?;
             }
@@ -208,7 +208,7 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("termoria-vault-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("portunia-vault-{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         dir.join(name)
     }

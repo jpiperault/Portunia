@@ -1,4 +1,4 @@
-# Labo de test de Termoria
+# Labo de test de Portunia
 
 Des serveurs jetables sur votre PC pour passer la recette avant la vente : SSH (mot de passe,
 clé, bastions, ancien équipement, double authentification), SFTP, FTP/FTPS, S3, VNC, telnet,
@@ -14,7 +14,7 @@ visible depuis le réseau.
 
 ## 2. Démarrer le labo
 
-Dans un terminal (PowerShell, ou un shell local de Termoria), depuis le dossier du projet :
+Dans un terminal (PowerShell, ou un shell local de Portunia), depuis le dossier du projet :
 
 ```
 cd tools\labo
@@ -24,19 +24,19 @@ docker compose up -d --build
 La première fois, comptez quelques minutes (téléchargement et construction des images).
 Ensuite le démarrage prend quelques secondes.
 
-## 3. Importer les sessions dans Termoria
+## 3. Importer les sessions dans Portunia
 
-1. Termoria › **Importer / exporter** › **Restaurer…** › choisir `tools\labo\sessions-labo.json`.
-2. **Identifiants partagés** › « Labo » › Modifier › mot de passe `termoria-test`.
+1. Portunia › **Importer / exporter** › **Restaurer…** › choisir `tools\labo\sessions-labo.json`.
+2. **Identifiants partagés** › « Labo » › Modifier › mot de passe `portunia-test`.
 3. Dans les sessions :
-   - **Labo — S3** › Modifier › Clé secrète : `termoria-labo-secret`
-   - **Labo — bureau VNC** › Modifier › Mot de passe VNC : `termoria`
+   - **Labo — S3** › Modifier › Clé secrète : `portunia-labo-secret`
+   - **Labo — bureau VNC** › Modifier › Mot de passe VNC : `portunia`
 
 Le dossier **Labo** contient alors toutes les sessions de test.
 
 ## Ce qu'il y a dans le labo
 
-| Session Termoria | Serveur | Adresse | Pour tester |
+| Session Portunia | Serveur | Adresse | Pour tester |
 |---|---|---|---|
 | Labo — serveur | Linux Debian | 127.0.0.1:2201 | mot de passe, clés, SFTP, tableau de bord, conteneurs, tunnels, X11 |
 | Labo — bastion | Linux | 127.0.0.1:2202 | entrée du réseau interne |
@@ -50,15 +50,15 @@ Le dossier **Labo** contient alors toutes les sessions de test.
 | Labo — telnet | Linux | 127.0.0.1:2323 | Telnet |
 | Labo — web | nginx | http://127.0.0.1:8080 | interface web, tunnels |
 
-Compte partout : **test / termoria-test** (sudo sans mot de passe).
+Compte partout : **test / portunia-test** (sudo sans mot de passe).
 
 ## Recettes particulières
 
 - **Clé SSH** : déposez vos clés publiques (`.pub`) dans `tools\labo\cles`, puis
-  `docker compose up -d --force-recreate`. Ou utilisez l'assistant « Clé SSH » de Termoria
+  `docker compose up -d --force-recreate`. Ou utilisez l'assistant « Clé SSH » de Portunia
   depuis une session par mot de passe.
 - **Clé de serveur changée** : `docker compose up -d --force-recreate serveur` recrée le serveur
-  avec de nouvelles clés d'hôte ; Termoria doit refuser la connexion suivante.
+  avec de nouvelles clés d'hôte ; Portunia doit refuser la connexion suivante.
 - **Double authentification** : code du moment avec
   `docker compose exec deuxfacteurs oathtool --totp -b JBSWY3DPEHPK3PXP`,
   ou ajoutez le secret `JBSWY3DPEHPK3PXP` à une application d'authentification.

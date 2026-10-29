@@ -18,7 +18,7 @@ export async function checkForUpdates(toast: Toast, silent = false) {
     return;
   }
   if (!update) {
-    if (!silent) toast('Termoria est à jour.');
+    if (!silent) toast('Portunia est à jour.');
     return;
   }
   showBanner(update, toast);
@@ -54,7 +54,7 @@ function showBanner(update: Update, toast: Toast) {
   banner = h('div', { class: 'update-banner', role: 'status' },
     icon('download', 16),
     h('div', { class: 'grow' },
-      h('strong', {}, `Termoria ${update.version} est disponible`),
+      h('strong', {}, `Portunia ${update.version} est disponible`),
       update.body && h('div', { class: 'muted small ellipsis', title: update.body }, update.body.split('\n')[0])),
     progress,
     install,

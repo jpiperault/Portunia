@@ -65,7 +65,7 @@ impl AppState {
         }
     }
 
-    /// Refuse les actions sensibles tant que Termoria est verrouillé.
+    /// Refuse les actions sensibles tant que Portunia est verrouillé.
     fn unlocked(&self) -> CmdResult<()> {
         self.lock.lock().unwrap().ensure_unlocked().map_err(err)
     }
@@ -714,7 +714,7 @@ pub fn export_backup(state: State<'_, AppState>, path: String, passphrase: Optio
         sessions.iter().filter_map(|s| all.all().get(&s.id).map(|n| (s.id.clone(), n.clone()))).collect()
     };
     let credentials = state.credentials.lock().unwrap().list().into_iter().map(|mut c| { c.secret_keys.clear(); c }).collect();
-    let backup = importers::Backup { app: "termoria".into(), version: 1, sessions, folders, snippets, notes, credentials };
+    let backup = importers::Backup { app: "portunia".into(), version: 1, sessions, folders, snippets, notes, credentials };
     let text = importers::backup_text(&backup, passphrase.as_deref()).map_err(full)?;
     std::fs::write(&path, text).map_err(|e| format!("Écriture impossible : {e}"))?;
     Ok(count)
@@ -900,7 +900,7 @@ fn apply_data_change(state: &AppState, change: lock::DataChange) -> CmdResult<()
 #[tauri::command]
 pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResult<bool> {
     if !state.lock.lock().unwrap().hello_enabled() {
-        return Err("Windows Hello n'est pas activé pour Termoria".into());
+        return Err("Windows Hello n'est pas activé pour Portunia".into());
     }
     let window = app.get_webview_window("main").ok_or("Fenêtre introuvable")?;
     #[cfg(windows)]
@@ -908,7 +908,7 @@ pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResu
     #[cfg(not(windows))]
     let hwnd = { let _ = window; 0usize };
     let verified = tauri::async_runtime::spawn_blocking(move || {
-        lock::hello::verify(hwnd as *mut core::ffi::c_void, "Déverrouiller Termoria")
+        lock::hello::verify(hwnd as *mut core::ffi::c_void, "Déverrouiller Portunia")
     })
     .await
     .map_err(err)?
@@ -922,11 +922,17 @@ pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResu
 
 // ---------- Enregistrement des sessions (Pro) ----------
 
-/// Dossier des enregistrements : choisi dans les Paramètres, sinon Documents\Termoria\Enregistrements.
+/// Dossier des enregistrements : choisi dans les Paramètres, sinon Documents\Portunia\Enregistrements.
 fn recording_dir(app: &AppHandle, custom: Option<String>) -> CmdResult<PathBuf> {
     match custom.filter(|d| !d.trim().is_empty()) {
         Some(dir) => Ok(PathBuf::from(dir)),
-        None => Ok(app.path().document_dir().map_err(err)?.join("Termoria").join("Enregistrements")),
+        None => {
+            let documents = app.path().document_dir().map_err(err)?;
+            // Enregistrements faits sous l'ancien nom : on continue d'utiliser ce dossier.
+            let old = documents.join("Termoria").join("Enregistrements");
+            let new = documents.join("Portunia").join("Enregistrements");
+            Ok(if old.is_dir() && !new.exists() { old } else { new })
+        }
     }
 }
 
@@ -1130,7 +1136,7 @@ pub fn fs_edit_stop(state: State<'_, AppState>, id: String) {
     if let Some((_, task)) = state.edits.lock().unwrap().remove(&id) {
         task.abort();
     }
-    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("termoria-edition").join(&id));
+    let _ = std::fs::remove_dir_all(std::env::temp_dir().join("portunia-edition").join(&id));
 }
 
 // ---------- Shells locaux ----------

@@ -18,11 +18,11 @@ Edge headless n'a pas de vraie carte graphique : le rendu WebGL n'y est pas repr
 
 ## Bout en bout dans la vraie application
 
-Lancer Termoria en développement avec un port de débogage WebView2 et son propre dossier
-de données (pour cohabiter avec une Termoria installée) :
+Lancer Portunia en développement avec un port de débogage WebView2 et son propre dossier
+de données (pour cohabiter avec une Portunia installée) :
 
 ```
-WEBVIEW2_USER_DATA_FOLDER=%TEMP%\termoria-bench WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223 npm run tauri dev
+WEBVIEW2_USER_DATA_FOLDER=%TEMP%\portunia-bench WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9223 npm run tauri dev
 ```
 
 - `node gros-fichier.mjs` crée le fichier de 20 Mo ;
@@ -31,4 +31,4 @@ WEBVIEW2_USER_DATA_FOLDER=%TEMP%\termoria-bench WEBVIEW2_ADDITIONAL_BROWSER_ARGU
 - `node echo.mjs` : délai entre une touche et son écho.
 
 Résultats de référence (machine virtuelle 2 cœurs, sans carte graphique) : voir le message
-du commit « Termoria 0.34.0 ».
+du commit « Portunia 0.34.0 ».

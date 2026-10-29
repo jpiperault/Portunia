@@ -70,7 +70,7 @@ mod icmp {
     const IP_TTL_EXPIRED_TRANSIT: u32 = 11013;
 
     pub fn echo(target: Ipv4Addr, ttl: u8, timeout: Duration) -> Result<Echo> {
-        let payload = *b"Termoria ping....................";
+        let payload = *b"Portunia ping....................";
         // Réponse + données renvoyées + marge pour un message d'erreur ICMP.
         let mut buffer = vec![0u8; std::mem::size_of::<ICMP_ECHO_REPLY>() + payload.len() + 64];
         let options = IP_OPTION_INFORMATION { Ttl: ttl, ..Default::default() };
