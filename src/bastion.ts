@@ -251,7 +251,7 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
     const address = input({ id: 'b-address', placeholder: 'bastion.exemple.fr ou 192.168.1.10:8443', value: existing ? `${existing.host}:${existing.apiPort}` : '' });
     const fingerprintBox = h('div', { class: 'fp', hidden: !existing }, existing?.apiFingerprint ?? '');
     const fingerprintField = h('div', { class: 'fld', hidden: true },
-      h('span', {}, 'Empreinte du certificat', h('span', { class: 'muted small' }, ' à comparer avec celle affichée par « heimdia init »')), fingerprintBox);
+      h('span', {}, 'Empreinte du certificat', h('span', { class: 'muted small' }, ' à comparer avec celle donnée à l\'installation (ou « sudo heimdia info » sur le bastion)')), fingerprintBox);
     const login = input({ id: 'b-login', value: existing?.login ?? '', autocomplete: 'username' });
     const password = input({ id: 'b-password', type: 'password', autocomplete: 'current-password', placeholder: existing?.passwordSaved ? 'Mémorisé : laisser vide' : '' });
     const code = input({ id: 'b-code', inputmode: 'numeric', placeholder: '6 chiffres', maxlength: 7 });
@@ -266,7 +266,7 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
       h('div', { class: 'enrol-row' }, qr, h('div', { class: 'enrol-side' }, h('span', { class: 'muted small' }, 'Ou saisissez cette clé :'), secretText)));
     const credFields = h('div', { class: 'fld-group', hidden: !existing },
       h('div', { class: 'row2' }, field('Identifiant', login), field('Mot de passe', password)));
-    const codeField = field('Code de l\'application d\'authentification', code, 'si demandé');
+    const codeField = field('Code de l\'application d\'authentification', code, 'si demandé ; vide à la première connexion');
     const newFields = h('div', { class: 'fld-group', hidden: true },
       h('p', { class: 'muted' }, 'Votre mot de passe est provisoire : choisissez-en un nouveau.'),
       h('div', { class: 'row2' }, field('Nouveau mot de passe', newPassword), field('Confirmation', confirmPassword)));
