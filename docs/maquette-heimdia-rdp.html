@@ -1,0 +1,683 @@
+<title>Heimdia RDP</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette fidèle à Portunia (tokens de src/styles.css, sombre par défaut) + questionnaire.
+   Mise en page : onglets Maquette / Questions ; la maquette montre la fenêtre de Portunia. */
+:root {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --b-rdp: #1f2f4a; --f-rdp: #8fb8ff;
+  --win-desk: #0f3a63; --win-desk2: #0a2744; --win-bar: #1b1b1f; --win-panel: #f3f3f3; --win-text: #1b1b1f; --win-blue: #0067c0;
+  --ps-bg: #012456; --ps-text: #eef2f8;
+  --sub-bg: rgb(0 0 0 / .78); --sub-key: #3a3d46; --hatch: rgb(255 255 255 / .07);
+  --shadow: rgb(0 0 0 / .45);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1f4fa8;
+  --hatch: rgb(0 0 0 / .07); --shadow: rgb(20 30 50 / .18); color-scheme: light; } }
+:root[data-theme="light"] {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2; --term: #1b1c20; --term-text: #d6d8dd;
+  --b-ssh: #d7f2e4; --f-ssh: #17633f; --b-rdp: #dbe7fb; --f-rdp: #1f4fa8;
+  --hatch: rgb(0 0 0 / .07); --shadow: rgb(20 30 50 / .18); color-scheme: light; }
+:root[data-theme="dark"] {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --term: #111215; --term-text: #d6d8dd;
+  --b-ssh: #1f3b2e; --f-ssh: #7fdbaa; --b-rdp: #1f2f4a; --f-rdp: #8fb8ff;
+  --hatch: rgb(255 255 255 / .07); --shadow: rgb(0 0 0 / .45); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.intro { display: flex; flex-direction: column; gap: 4px; }
+.intro h1 { font-size: 21px; font-weight: 650; }
+.intro p { max-width: 78ch; color: var(--text-2); }
+.maintabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.maintabs button { border: 0; background: none; padding: 9px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.maintabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.maintabs .count { font-size: 11px; background: var(--chip-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.steps { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+
+/* Fenêtre Portunia */
+.win { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 580px; background: var(--work); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+@media (max-width: 820px) { .win { grid-template-columns: minmax(0, 1fr); } .side { border-right: 0 !important; border-bottom: 1px solid var(--line); } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sec { padding: 6px 4px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.bcard { border: 1px solid var(--line-soft); border-radius: 8px; padding: 7px 10px; background: var(--panel); display: flex; gap: 8px; align-items: center; }
+.bcard b { display: block; font-size: 13px; }
+.bcard span { font-size: 11px; color: var(--muted); }
+.led { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.trow { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); min-width: 0; }
+.trow .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.trow.folder { color: var(--muted); font-size: 12px; padding-top: 7px; }
+.trow.sel { background: var(--accent-soft); color: var(--text); }
+.trow.off { opacity: .5; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
+.proto { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; }
+.proto.ssh { background: var(--b-ssh); color: var(--f-ssh); }
+.proto.rdp { background: var(--b-rdp); color: var(--f-rdp); }
+.mode { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); white-space: nowrap; }
+.mode.vault { border-color: transparent; background: var(--warn-soft); color: var(--warn); }
+.mode.rec { border-color: transparent; background: var(--danger-soft); color: var(--danger); }
+.hint { font-size: 11px; color: var(--warn); padding: 2px 8px 6px 30px; }
+.main { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: flex; gap: 2px; padding: 6px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; color: var(--muted); border-radius: 6px 6px 0 0; white-space: nowrap; }
+.tab.on { background: var(--work); color: var(--text); border: 1px solid var(--line); border-bottom-color: var(--work); margin-bottom: -1px; }
+.content { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.bar .sp { margin-left: auto; }
+.btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 6px 12px; font-size: 13px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.recpill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); font-weight: 600; font-size: 12px; }
+.recpill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* Bureau Windows simulé */
+.desk { position: relative; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 6px; overflow: hidden; background: radial-gradient(120% 90% at 70% 20%, var(--win-desk) 0%, var(--win-desk2) 70%); font: 12px/1.4 var(--ui); }
+.taskbar { position: absolute; inset: auto 0 0 0; height: 8%; background: var(--win-bar); display: flex; align-items: center; justify-content: center; gap: 10px; }
+.taskbar i { width: 18px; height: 18px; border-radius: 4px; background: rgb(255 255 255 / .18); }
+.taskbar i.on { background: var(--win-blue); }
+.wwin { position: absolute; background: var(--win-panel); color: var(--win-text); border-radius: 6px; box-shadow: 0 10px 30px rgb(0 0 0 / .45); overflow: hidden; display: flex; flex-direction: column; }
+.wwin .tt { height: 22px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; background: #ffffff; border-bottom: 1px solid #ddd; gap: 6px; }
+.wwin .bd { flex: 1; padding: 8px 10px; font-size: 11px; overflow: hidden; }
+.wwin.ps { background: var(--ps-bg); color: var(--ps-text); }
+.wwin.ps .tt { background: #0c1b33; color: #dfe7f5; border-bottom-color: #0c1b33; }
+.wwin.ps .bd { font: 11px/1.45 var(--mono); white-space: pre; }
+.tile { display: inline-block; width: 30%; margin: 0 2% 6px 0; padding: 6px; border-radius: 4px; background: #e6eef8; color: #13355d; font-size: 10px; vertical-align: top; }
+.tile b { display: block; font-size: 16px; color: var(--win-blue); }
+.wm { position: absolute; top: 8px; right: 10px; font: 11px var(--ui); color: rgb(255 255 255 / .35); text-align: right; pointer-events: none; }
+.subs { position: absolute; left: 50%; bottom: 11%; transform: translateX(-50%); max-width: calc(100% - 32px); display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 3px 4px;
+  background: var(--sub-bg); color: #fff; font: 14px/1.5 var(--mono); padding: 5px 12px; border-radius: 6px; }
+.subs .who { font: 600 11px var(--ui); color: #9fc2ff; margin-right: 6px; }
+.subs .kk { font: 600 11px var(--ui); background: var(--sub-key); border: 1px solid #555a66; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; }
+.subs .ev { font: 600 11px var(--ui); color: #ffd28a; }
+.cursor-pt { position: absolute; width: 0; height: 0; border-left: 7px solid #fff; border-top: 5px solid transparent; border-bottom: 5px solid transparent; transform: rotate(-30deg); filter: drop-shadow(0 1px 1px #000); }
+.click { position: absolute; width: 22px; height: 22px; margin: -11px; border-radius: 50%; border: 2px solid #ffd28a; opacity: .9; }
+
+/* Formulaires */
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px 14px; }
+.fld { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-2); }
+.fld .h { font-size: 11.5px; color: var(--muted); }
+.input { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--text); min-width: 0; }
+.seg { display: flex; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; }
+.seg span { flex: 1; text-align: center; padding: 6px 8px; font-size: 12px; color: var(--text-2); }
+.seg span.on { background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.checks { display: flex; flex-direction: column; gap: 6px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); }
+.check i { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-strong); display: inline-grid; place-items: center; font-style: normal; font-size: 11px; flex: none; margin-top: 1px; }
+.check i.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.check small { display: block; color: var(--muted); font-size: 11.5px; }
+.card { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.card h3 { font-size: 14px; }
+.fp { font-family: var(--mono); font-size: 12px; padding: 7px 10px; border-radius: 7px; background: var(--chip-bg); color: var(--text-2); overflow-wrap: anywhere; }
+.note { font-size: 12px; color: var(--muted); padding: 7px 10px; border-radius: 7px; background: var(--chip-bg); }
+.note.warn { background: var(--warn-soft); color: var(--warn); }
+
+/* Lecteur */
+.player { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 12px; }
+@media (max-width: 980px) { .player { grid-template-columns: minmax(0, 1fr); } }
+.controls { background: var(--panel); border: 1px solid var(--line-soft); border-top: 0; border-radius: 0 0 8px 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.track { position: relative; height: 26px; cursor: pointer; }
+.track .rail { position: absolute; left: 0; right: 0; top: 10px; height: 6px; border-radius: 3px; background: var(--chip-bg); }
+.track .done { position: absolute; left: 0; top: 10px; height: 6px; border-radius: 3px; background: var(--accent); }
+.track .idle { position: absolute; top: 7px; height: 12px; background: repeating-linear-gradient(135deg, var(--hatch) 0 3px, transparent 3px 6px); border: 1px dashed var(--line-strong); border-radius: 3px; }
+.track .mk { position: absolute; top: 2px; width: 3px; height: 8px; border-radius: 2px; background: var(--muted); transform: translateX(-1px); }
+.track .mk.w { background: var(--warn); }
+.track .mk.cb { background: var(--accent); }
+.track .knob { position: absolute; top: 6px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transform: translateX(-7px); }
+.film { display: flex; gap: 3px; height: 34px; }
+.film div { flex: 1; border-radius: 3px; background: linear-gradient(180deg, var(--win-desk) 0 80%, var(--win-bar) 80%); position: relative; overflow: hidden; }
+.film div::after { content: ""; position: absolute; inset: 18% 20% 32% 15%; background: var(--fc, #f3f3f3); border-radius: 2px; }
+.cbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.cbar .sp { margin-left: auto; }
+.ib { border: 1px solid transparent; background: none; border-radius: 6px; padding: 3px 8px; font-size: 13px; color: var(--text-2); }
+.ib[aria-pressed="true"] { background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+.side2 { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel); display: flex; flex-direction: column; min-width: 0; }
+.side2 .st { display: flex; border-bottom: 1px solid var(--line); }
+.side2 .st span { flex: 1; text-align: center; padding: 8px; font-size: 13px; color: var(--muted); }
+.side2 .st span.on { color: var(--text); border-bottom: 2px solid var(--accent); font-weight: 600; }
+.evs { display: flex; flex-direction: column; padding: 8px; }
+.evr { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 6px; padding: 5px 6px; border-radius: 6px; font-size: 12px; }
+.evr.now { background: var(--accent-soft); }
+.evr .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.evr code { font-family: var(--mono); color: var(--text-2); overflow-wrap: anywhere; }
+.evr .k { font: 600 10px var(--ui); background: var(--chip-bg); border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 4px; }
+.evr .tag { font: 600 10px var(--ui); border-radius: 3px; padding: 0 5px; }
+.tag.cb { background: var(--accent-soft); color: var(--accent); }
+.tag.f { background: var(--warn-soft); color: var(--warn); }
+.tag.c { background: var(--ok-soft); color: var(--ok); }
+
+/* Schéma */
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.flow > div { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px; background: var(--panel); font-size: 12.5px; color: var(--text-2); display: flex; flex-direction: column; gap: 6px; }
+.flow b { color: var(--text); font-size: 13px; }
+.flow .arrow { color: var(--accent); font-weight: 600; font-size: 12px; }
+.svgwrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 10px; }
+
+.explain { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; }
+@media (max-width: 760px) { .explain { grid-template-columns: minmax(0, 1fr); } }
+.explain h2 { font-size: 15px; margin-bottom: 6px; }
+.explain ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); max-width: 65ch; }
+.scope { border-left: 3px solid var(--accent); padding-left: 12px; }
+
+/* Questionnaire */
+.qbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+.qbar .prog { flex: 1 1 200px; height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; min-width: 120px; }
+.qbar .prog i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.save { font-size: 12px; color: var(--muted); }
+.save.ok { color: var(--ok); }
+.save.err { color: var(--danger); }
+.qsec { display: flex; flex-direction: column; gap: 12px; }
+.qsec > h2 { font-size: 16px; padding-top: 10px; }
+.q { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.q .qt { font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.q .qn { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+.q .why { font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 11px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 100%; }
+.opt input { margin: 2px 0 0; accent-color: var(--accent); }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.opt .rec { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 4px; }
+.q textarea { min-height: 38px; resize: vertical; width: 100%; }
+@media (prefers-reduced-motion: reduce) { .qbar .prog i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="label">Maquette · Heimdia, Bureau à distance (RDP)</p>
+    <h1>Les serveurs Windows derrière le bastion : ouverture, coffre, enregistrement, relecture</h1>
+    <p>Même logique que SSH : l'utilisateur ouvre un serveur depuis la section du bastion, Heimdia vérifie la règle, fournit le compte du coffre et enregistre la session ; l'audit la relit comme une vidéo. Les écrans se parcourent avec les boutons ; l'onglet Questions rassemble les choix à faire avant de coder, et les réponses s'enregistrent toutes seules.</p>
+  </div>
+
+  <div class="maintabs" role="tablist">
+    <button role="tab" id="tab-maq" aria-selected="true" aria-controls="pane-maq">Maquette</button>
+    <button role="tab" id="tab-q" aria-selected="false" aria-controls="pane-q">Questions <span class="count" id="qcount">0 / 0</span></button>
+  </div>
+
+  <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
+    <div class="steps" aria-label="Écrans">
+      <button data-s="how" aria-pressed="true">1. Fonctionnement</button>
+      <button data-s="tree" aria-pressed="false">2. Serveurs du bastion</button>
+      <button data-s="open" aria-pressed="false">3. Session RDP</button>
+      <button data-s="target" aria-pressed="false">4. Ajouter un serveur</button>
+      <button data-s="rule" aria-pressed="false">5. Règle</button>
+      <button data-s="replay" aria-pressed="false">6. Relecture</button>
+    </div>
+
+    <!-- 1. Fonctionnement -->
+    <div data-screen="how" class="wrap" style="max-width:none;gap:12px">
+      <div class="svgwrap">
+        <svg viewBox="0 0 960 250" width="100%" style="min-width:720px" role="img" aria-label="Portunia se connecte au relais RDP de Heimdia, qui se connecte au serveur Windows avec le compte du coffre et enregistre la session">
+          <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>
+          <rect x="10" y="60" width="220" height="130" rx="10" fill="var(--work)" stroke="var(--line-strong)"/>
+          <text x="120" y="88" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="600">Portunia</text>
+          <text x="120" y="112" text-anchor="middle" fill="var(--muted)" font-size="12">onglet Bureau à distance</text>
+          <text x="120" y="130" text-anchor="middle" fill="var(--muted)" font-size="12">(moteur IronRDP actuel)</text>
+          <text x="120" y="160" text-anchor="middle" fill="var(--text-2)" font-size="12">jeton à usage unique</text>
+          <rect x="370" y="30" width="230" height="190" rx="10" fill="var(--work)" stroke="var(--accent)"/>
+          <text x="485" y="58" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="600">Heimdia</text>
+          <text x="485" y="82" text-anchor="middle" fill="var(--muted)" font-size="12">relais RDP (port 3390)</text>
+          <text x="485" y="110" text-anchor="middle" fill="var(--text-2)" font-size="12">1. vérifie jeton et règle</text>
+          <text x="485" y="130" text-anchor="middle" fill="var(--text-2)" font-size="12">2. ouvre la session Windows</text>
+          <text x="485" y="146" text-anchor="middle" fill="var(--text-2)" font-size="12">avec le compte du coffre</text>
+          <text x="485" y="168" text-anchor="middle" fill="var(--text-2)" font-size="12">3. relaie et enregistre</text>
+          <text x="485" y="184" text-anchor="middle" fill="var(--text-2)" font-size="12">écran, clavier, presse-papiers</text>
+          <text x="485" y="206" text-anchor="middle" fill="var(--muted)" font-size="11">fichier signé, comme pour SSH</text>
+          <rect x="740" y="60" width="210" height="130" rx="10" fill="var(--work)" stroke="var(--line-strong)"/>
+          <text x="845" y="92" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="600">Serveur Windows</text>
+          <text x="845" y="116" text-anchor="middle" fill="var(--muted)" font-size="12">srv-ad-01 · 3389</text>
+          <text x="845" y="140" text-anchor="middle" fill="var(--text-2)" font-size="12">ACME\svc-admin</text>
+          <text x="845" y="158" text-anchor="middle" fill="var(--muted)" font-size="11">(mot de passe jamais vu</text>
+          <text x="845" y="172" text-anchor="middle" fill="var(--muted)" font-size="11">par l'utilisateur)</text>
+          <line x1="232" y1="125" x2="366" y2="125" stroke="var(--accent)" stroke-width="2" marker-end="url(#ar)"/>
+          <text x="299" y="116" text-anchor="middle" fill="var(--text-2)" font-size="11">TLS + NLA</text>
+          <text x="299" y="144" text-anchor="middle" fill="var(--muted)" font-size="11">julien%srv-ad-01</text>
+          <line x1="602" y1="125" x2="736" y2="125" stroke="var(--accent)" stroke-width="2" marker-end="url(#ar)"/>
+          <text x="669" y="116" text-anchor="middle" fill="var(--text-2)" font-size="11">TLS + NLA</text>
+          <text x="669" y="144" text-anchor="middle" fill="var(--muted)" font-size="11">empreinte vérifiée</text>
+        </svg>
+      </div>
+      <div class="flow">
+        <div><b>Deux connexions séparées</b>Heimdia termine la connexion de Portunia puis en ouvre une seconde vers Windows. C'est ce qui lui permet de fournir le compte du coffre, d'appliquer la règle (presse-papiers, lecteurs) et d'enregistrer.</div>
+        <div><b>Même moteur des deux côtés</b>IronRDP (Rust), déjà dans Portunia, sert aussi au relais de Heimdia : pas de dépendance à FreeRDP ni à Windows sur le bastion.</div>
+        <div><b>Enregistrement léger</b>Le bastion garde le flux graphique RDP tel quel (quelques Mo par heure), signé. Portunia le rejoue avec IronRDP : pas de vidéo calculée sur le bastion.</div>
+        <div><b>Rebond possible</b>Pour un serveur en mode rebond, Heimdia relaie seulement la connexion chiffrée : pas d'enregistrement, pas de coffre, comme <code>ssh -J</code>.</div>
+      </div>
+    </div>
+
+    <!-- Fenêtre Portunia (écrans 2 à 6) -->
+    <div class="win" data-screen="win" hidden>
+      <nav class="side" aria-label="Barre latérale">
+        <div class="sec">Bastions</div>
+        <div class="bcard"><i class="led"></i><div><b>Heimdia · Production</b><span>julien · expire dans 7 h 52</span></div></div>
+        <div class="trow folder">▾ Linux</div>
+        <div class="trow"><i class="dot"></i><span class="n">srv-web-01</span><span class="proto ssh">SSH</span><span class="mode vault">Coffre</span></div>
+        <div class="trow"><i class="dot"></i><span class="n">srv-db-02</span><span class="proto ssh">SSH</span><span class="mode rec">Enregistré</span></div>
+        <div class="trow folder">▾ Windows</div>
+        <div class="trow sel brdp" id="t-ad"><i class="dot"></i><span class="n">srv-ad-01</span><span class="proto rdp">RDP</span><span class="mode vault">Coffre</span></div>
+        <div class="trow brdp"><i class="dot"></i><span class="n">srv-rds-02</span><span class="proto rdp">RDP</span><span class="mode rec">Enregistré</span></div>
+        <div class="trow brdp" id="t-off"><i class="dot"></i><span class="n">srv-hyperv</span><span class="proto rdp">RDP</span><span class="mode">Rebond</span></div>
+        <div class="hint" id="t-hint" hidden>Activez l'extension Bureau à distance</div>
+        <div class="sec" style="margin-top:8px">Sessions</div>
+        <div class="trow"><i class="dot" style="background:var(--muted)"></i><span class="n">poste-julien</span><span class="proto rdp">RDP</span></div>
+      </nav>
+      <div class="main">
+        <div class="tabs" id="wtabs"></div>
+        <div class="content" id="wcontent">
+
+          <!-- 2. Arbre -->
+          <div data-sub="tree" class="wrap" style="max-width:none;gap:12px">
+            <div class="card">
+              <h3>Ce qui change dans la barre latérale</h3>
+              <p class="small muted">Un badge de protocole à côté du mode. Les serveurs Windows du bastion s'ouvrent dans un onglet Bureau à distance, comme une session RDP de Portunia, mais en passant par Heimdia.</p>
+              <div class="checks">
+                <div class="check"><i class="on">✓</i><span>Clic sur <b>srv-ad-01</b> : onglet Bureau à distance, connecté avec le compte du coffre, sans rien taper.</span></div>
+                <div class="check"><i class="on">✓</i><span>Clic droit : <b>Ouvrir</b>, <b>Ouvrir dans le client Windows (mstsc)</b> (voir les questions), <b>Copier l'adresse</b>.</span></div>
+                <div class="check"><i class="on">✓</i><span>Extension Bureau à distance désactivée : les serveurs RDP restent visibles, grisés, avec « Activez l'extension Bureau à distance ».</span></div>
+              </div>
+              <button class="btn sm" id="toggle-ext" style="align-self:flex-start">Voir avec l'extension RDP désactivée</button>
+            </div>
+          </div>
+
+          <!-- 3. Session ouverte -->
+          <div data-sub="open" class="wrap" style="max-width:none;gap:10px" hidden>
+            <div class="bar"><span class="recpill"><i></i>Enregistré par Heimdia</span><span>ACME\svc-admin (coffre) · 1920 × 1080 · presse-papiers : texte, vers le serveur seulement</span><span class="sp"></span><button class="btn sm">Ctrl+Alt+Suppr</button><button class="btn sm">Plein écran</button></div>
+            <div class="desk" id="desk-open"></div>
+            <p class="small muted">Un fichier copié depuis le PC est refusé par la règle : Portunia affiche « Presse-papiers : copie de fichiers interdite par le bastion ».</p>
+          </div>
+
+          <!-- 4. Ajouter un serveur -->
+          <div data-sub="target" class="wrap" style="max-width:none;gap:12px" hidden>
+            <div class="card">
+              <h3>Ajouter un serveur</h3>
+              <div class="form">
+                <label class="fld">Protocole<div class="seg"><span>SSH</span><span class="on">Bureau à distance (RDP)</span></div></label>
+                <label class="fld">Nom<input class="input" id="f-nom" value="srv-ad-01"></label>
+                <label class="fld">Dossier<input class="input" id="f-dos" value="Windows"></label>
+                <label class="fld">Adresse<input class="input" id="f-host" value="10.0.3.10"></label>
+                <label class="fld">Port<input class="input" id="f-port" value="3389"></label>
+                <label class="fld">Mode<select class="input" id="f-mode"><option>Coffre : compte fourni par le bastion</option><option>Enregistré : l'utilisateur tape ses identifiants Windows</option><option>Rebond : relais de bout en bout, sans enregistrement</option></select></label>
+                <label class="fld">Compte Windows<input class="input" id="f-acc" value="ACME\svc-admin"><span class="h">DOMAINE\compte ou compte@domaine</span></label>
+                <label class="fld">Mot de passe du compte<input class="input" id="f-pw" type="password" value="xxxxxxxxxxxx"><span class="h">chiffré par le bastion, ne se relit jamais</span></label>
+              </div>
+              <div class="fp">Certificat du serveur Windows : vérifié à la première connexion (empreinte gardée), comme la clé d'un serveur SSH.</div>
+              <div class="note">« Générer une clé et l'installer » n'existe pas en RDP : le coffre garde un mot de passe. La rotation automatique de ce mot de passe est une question à part.</div>
+              <div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn">Annuler</button><button class="btn primary">Ajouter</button></div>
+            </div>
+          </div>
+
+          <!-- 5. Règle -->
+          <div data-sub="rule" class="wrap" style="max-width:none;gap:12px" hidden>
+            <div class="card">
+              <h3>Règle « Admins Windows » : options du Bureau à distance</h3>
+              <p class="small muted">Les jours, heures et la date d'expiration restent les mêmes que pour SSH. Ces options ne s'appliquent qu'aux serveurs RDP de la règle.</p>
+              <div class="form">
+                <div class="checks">
+                  <span class="label">Presse-papiers</span>
+                  <div class="check"><i class="on">✓</i><span>Texte, du PC vers le serveur</span></div>
+                  <div class="check"><i class="on">✓</i><span>Texte, du serveur vers le PC<small>une fuite de données passe souvent par là</small></span></div>
+                  <div class="check"><i>&nbsp;</i><span>Fichiers (copier-coller)</span></div>
+                </div>
+                <div class="checks">
+                  <span class="label">Redirections</span>
+                  <div class="check"><i>&nbsp;</i><span>Lecteurs du PC</span></div>
+                  <div class="check"><i>&nbsp;</i><span>Imprimantes</span></div>
+                  <div class="check"><i class="on">✓</i><span>Son</span></div>
+                  <div class="check"><i>&nbsp;</i><span>Cartes à puce, USB</span></div>
+                </div>
+                <div class="checks">
+                  <span class="label">Enregistrement</span>
+                  <div class="check"><i class="on">✓</i><span>Écran</span></div>
+                  <div class="check"><i class="on">✓</i><span>Frappe<small>sous-titres à la relecture ; capte aussi les mots de passe tapés dans Windows</small></span></div>
+                  <div class="check"><i class="on">✓</i><span>Texte copié dans le presse-papiers<small>contenu gardé dans le journal de la session</small></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 6. Relecture -->
+          <div data-sub="replay" class="wrap" style="max-width:none;gap:10px" hidden>
+            <div class="bar"><b style="color:var(--text);font-size:15px">srv-ad-01</b><span class="proto rdp">RDP</span><span class="mode vault">coffre</span><span>julien · ACME\svc-admin · 29/10/2026 14:02 · 12 min 40</span><span style="color:var(--ok);font-weight:600">✓ Signature vérifiée</span><span class="sp"></span><button class="btn sm">Vidéo MP4</button><button class="btn sm">Transcription</button></div>
+            <div class="player">
+              <div>
+                <div class="desk" id="desk-replay" style="border-radius:8px 8px 0 0"></div>
+                <div class="controls">
+                  <div class="film" id="film" aria-hidden="true"></div>
+                  <div class="track" id="track"><div class="rail"></div><div class="done" id="done"></div><div class="knob" id="knob"></div></div>
+                  <div class="cbar">
+                    <button class="ib" id="play" aria-label="Lire">▶</button><button class="ib">−10 s</button><button class="ib">+10 s</button>
+                    <span id="time" style="font-variant-numeric:tabular-nums">00:00 / 12:40</span><span class="sp"></span>
+                    <button class="ib" aria-pressed="true">Sauter les pauses</button><button class="ib">4×</button>
+                    <button class="ib" aria-pressed="true" id="cc">CC Frappe</button><button class="ib" aria-pressed="true">Clics</button><button class="ib">⛶</button>
+                  </div>
+                </div>
+              </div>
+              <aside class="side2">
+                <div class="st"><span class="on">Événements</span><span>Informations</span></div>
+                <div class="evs" id="evs"></div>
+              </aside>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="explain" id="explain"></div>
+  </section>
+
+  <section id="pane-q" role="tabpanel" aria-labelledby="tab-q" hidden>
+    <div class="qbar">
+      <span class="small"><b id="qdone">0</b> réponse(s) sur <span id="qtotal">0</span></span>
+      <div class="prog"><i id="qprog"></i></div>
+      <span class="save" id="save">Les réponses s'enregistrent toutes seules.</span>
+      <button class="btn sm" id="copy">Copier mes réponses</button>
+    </div>
+    <p class="small muted" style="padding-block:10px">« conseillé » = mon choix par défaut si vous ne répondez pas.</p>
+    <div id="qlist" class="wrap" style="max-width:none"></div>
+  </section>
+</div>
+
+<script>
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+// ---------- Bureau Windows simulé (images clés de la session) ----------
+const FRAMES = [
+  { t: 0, wins: [], cur: [50, 50] },
+  { t: 40, wins: [{ k: 'sm', x: 8, y: 6, w: 70, h: 70, title: 'Gestionnaire de serveur' }], cur: [30, 20], click: [30, 20] },
+  { t: 160, wins: [{ k: 'sm', x: 8, y: 6, w: 70, h: 70, title: 'Gestionnaire de serveur' }, { k: 'ps', x: 30, y: 26, w: 62, h: 52, title: 'Administrateur : Windows PowerShell', lines: ['PS C:\\> '] }], cur: [60, 50] },
+  { t: 205, wins: [{ k: 'sm', x: 8, y: 6, w: 70, h: 70, title: 'Gestionnaire de serveur' }, { k: 'ps', x: 30, y: 26, w: 62, h: 52, title: 'Administrateur : Windows PowerShell', lines: ['PS C:\\> Get-Service W3SVC | Restart-Service', 'PS C:\\> '] }], cur: [60, 50] },
+  { t: 520, wins: [{ k: 'ps', x: 30, y: 26, w: 62, h: 52, title: 'Administrateur : Windows PowerShell', lines: ['PS C:\\> Get-Service W3SVC | Restart-Service', 'PS C:\\> Add-ADGroupMember "Admins du domaine" presta.jdupont', 'PS C:\\> '] }], cur: [62, 52] },
+  { t: 700, wins: [{ k: 'note', x: 20, y: 14, w: 50, h: 50, title: 'Bloc-notes : clients.csv' }], cur: [44, 40], click: [44, 40] },
+];
+const SUBS = [
+  { t: 180, d: 25, html: ['Get-Service W3SVC | Restart-Service', 'Entrée'] },
+  { t: 500, d: 30, html: ['Add-ADGroupMember "Admins du domaine" presta.jdupont', 'Entrée'] },
+  { t: 720, d: 10, ev: 'Ctrl+C · 1 842 caractères copiés vers le PC' },
+];
+const EVENTS = [
+  { t: 0, tag: ['c', 'connexion'], text: 'ACME\\svc-admin (coffre) · 1920 × 1080' },
+  { t: 40, tag: null, text: 'clic · Gestionnaire de serveur' },
+  { t: 180, keys: 'Get-Service W3SVC | Restart-Service' },
+  { t: 500, keys: 'Add-ADGroupMember "Admins du domaine" presta.jdupont', w: true },
+  { t: 610, tag: ['cb', 'presse-papiers'], text: 'PC → serveur : 38 caractères' },
+  { t: 720, tag: ['cb', 'presse-papiers'], text: 'serveur → PC : 1 842 caractères', w: true },
+  { t: 731, tag: ['f', 'refusé'], text: 'copie de fichier vers le serveur (règle)' },
+  { t: 760, tag: ['c', 'déconnexion'], text: 'fermeture de l\'onglet' },
+];
+const DUR = 760, IDLE = [[250, 480]];
+
+function drawDesk(target, t, withSubs) {
+  let f = FRAMES[0];
+  for (const x of FRAMES) if (x.t <= t) f = x;
+  target.replaceChildren();
+  for (const w of f.wins) {
+    const win = el('div', 'wwin' + (w.k === 'ps' ? ' ps' : ''));
+    win.style.cssText = `left:${w.x}%;top:${w.y}%;width:${w.w}%;height:${w.h}%`;
+    const tt = el('div', 'tt', w.title); const bd = el('div', 'bd');
+    if (w.k === 'sm') { bd.append(el('div', null, 'Tableau de bord · Serveur local')); for (const [n, l] of [['3', 'Rôles'], ['1', 'Alertes'], ['24', 'Services']]) { const ti = el('span', 'tile'); ti.append(el('b', null, n), l); bd.append(ti); } }
+    if (w.k === 'ps') bd.textContent = w.lines.join('\n');
+    if (w.k === 'note') bd.textContent = 'nom;email;contrat\nDurand;durand@client.fr;C-1042\nMartin;martin@client.fr;C-1043\n…';
+    win.append(tt, bd); target.append(win);
+  }
+  const bar = el('div', 'taskbar'); for (let i = 0; i < 6; i++) bar.append(el('i', i === 2 ? 'on' : null)); target.append(bar);
+  const c = el('div', 'cursor-pt'); c.style.left = f.cur[0] + '%'; c.style.top = f.cur[1] + '%'; target.append(c);
+  if (f.click && t - f.t < 6) { const k = el('div', 'click'); k.style.left = f.click[0] + '%'; k.style.top = f.click[1] + '%'; target.append(k); }
+  target.append(el('div', 'wm', 'Consulté par claire (auditrice)'));
+  if (withSubs && state.cc) {
+    const s = SUBS.find((x) => t >= x.t && t < x.t + x.d);
+    if (s) {
+      const box = el('div', 'subs'); box.append(el('span', 'who', 'JULIEN'));
+      if (s.ev) box.append(el('span', 'ev', s.ev));
+      else { const typed = s.html[0].slice(0, Math.max(1, Math.round((t - s.t) * 3))); box.append(typed); if (typed.length === s.html[0].length) box.append(el('span', 'kk', s.html[1])); }
+      target.append(box);
+    }
+  }
+}
+
+// ---------- Lecteur ----------
+const state = { t: 0, playing: false, cc: true };
+const fmt = (s) => String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+const track = document.getElementById('track');
+for (const [a, b] of IDLE) { const d = el('div', 'idle'); d.style.left = (100 * a / DUR) + '%'; d.style.width = (100 * (b - a) / DUR) + '%'; track.insertBefore(d, document.getElementById('done')); }
+for (const e of EVENTS) { const m = el('div', 'mk' + (e.w ? ' w' : e.tag && e.tag[0] === 'cb' ? ' cb' : '')); m.style.left = (100 * e.t / DUR) + '%'; track.insertBefore(m, document.getElementById('knob')); }
+const film = document.getElementById('film');
+const FC = ['#f3f3f3', '#e8eef7', '#012456', '#012456', '#012456', '#012456', '#f3f3f3', '#f3f3f3', '#fffbe8', '#fffbe8'];
+for (let i = 0; i < 10; i++) { const d = el('div'); d.style.setProperty('--fc', FC[i]); d.title = fmt(i * DUR / 10); film.append(d); }
+const evs = document.getElementById('evs');
+function drawEvents() {
+  evs.replaceChildren();
+  let now = -1; EVENTS.forEach((e, i) => { if (e.t <= state.t) now = i; });
+  EVENTS.forEach((e, i) => {
+    const r = el('div', 'evr' + (i === now ? ' now' : ''));
+    r.append(el('span', 't', fmt(e.t)));
+    const c = el('code');
+    if (e.keys) { c.append(e.keys + ' '); c.append(el('span', 'k', 'Entrée')); if (e.w) c.style.color = 'var(--warn)'; }
+    else { if (e.tag) { c.append(el('span', 'tag ' + e.tag[0], e.tag[1]), ' '); } c.append(e.text); }
+    r.append(c); r.addEventListener('click', () => seek(e.t)); r.style.cursor = 'pointer'; evs.append(r);
+  });
+}
+function draw() {
+  drawDesk(document.getElementById('desk-replay'), state.t, true);
+  const p = 100 * state.t / DUR;
+  document.getElementById('done').style.width = p + '%';
+  document.getElementById('knob').style.left = p + '%';
+  document.getElementById('time').textContent = fmt(state.t) + ' / 12:40';
+  document.getElementById('play').textContent = state.playing ? '❚❚' : '▶';
+  drawEvents();
+}
+function seek(t) { state.t = Math.max(0, Math.min(DUR, t)); draw(); }
+let last = 0;
+function frame(now) {
+  if (!state.playing) return;
+  let t = state.t + (now - last) / 1000 * 12; last = now;
+  for (const [a, b] of IDLE) if (t > a && t < b) t = b;
+  if (t >= DUR) { t = DUR; state.playing = false; }
+  state.t = t; draw();
+  if (state.playing) requestAnimationFrame(frame);
+}
+document.getElementById('play').addEventListener('click', () => { state.playing = !state.playing; if (state.playing) { if (state.t >= DUR) state.t = 0; last = performance.now(); requestAnimationFrame(frame); } draw(); });
+document.getElementById('cc').addEventListener('click', (e) => { state.cc = !state.cc; e.currentTarget.setAttribute('aria-pressed', String(state.cc)); draw(); });
+track.addEventListener('click', (e) => { const r = track.getBoundingClientRect(); seek(DUR * (e.clientX - r.left) / r.width); });
+
+// ---------- Écrans ----------
+const TEXT = {
+  how: { t: 'Fonctionnement', p: ['Portunia se connecte au relais RDP de Heimdia avec un jeton à usage unique (comme pour SSH), sans code à retaper.', 'Heimdia vérifie la règle, ouvre la session Windows avec le compte du coffre, puis relaie l\'écran, le clavier, la souris et le presse-papiers.', 'Le flux est enregistré et signé à la fermeture, comme une session SSH.'], s: ['Le relais RDP de Heimdia écoute sur un port à lui (3390 dans la maquette) : une question porte sur ce choix.', 'IronRDP côté bastion : les rôles serveur (accepteur) et client existent dans le projet ; le relais complet est le plus gros du travail.'] },
+  tree: { t: 'Serveurs du bastion', p: ['Les serveurs Windows apparaissent sous le bastion avec un badge RDP.', 'Un clic ouvre un onglet Bureau à distance ; rien à taper en mode coffre.', 'Sans l\'extension Bureau à distance, ils restent visibles mais grisés.'], s: ['Une seule extension Heimdia : elle passe la main au moteur RDP de Portunia.'] },
+  open: { t: 'Session RDP par le bastion', p: ['Onglet Bureau à distance habituel (IronRDP), avec un bandeau « Enregistré par Heimdia ».', 'Le bandeau rappelle le compte utilisé et ce que la règle permet (presse-papiers, lecteurs).', 'Ce que la règle interdit est refusé par le bastion, et Portunia le dit.'], s: ['Le redimensionnement de l\'onglet suit si le serveur le permet (canal d\'affichage dynamique).'] },
+  target: { t: 'Ajouter un serveur Windows', p: ['Même fenêtre que pour SSH, avec le protocole en premier.', 'Mode coffre : compte Windows (DOMAINE\\compte) et son mot de passe, chiffrés par le bastion.', 'Certificat du serveur vérifié à la première connexion, puis gardé.'], s: ['Pas de clé à générer en RDP ; la rotation automatique du mot de passe est une question.'] },
+  rule: { t: 'Options de la règle', p: ['Presse-papiers par sens et par type (texte, fichiers).', 'Redirections : lecteurs, imprimantes, son, cartes à puce.', 'Enregistrement : écran, frappe, texte copié.'], s: ['Par défaut : texte dans les deux sens, aucune redirection, écran et frappe enregistrés (à confirmer).'] },
+  replay: { t: 'Relecture d\'une session RDP', p: ['Le même lecteur que pour SSH : barre de temps, pauses sautées, vitesse, plein écran, filigrane.', 'Une bande d\'images au-dessus de la barre aide à repérer les moments.', 'Sous-titres de la frappe, et indicateur des clics.', 'Panneau Événements : connexion, frappe, presse-papiers, refus de la règle ; un clic y saute.'], s: ['La recherche de texte affiché (comme en SSH) n\'existe pas pour une image : la recherche porte sur la frappe et les événements (voir questions).', 'Vidéo MP4 à la demande, comme décidé pour SSH.'] },
+};
+const explain = document.getElementById('explain');
+const TABS = {
+  tree: [['srv-web-01', false]],
+  open: [['srv-web-01', false], ['srv-ad-01 · Heimdia', true]],
+  target: [['srv-ad-01 · Heimdia', false], ['Admin · Heimdia', true]],
+  rule: [['srv-ad-01 · Heimdia', false], ['Admin · Heimdia', true]],
+  replay: [['Audit · Heimdia', false], ['▶ srv-ad-01 · 29/10 14:02', true]],
+};
+let extOff = false;
+function show(s) {
+  document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+  document.querySelector('[data-screen="how"]').hidden = s !== 'how';
+  document.querySelector('[data-screen="win"]').hidden = s === 'how';
+  document.querySelectorAll('[data-sub]').forEach((n) => { n.hidden = n.dataset.sub !== s; });
+  if (s !== 'how') {
+    const tabs = document.getElementById('wtabs'); tabs.replaceChildren();
+    for (const [name, on] of TABS[s]) tabs.append(el('div', 'tab' + (on ? ' on' : ''), name));
+  }
+  if (s === 'open') drawDesk(document.getElementById('desk-open'), 205, false);
+  if (s === 'replay') draw(); else state.playing = false;
+  document.getElementById('t-ad').classList.toggle('sel', s === 'open' || s === 'tree');
+  const x = TEXT[s];
+  const left = el('div'); left.append(el('h2', null, x.t));
+  const ul = el('ul'); x.p.forEach((t) => ul.append(el('li', null, t))); left.append(ul);
+  const right = el('div', 'scope'); right.append(el('h2', null, 'À noter'));
+  const ul2 = el('ul'); x.s.forEach((t) => ul2.append(el('li', null, t))); right.append(ul2);
+  explain.replaceChildren(left, right);
+}
+document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
+document.getElementById('toggle-ext').addEventListener('click', (e) => {
+  extOff = !extOff;
+  document.querySelectorAll('.brdp').forEach((r) => r.classList.toggle('off', extOff));
+  document.getElementById('t-hint').hidden = !extOff;
+  e.currentTarget.textContent = extOff ? 'Réactiver l\'extension RDP' : 'Voir avec l\'extension RDP désactivée';
+});
+show('how');
+
+function tab(which) {
+  const q = which === 'q';
+  document.getElementById('tab-maq').setAttribute('aria-selected', String(!q));
+  document.getElementById('tab-q').setAttribute('aria-selected', String(q));
+  document.getElementById('pane-maq').hidden = q;
+  document.getElementById('pane-q').hidden = !q;
+  if (q) state.playing = false;
+}
+document.getElementById('tab-maq').addEventListener('click', () => tab('maq'));
+document.getElementById('tab-q').addEventListener('click', () => tab('q'));
+if (location.hash === '#questions') tab('q');
+
+// ---------- Questions ----------
+const SECTIONS = [
+  { title: 'Connexion', qs: [
+    { id: 'port', t: 'Par où passe la connexion RDP vers le bastion ?', why: 'Un port RDP dédié est simple et standard. Le faire passer dans la connexion SSH du bastion (port 2222) évite d\'ouvrir un port de plus, mais ne marche qu\'avec Portunia.', type: 'one', o: ['Port RDP dédié sur le bastion (3390 par défaut)', 'Dans la connexion SSH du bastion, sans nouveau port', 'Les deux'], rec: 0 },
+    { id: 'clients', t: 'Quels clients peuvent passer par le bastion en RDP ?', why: 'Le client Windows (mstsc) ne sait pas demander un code TOTP : il faudrait un mot de passe à usage unique généré dans Portunia (ou une page web) et collé dans mstsc.', type: 'one', o: ['Portunia seulement', 'Portunia, et mstsc / Remmina avec un mot de passe à usage unique', 'Plus tard pour les autres clients'], rec: 2 },
+    { id: 'modes', t: 'Modes proposés pour un serveur RDP', why: 'Coffre : compte fourni par le bastion. Enregistré : l\'utilisateur tape ses identifiants Windows (relayés à la connexion, jamais gardés). Rebond : relais chiffré de bout en bout, sans enregistrement.', type: 'many', o: ['Coffre', 'Enregistré', 'Rebond'], rec: [0, 1, 2] },
+    { id: 'taille', t: 'Taille de l\'écran de la session', why: 'Suivre l\'onglet est le plus agréable ; une taille fixe donne des enregistrements homogènes.', type: 'one', o: ['Suit la taille de l\'onglet (redimensionnement dynamique)', 'Taille fixe choisie dans la règle'], rec: 0 },
+  ]},
+  { title: 'Coffre et serveurs', qs: [
+    { id: 'rotation', t: 'Rotation du mot de passe des comptes Windows du coffre ?', why: 'Le bastion changerait lui-même le mot de passe (après chaque session ou chaque semaine), pour qu\'il ne serve plus s\'il a fuité. Demande un compte avec le droit de changer les mots de passe (local ou Active Directory).', type: 'one', o: ['Plus tard', 'Oui, réglable par serveur'], rec: 0 },
+    { id: 'cert', t: 'Certificat du serveur Windows', why: 'Les serveurs Windows ont souvent un certificat auto-signé. On peut faire comme SSH : empreinte gardée à la première connexion, alerte si elle change.', type: 'one', o: ['Empreinte gardée à la 1ʳᵉ connexion, connexion bloquée si elle change', 'Certificat vérifié par l\'autorité de l\'entreprise', 'Les deux, au choix par serveur'], rec: 0 },
+  ]},
+  { title: 'Règles', qs: [
+    { id: 'pp', t: 'Presse-papiers par défaut dans une nouvelle règle', why: 'Le texte du serveur vers le PC est le chemin le plus courant d\'une fuite de données.', type: 'one', o: ['Texte dans les deux sens, pas de fichiers', 'Texte du PC vers le serveur seulement', 'Rien'], rec: 0 },
+    { id: 'redir', t: 'Redirections à proposer dans les règles', why: 'Chaque redirection est un canal en plus à relayer et à contrôler. Lecteurs et USB permettent de sortir des fichiers.', type: 'many', o: ['Lecteurs du PC', 'Imprimantes', 'Son', 'Cartes à puce / USB'], rec: [2] },
+  ]},
+  { title: 'Enregistrement et relecture', qs: [
+    { id: 'format', t: 'Format de l\'enregistrement', why: 'Garder le flux graphique RDP tel quel est léger (quelques Mo par heure) et exact ; Portunia le rejoue avec IronRDP. Calculer une vidéo sur le bastion coûte beaucoup de processeur.', type: 'one', o: ['Flux RDP rejoué par Portunia, vidéo MP4 à la demande', 'Vidéo calculée par le bastion'], rec: 0 },
+    { id: 'frappe', t: 'Frappe en RDP', why: 'En RDP, impossible de savoir si une touche part dans un champ mot de passe : la frappe enregistrée contiendra les mots de passe Windows tapés.', type: 'one', o: ['Au choix dans la règle, désactivée par défaut', 'Au choix dans la règle, activée par défaut', 'Jamais'], rec: 0 },
+    { id: 'pptexte', t: 'Garder le texte copié dans le presse-papiers ?', why: 'Utile en cas d\'incident (qu\'est-ce qui est sorti ?), mais peut contenir des données sensibles.', type: 'one', o: ['Seulement la taille et le sens', 'Le contenu aussi, au choix dans la règle'], rec: 0 },
+    { id: 'recherche', t: 'Recherche dans les sessions RDP', why: 'Le texte affiché à l\'écran n\'existe pas en RDP (ce sont des images). Lire l\'écran (OCR) est possible mais lourd.', type: 'one', o: ['Frappe et événements seulement', 'Plus tard : texte lu à l\'écran (OCR)'], rec: 0 },
+    { id: 'direct', t: 'Vue en direct et coupure', why: 'Prévue pour SSH dans la phase 2 ; même lecteur pour RDP.', type: 'one', o: ['Avec la phase 2 de SSH', 'Après RDP'], rec: 0 },
+  ]},
+  { title: 'Offre', qs: [
+    { id: 'offre', t: 'RDP dans quelle offre de Heimdia ?', why: 'RDP intéresse surtout les parcs Windows et les prestataires ; c\'est un argument pour une offre supérieure.', type: 'one', o: ['Dans toutes les offres', 'Offre supérieure seulement', 'À décider plus tard'], rec: 2 },
+  ]},
+];
+const ALL = SECTIONS.flatMap((s) => s.qs);
+let answers = {};
+let db = null, saveTimer = null;
+const saveEl = document.getElementById('save');
+function setSave(text, cls) { saveEl.textContent = text; saveEl.className = 'save' + (cls ? ' ' + cls : ''); }
+function answered(q) { const a = answers[q.id]; return !!a && ((Array.isArray(a.v) ? a.v.length : a.v != null) || !!(a.note || '').trim()); }
+function render() {
+  const list = document.getElementById('qlist');
+  list.replaceChildren();
+  let n = 0;
+  for (const sec of SECTIONS) {
+    const box = el('div', 'qsec'); box.append(el('h2', null, sec.title));
+    for (const q of sec.qs) {
+      n++;
+      const card = el('div', 'q');
+      const head = el('div', 'qt'); head.append(el('span', 'qn', String(n)), el('span', null, q.t));
+      card.append(head, el('p', 'why', q.why));
+      const opts = el('div', 'opts');
+      const cur = answers[q.id] || {};
+      q.o.forEach((label, i) => {
+        const lab = el('label', 'opt');
+        const inp = document.createElement('input');
+        inp.type = q.type === 'many' ? 'checkbox' : 'radio'; inp.name = 'q-' + q.id; inp.id = 'q-' + q.id + '-' + i;
+        inp.checked = q.type === 'many' ? (cur.v || []).includes(i) : cur.v === i;
+        inp.addEventListener('change', () => {
+          const a = answers[q.id] || {};
+          if (q.type === 'many') { const set = new Set(a.v || []); inp.checked ? set.add(i) : set.delete(i); a.v = [...set].sort((x, y) => x - y); } else a.v = i;
+          answers[q.id] = a; changed();
+        });
+        const span = el('span', null, label);
+        if (Array.isArray(q.rec) ? q.rec.includes(i) : q.rec === i) span.append(el('span', 'rec', 'conseillé'));
+        lab.append(inp, span); opts.append(lab);
+      });
+      const note = document.createElement('textarea');
+      note.className = 'input'; note.id = 'note-' + q.id; note.rows = 1; note.placeholder = 'Précision (facultatif)'; note.value = cur.note || '';
+      note.addEventListener('input', () => { const a = answers[q.id] || {}; a.note = note.value; answers[q.id] = a; changed(); });
+      card.append(opts, note); box.append(card);
+    }
+    list.append(box);
+  }
+  progress();
+}
+function progress() {
+  const done = ALL.filter(answered).length;
+  document.getElementById('qdone').textContent = done;
+  document.getElementById('qtotal').textContent = ALL.length;
+  document.getElementById('qcount').textContent = done + ' / ' + ALL.length;
+  document.getElementById('qprog').style.width = (100 * done / ALL.length) + '%';
+}
+function changed() {
+  progress();
+  try { localStorage.setItem('heimdia-rdp', JSON.stringify(answers)); } catch {}
+  clearTimeout(saveTimer);
+  if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
+}
+async function save() {
+  try { await db.doc('questionnaire/rdp').set({ reponses: answers, misAJour: new Date().toISOString() }); setSave('Enregistré. Claude peut lire vos réponses.', 'ok'); }
+  catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
+}
+function summary() {
+  const lines = ['Réponses Heimdia : RDP']; let n = 0;
+  for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
+  return lines.join('\n');
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = summary();
+  try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
+});
+try { answers = JSON.parse(localStorage.getItem('heimdia-rdp') || '{}') || {}; } catch { answers = {}; }
+render();
+(async () => {
+  const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;
+  if (!api) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  db = api;
+  try {
+    const snap = await db.doc('questionnaire/rdp').get();
+    if (snap.exists) {
+      const stored = (snap.data() || {}).reponses || {};
+      answers = Object.assign({}, stored, answers); render();
+      if (JSON.stringify(stored) !== JSON.stringify(answers)) save(); else setSave('Enregistré. Claude peut lire vos réponses.', 'ok');
+    } else if (Object.keys(answers).length) save();
+  } catch { setSave('Lecture impossible : vos réponses restent dans ce navigateur.', 'err'); }
+})();
+</script>
