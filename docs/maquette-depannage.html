@@ -1,0 +1,598 @@
+<title>Portunia dépannage à distance</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette : extension de dépannage à distance (prise en main d'un PC d'un proche ou d'un client),
+   fenêtres de Portunia et du petit programme du dépanné, schéma, questionnaire. */
+:root {
+  --bg: #f1f2f5; --work: #ffffff; --panel: #ffffff; --field: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-soft: #d5d9df; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --accent: #2563d6; --accent-ink: #ffffff; --accent-soft: #dbe7fb;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #b5650f; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2;
+  --desk-1: #2f6fb3; --desk-2: #173f70; --win: #f6f6f6; --win-ink: #1b1b1b; --win-bar: #e8e8e8; --taskbar: #202020;
+  --assist: #0f8f7a; --assist-soft: #d6f1ec; --assist-ink: #ffffff;
+  --shadow: rgb(20 30 50 / .18);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --win: #2b2b2b; --win-ink: #f0f0f0; --win-bar: #3a3a3a;
+  --assist: #3cc9b1; --assist-soft: #133a33; --assist-ink: #06221d;
+  --shadow: rgb(0 0 0 / .45); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
+  --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --accent: #5b9bff; --accent-ink: #0e1a2e; --accent-soft: #23314a;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33; --win: #2b2b2b; --win-ink: #f0f0f0; --win-bar: #3a3a3a;
+  --assist: #3cc9b1; --assist-soft: #133a33; --assist-ink: #06221d;
+  --shadow: rgb(0 0 0 / .45); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 var(--ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.intro { display: flex; flex-direction: column; gap: 4px; }
+.intro h1 { font-size: 21px; font-weight: 650; }
+.intro p { max-width: 82ch; color: var(--text-2); }
+.maintabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.maintabs button { border: 0; background: none; padding: 9px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.maintabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.maintabs .count { font-size: 11px; background: var(--chip-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.steps { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.steps .grp { font-size: 11px; color: var(--muted); padding: 0 2px 0 6px; letter-spacing: .06em; text-transform: uppercase; }
+.steps button { border: 1px solid var(--line-soft); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--text-2); }
+.steps button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.btn { border: 1px solid var(--line-strong); background: var(--panel); border-radius: 7px; padding: 6px 12px; font-size: 13px; white-space: nowrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.assist { background: var(--assist); border-color: var(--assist); color: var(--assist-ink); font-weight: 600; }
+.btn.danger { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+.btn.sm { padding: 3px 9px; font-size: 12px; }
+.btn.big { padding: 10px 18px; font-size: 15px; }
+.note { font-size: 13px; color: var(--text-2); max-width: 88ch; }
+.duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 16px; align-items: start; }
+.who { font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; display: inline-flex; gap: 6px; align-items: center; }
+.who.me { color: var(--accent); }
+.who.them { color: var(--assist); }
+.who i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+/* Fenêtre Portunia */
+.app { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); background: var(--work); }
+.app-bar { display: flex; align-items: center; gap: 10px; padding: 7px 12px; background: var(--bg); border-bottom: 1px solid var(--line); font-size: 12.5px; flex-wrap: wrap; }
+.app-bar .tab { padding: 4px 10px; border-radius: 6px; background: var(--work); border: 1px solid var(--line); }
+.app-bar .sp { margin-left: auto; }
+.app-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 420px; }
+@media (max-width: 760px) { .app-body { grid-template-columns: minmax(0, 1fr); } .side { display: none !important; } }
+.side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.side .h { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 4px; }
+.nrow { padding: 6px 8px; border-radius: 6px; color: var(--text-2); display: flex; align-items: center; gap: 8px; }
+.nrow.sel { background: var(--accent-soft); color: var(--text); }
+.nrow .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-left: auto; }
+.nrow .dot.off { background: var(--line-strong); }
+.main { padding: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.card { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.card h3 { font-size: 15px; }
+.choice { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.choice > div { border: 1px solid var(--line-soft); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.choice b { font-size: 14px; }
+.choice p { font-size: 12.5px; color: var(--text-2); }
+.code { font: 600 30px/1.1 var(--mono); letter-spacing: .12em; font-variant-numeric: tabular-nums; }
+.link { font: 13px var(--mono); padding: 8px 10px; border-radius: 7px; background: var(--chip-bg); overflow-wrap: anywhere; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.input { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--text); min-width: 0; }
+.wait { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--text-2); }
+.spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); }
+.check i { width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid var(--line-strong); display: inline-grid; place-items: center; font-style: normal; font-size: 11px; flex: none; margin-top: 1px; }
+.check i.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.check small { display: block; color: var(--muted); font-size: 11.5px; }
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 9px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; min-width: 540px; }
+th { text-align: left; font-weight: 600; font-size: 11.5px; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--bg); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); }
+tr:last-child td { border-bottom: 0; }
+.chip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--chip-bg); color: var(--text-2); white-space: nowrap; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.assist { background: var(--assist-soft); color: var(--assist); }
+
+/* Écran distant dans Portunia */
+.toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.toolbar .sp { margin-left: auto; }
+.screen { position: relative; aspect-ratio: 16 / 9; max-width: 100%; background: radial-gradient(120% 90% at 70% 20%, var(--desk-1), var(--desk-2) 70%); overflow: hidden; }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 7%; background: var(--taskbar); display: flex; justify-content: center; align-items: center; gap: 2%; }
+.taskbar i { width: 2.3%; aspect-ratio: 1; border-radius: 3px; background: #3c3c3c; }
+.taskbar i.on { background: #4a7fd6; }
+.wwin { position: absolute; background: var(--win); color: var(--win-ink); border-radius: 6px; box-shadow: 0 10px 30px rgb(0 0 0 / .4); overflow: hidden; font-size: clamp(7px, 1.05vw, 12px); }
+.wwin .wbar { background: var(--win-bar); padding: 4px 8px; display: flex; justify-content: space-between; font-weight: 600; }
+.wwin .wbody { padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+.wwin .bar { height: .7em; border-radius: 2px; background: color-mix(in srgb, var(--win-ink) 16%, transparent); }
+.wwin .err { color: #c23b3b; font-weight: 600; }
+.cursor { position: absolute; width: 0; height: 0; border-left: 8px solid #fff; border-bottom: 12px solid transparent; transform: rotate(-12deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .6)); }
+.chat { position: absolute; right: 10px; top: 10px; width: min(260px, 45%); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 12px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 10px 30px rgb(0 0 0 / .3); }
+.msg { padding: 5px 8px; border-radius: 8px; background: var(--chip-bg); max-width: 90%; }
+.msg.me { background: var(--accent-soft); align-self: flex-end; }
+
+/* Côté dépanné : PC Windows simulé */
+.pc { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 50px var(--shadow); }
+.pc .screen { aspect-ratio: 16 / 10; }
+.agent { position: absolute; left: 50%; top: 46%; translate: -50% -50%; width: min(380px, 88%); background: var(--panel); color: var(--text); border-radius: 12px; box-shadow: 0 20px 60px rgb(0 0 0 / .45); overflow: hidden; font-size: 13px; }
+.agent .top { background: var(--assist); color: var(--assist-ink); padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-weight: 650; }
+.agent .top .x { margin-left: auto; opacity: .8; }
+.agent .body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.agent .code { font-size: 26px; text-align: center; }
+.agent .pw { text-align: center; font: 600 16px var(--mono); letter-spacing: .1em; }
+.agent .who-card { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 8px; background: var(--chip-bg); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; flex: none; }
+.agent .acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.floatbar { position: absolute; top: 0; left: 50%; translate: -50% 0; background: var(--assist); color: var(--assist-ink); padding: 6px 12px; border-radius: 0 0 10px 10px; display: flex; gap: 10px; align-items: center; font-size: 12.5px; font-weight: 600; box-shadow: 0 6px 20px rgb(0 0 0 / .35); white-space: nowrap; max-width: 96%; overflow: hidden; }
+.floatbar button { border: 0; border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 700; background: #fff; color: #9b1c1c; }
+.frame { position: absolute; inset: 0; border: 4px solid var(--assist); pointer-events: none; }
+.uac { position: absolute; inset: 0; background: rgb(0 0 0 / .55); display: grid; place-items: center; }
+.uac .box { background: #1f4e8c; color: #fff; width: min(340px, 86%); border-radius: 8px; padding: 14px; font-size: 12.5px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Schéma */
+.flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.flow > div { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px; background: var(--panel); font-size: 12.5px; color: var(--text-2); display: flex; flex-direction: column; gap: 6px; }
+.flow b { color: var(--text); font-size: 13px; }
+.flow .n { font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: .06em; }
+.svgwrap { overflow-x: auto; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 12px; }
+.svgwrap svg { display: block; min-width: 640px; width: 100%; height: auto; }
+.svgwrap text { fill: var(--text); font: 13px var(--ui); }
+.svgwrap .sub { fill: var(--muted); font-size: 11.5px; }
+.svgwrap .box { fill: var(--bg); stroke: var(--line-strong); }
+.svgwrap .boxa { fill: var(--accent-soft); stroke: var(--accent); }
+.svgwrap .boxt { fill: var(--assist-soft); stroke: var(--assist); }
+.svgwrap .ln { stroke: var(--muted); stroke-width: 1.5; fill: none; }
+.svgwrap .lock { stroke: var(--ok); stroke-width: 2.5; fill: none; stroke-dasharray: 6 4; }
+.props { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.prop { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.prop h3 { font-size: 14px; }
+.prop p, .prop li { font-size: 12.5px; color: var(--text-2); }
+.prop ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; }
+.prop .tag { align-self: flex-start; }
+
+/* Questionnaire */
+.qbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; border-bottom: 1px solid var(--line); }
+.qbar .prog { flex: 1 1 200px; height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; min-width: 120px; }
+.qbar .prog i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .2s; }
+.save { font-size: 12px; color: var(--muted); }
+.save.ok { color: var(--ok); }
+.save.err { color: var(--danger); }
+.qsec { display: flex; flex-direction: column; gap: 12px; }
+.qsec > h2 { font-size: 16px; padding-top: 10px; }
+.q { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--panel); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.q .qt { font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.q .qn { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.2em; }
+.q .why { font-size: 12.5px; color: var(--muted); max-width: 82ch; }
+.opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px 11px; font-size: 13px; color: var(--text-2); cursor: pointer; max-width: 100%; }
+.opt input { margin: 2px 0 0; accent-color: var(--accent); }
+.opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.opt .rec { font-size: 11px; color: var(--accent); font-weight: 600; margin-left: 4px; }
+.q textarea { min-height: 38px; resize: vertical; width: 100%; }
+@media (prefers-reduced-motion: reduce) { .qbar .prog i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <div class="intro">
+    <p class="label">Maquette · extension Portunia</p>
+    <h1>Dépannage à distance : prendre la main sur le PC d'un proche ou d'un client</h1>
+    <p>La personne aidée n'installe rien de durable : elle ouvre un petit programme, lit un code au téléphone ou clique sur votre lien, et accepte. Vous voyez son écran dans un onglet de Portunia, vous prenez la main, et elle garde toujours un bouton « Arrêter ». La liaison est chiffrée de bout en bout à partir du code : même le relais ne voit pas l'écran. Parcourez les écrans ; l'onglet Propositions détaille les choix techniques, l'onglet Questions rassemble ce qu'il faut décider avant de coder.</p>
+  </div>
+
+  <div class="maintabs" role="tablist">
+    <button role="tab" id="tab-maq" aria-selected="true" aria-controls="pane-maq">Maquette</button>
+    <button role="tab" id="tab-prop" aria-selected="false" aria-controls="pane-prop">Propositions</button>
+    <button role="tab" id="tab-q" aria-selected="false" aria-controls="pane-q">Questions <span class="count" id="qcount">0 / 0</span></button>
+  </div>
+
+  <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
+    <div class="steps" aria-label="Écrans">
+      <span class="grp">Vous (Portunia)</span>
+      <button data-s="start" aria-pressed="true">1. Lancer un dépannage</button>
+      <span class="grp">La personne aidée</span>
+      <button data-s="agent" aria-pressed="false">2. Le petit programme</button>
+      <button data-s="consent" aria-pressed="false">3. Elle accepte</button>
+      <span class="grp">Pendant</span>
+      <button data-s="session" aria-pressed="false">4. Vous avez la main</button>
+      <button data-s="her" aria-pressed="false">5. Ce qu'elle voit</button>
+      <button data-s="admin" aria-pressed="false">6. Fenêtre administrateur</button>
+      <span class="grp">Ensuite</span>
+      <button data-s="mine" aria-pressed="false">7. Mes PC et historique</button>
+    </div>
+
+    <!-- 1. Lancer -->
+    <div data-screen="start" class="wrap" style="max-width:none">
+      <p class="note"><span class="who me"><i></i>Vous</span> Barre latérale › <b>Dépannage</b> › Nouveau. Deux façons, selon qui appelle qui : la personne vous lit le code affiché par son programme, ou vous lui envoyez un lien.</p>
+      <div class="app">
+        <div class="app-bar"><span class="tab">Dépannage</span><span class="sp muted">Portunia</span></div>
+        <div class="app-body">
+          <div class="side" style="display:flex">
+            <span class="h">Dépannage</span>
+            <span class="nrow sel">+ Nouveau dépannage</span>
+            <span class="h">Mes PC</span>
+            <span class="nrow">PC de Maman <span class="dot"></span></span>
+            <span class="nrow">Portable de Léa <span class="dot off"></span></span>
+            <span class="h">Historique</span>
+            <span class="nrow">Cabinet Durand · hier</span>
+          </div>
+          <div class="main">
+            <div class="choice">
+              <div>
+                <b>Elle me lit un code</b>
+                <p>Elle télécharge « Portunia Aide » sur <b>aide.portunia.fr</b> et l'ouvre : un code s'affiche. Vous le tapez ici.</p>
+                <label class="small muted" for="code-in">Code de la personne</label>
+                <div class="row"><input class="input code" id="code-in" value="483 216 907" style="font-size:20px;width:12em"><button class="btn primary">Se connecter</button></div>
+              </div>
+              <div>
+                <b>Je lui envoie un lien</b>
+                <p>Par SMS, e-mail ou WhatsApp. Le lien télécharge un programme déjà relié à vous : elle n'a qu'à l'ouvrir et accepter.</p>
+                <div class="link">https://aide.portunia.fr/j/7KQ-M4X-29P</div>
+                <div class="row"><button class="btn">Copier le lien</button><span class="muted small">Valable 30 minutes, une seule fois</span></div>
+                <div class="wait"><span class="spin"></span>En attente de Maman…</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>À dire au téléphone</h3>
+              <p class="note">« Va sur <b>aide.portunia.fr</b>, clique sur le gros bouton bleu, ouvre le fichier téléchargé et lis-moi les chiffres. »</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Programme du dépanné -->
+    <div data-screen="agent" class="wrap" style="max-width:none" hidden>
+      <p class="note"><span class="who them"><i></i>La personne aidée</span> Un seul fichier (environ 5 Mo), signé, sans installation ni droits administrateur. Il s'ouvre au premier plan, en français ou en anglais selon Windows, et se supprime de lui-même après usage si on le souhaite.</p>
+      <div class="pc">
+        <div class="screen">
+          <div class="wwin" style="left:6%;top:8%;width:46%;height:52%"><div class="wbar"><span>Imprimantes et scanners</span><span>— ▢ ✕</span></div><div class="wbody"><div class="bar" style="width:70%"></div><span class="err">⚠ L'imprimante ne répond pas</span><div class="bar" style="width:55%"></div><div class="bar" style="width:62%"></div></div></div>
+          <div class="agent">
+            <div class="top">Portunia Aide <span class="x">✕</span></div>
+            <div class="body">
+              <p>Donnez ce code à la personne qui vous aide :</p>
+              <div class="code">483 216 907</div>
+              <p class="muted small" style="text-align:center">Le code change à chaque ouverture. Personne ne peut voir votre écran sans votre accord.</p>
+            </div>
+          </div>
+          <div class="taskbar"><i></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Consentement -->
+    <div data-screen="consent" class="wrap" style="max-width:none" hidden>
+      <p class="note"><span class="who them"><i></i>La personne aidée</span> Votre nom et votre photo (ceux de votre compte Portunia) s'affichent : elle sait à qui elle ouvre. Elle peut accepter seulement de montrer son écran, ou vous laisser la main.</p>
+      <div class="pc">
+        <div class="screen">
+          <div class="wwin" style="left:6%;top:8%;width:46%;height:52%"><div class="wbar"><span>Imprimantes et scanners</span><span>— ▢ ✕</span></div><div class="wbody"><div class="bar" style="width:70%"></div><span class="err">⚠ L'imprimante ne répond pas</span><div class="bar" style="width:55%"></div></div></div>
+          <div class="agent">
+            <div class="top">Portunia Aide <span class="x">✕</span></div>
+            <div class="body">
+              <div class="who-card"><span class="avatar">JP</span><div><b>Julien Piperault</b><div class="muted small">veut vous aider · vérifié par le code 483 216 907</div></div></div>
+              <label class="check"><i class="on">✓</i><span>Lui laisser utiliser la souris et le clavier<small>Sinon, il voit seulement votre écran.</small></span></label>
+              <label class="check"><i>✓</i><span>Lui permettre d'échanger des fichiers</span></label>
+              <div class="acts"><button class="btn">Refuser</button><button class="btn assist">Accepter</button></div>
+            </div>
+          </div>
+          <div class="taskbar"><i></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Session côté Portunia -->
+    <div data-screen="session" class="wrap" style="max-width:none" hidden>
+      <p class="note"><span class="who me"><i></i>Vous</span> Un onglet comme une session Bureau à distance : l'écran s'adapte à la fenêtre, plusieurs écrans se choisissent en haut, la discussion reste à portée de main.</p>
+      <div class="app">
+        <div class="app-bar"><span class="tab">🛟 PC de Maman</span><span class="sp chip assist">Chiffré de bout en bout · direct</span></div>
+        <div class="toolbar">
+          <button class="btn sm">Ctrl+Alt+Suppr</button><button class="btn sm">Écran 1 ▾</button><button class="btn sm">Discussion</button><button class="btn sm">Envoyer un fichier</button><button class="btn sm">Demander l'administration</button><button class="btn sm">Redémarrer et revenir</button>
+          <span class="sp muted small">12 min · 38 ms</span><button class="btn sm danger">Terminer</button>
+        </div>
+        <div class="screen">
+          <div class="wwin" style="left:6%;top:8%;width:46%;height:52%"><div class="wbar"><span>Imprimantes et scanners</span><span>— ▢ ✕</span></div><div class="wbody"><div class="bar" style="width:70%"></div><span class="err">⚠ L'imprimante ne répond pas</span><div class="bar" style="width:55%"></div><div class="bar" style="width:62%"></div></div></div>
+          <div class="cursor" style="left:30%;top:36%"></div>
+          <div class="chat"><div class="msg">Elle ne marche plus depuis la mise à jour</div><div class="msg me">Je relance le service d'impression, ne touche à rien 🙂</div></div>
+          <div class="taskbar"><i></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Ce qu'elle voit -->
+    <div data-screen="her" class="wrap" style="max-width:none" hidden>
+      <p class="note"><span class="who them"><i></i>La personne aidée</span> Un cadre de couleur autour de l'écran et un bandeau toujours visible rappellent que vous êtes là. « Arrêter » coupe tout immédiatement ; la touche Échap trois fois de suite aussi.</p>
+      <div class="pc">
+        <div class="screen">
+          <div class="wwin" style="left:6%;top:8%;width:46%;height:52%"><div class="wbar"><span>Imprimantes et scanners</span><span>— ▢ ✕</span></div><div class="wbody"><div class="bar" style="width:70%"></div><span style="color:#1d8a57;font-weight:600">✓ Imprimante prête</span><div class="bar" style="width:55%"></div></div></div>
+          <div class="cursor" style="left:30%;top:36%"></div>
+          <div class="frame"></div>
+          <div class="floatbar">Julien voit et contrôle votre écran · 12 min <button>Arrêter</button></div>
+          <div class="taskbar"><i></i><i class="on"></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. UAC -->
+    <div data-screen="admin" class="wrap" style="max-width:none" hidden>
+      <p class="note">Les fenêtres « Voulez-vous autoriser cette application… » de Windows ne peuvent pas être cliquées à distance par un programme ordinaire. Vous demandez l'administration : la personne valide une seule fois, le petit programme se relance avec les droits nécessaires pour la durée de la session, puis les perd.</p>
+      <div class="duo">
+        <div class="pc">
+          <div class="screen">
+            <div class="uac"><div class="box"><b>Contrôle de compte d'utilisateur</b><span>Voulez-vous autoriser Portunia Aide à apporter des modifications à votre appareil ?</span><span style="opacity:.8">Éditeur vérifié : Portunia</span><div style="display:flex;gap:8px;justify-content:flex-end"><span class="btn sm" style="background:#fff;color:#1f4e8c">Oui</span><span class="btn sm" style="background:transparent;color:#fff;border-color:#fff">Non</span></div></div></div>
+            <div class="floatbar">Julien demande les droits administrateur <button>Arrêter</button></div>
+          </div>
+        </div>
+        <div class="flow">
+          <div><span class="n">1</span><b>Vous cliquez « Demander l'administration »</b>Le bandeau de la personne l'annonce.</div>
+          <div><span class="n">2</span><b>Windows lui demande</b>Elle clique Oui (ou tape le mot de passe d'un compte administrateur). Vous voyez l'écran sécurisé grisé pendant ce temps.</div>
+          <div><span class="n">3</span><b>Droits jusqu'à la fin de la session</b>Les fenêtres administrateur, l'écran de verrouillage et Ctrl+Alt+Suppr passent. À la fin, plus rien ne tourne.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. Mes PC -->
+    <div data-screen="mine" class="wrap" style="max-width:none" hidden>
+      <p class="note"><span class="who me"><i></i>Vous</span> Pour vos propres PC ou ceux de la famille, un accès sans personne devant (option à activer sur le PC, avec un mot de passe) ; et l'historique de tous les dépannages.</p>
+      <div class="duo">
+        <div class="card">
+          <h3>Mes PC (accès sans surveillance)</h3>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>PC</th><th>État</th><th>Dernier accès</th><th></th></tr></thead>
+            <tbody>
+              <tr><td><b>PC de Maman</b><br><span class="muted small">Windows 11 · Lyon</span></td><td><span class="chip ok">en ligne</span></td><td>il y a 3 jours</td><td><button class="btn sm primary">Ouvrir</button></td></tr>
+              <tr><td><b>Portable de Léa</b><br><span class="muted small">Windows 10</span></td><td><span class="chip">hors ligne</span></td><td>12 septembre</td><td><button class="btn sm">Réveiller</button></td></tr>
+            </tbody>
+          </table></div>
+          <p class="muted small">Sur le PC : Portunia Aide › « Autoriser Julien à se connecter quand je ne suis pas là » + mot de passe. Le bandeau reste affiché à chaque connexion, et la personne voit l'historique.</p>
+        </div>
+        <div class="card">
+          <h3>Historique</h3>
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>Date</th><th>PC</th><th>Durée</th><th>Accordé</th></tr></thead>
+            <tbody>
+              <tr><td>30/10 14:02</td><td>PC de Maman</td><td>18 min</td><td>contrôle, administration</td></tr>
+              <tr><td>29/10 09:15</td><td>Cabinet Durand (accueil)</td><td>42 min</td><td>contrôle, fichiers</td></tr>
+              <tr><td>21/10 18:40</td><td>Portable de Léa</td><td>6 min</td><td>vue seule</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Propositions -->
+  <section id="pane-prop" role="tabpanel" aria-labelledby="tab-prop" class="wrap" style="max-width:none" hidden>
+    <div class="svgwrap" role="img" aria-label="Schéma : Portunia et Portunia Aide se rejoignent par un relais ; la liaison est chiffrée de bout en bout à partir du code.">
+      <svg viewBox="0 0 760 210">
+        <rect class="boxa" x="10" y="60" width="200" height="90" rx="10"/>
+        <text x="110" y="95" text-anchor="middle">Portunia (vous)</text>
+        <text class="sub" x="110" y="117" text-anchor="middle">écran, souris, clavier</text>
+        <rect class="box" x="290" y="20" width="180" height="70" rx="10"/>
+        <text x="380" y="50" text-anchor="middle">Relais</text>
+        <text class="sub" x="380" y="70" text-anchor="middle">met en relation, ne lit rien</text>
+        <rect class="boxt" x="550" y="60" width="200" height="90" rx="10"/>
+        <text x="650" y="95" text-anchor="middle">Portunia Aide (PC aidé)</text>
+        <text class="sub" x="650" y="117" text-anchor="middle">capture, consentement</text>
+        <path class="ln" d="M210 85 C 250 85, 260 55, 290 55"/>
+        <path class="ln" d="M470 55 C 500 55, 510 85, 550 85"/>
+        <path class="lock" d="M210 135 L 550 135"/>
+        <text class="sub" x="380" y="160" text-anchor="middle">Direct quand les réseaux le permettent, sinon par le relais</text>
+        <text class="sub" x="380" y="180" text-anchor="middle">Chiffré de bout en bout : clés dérivées du code (le relais ne connaît pas le code)</text>
+      </svg>
+    </div>
+    <div class="props">
+      <div class="prop">
+        <span class="chip assist tag">Proposé</span>
+        <h3>Un petit programme, pas d'installation</h3>
+        <ul>
+          <li>Un seul .exe signé d'environ 5 Mo, lancé sans droits administrateur.</li>
+          <li>Il affiche un code, attend l'accord de la personne, puis s'arrête.</li>
+          <li>Le navigateur seul ne suffit pas : une page web peut montrer l'écran, mais pas recevoir la souris et le clavier.</li>
+        </ul>
+      </div>
+      <div class="prop">
+        <span class="chip assist tag">Proposé</span>
+        <h3>Réutiliser le moteur Bureau à distance</h3>
+        <ul>
+          <li>Portunia Aide embarque un petit serveur RDP (IronRDP, comme le reste) qui envoie l'écran ; Portunia l'affiche dans son onglet Bureau à distance habituel.</li>
+          <li>Marche aussi sur Windows Famille, qui n'a pas de Bureau à distance.</li>
+          <li>Plus tard, un flux vidéo H.264 pour les connexions lentes (4G).</li>
+        </ul>
+      </div>
+      <div class="prop">
+        <span class="chip assist tag">Proposé</span>
+        <h3>Chiffré de bout en bout par le code</h3>
+        <ul>
+          <li>Le code sert à un échange de clés authentifié par mot de passe (SPAKE2) : sans le code, impossible de se faire passer pour l'un ou l'autre.</li>
+          <li>Le relais ne voit que des données chiffrées. 3 essais de code au plus.</li>
+          <li>Votre nom vient de votre compte Portunia signé : la personne voit qui se connecte.</li>
+        </ul>
+      </div>
+      <div class="prop">
+        <span class="chip tag">À choisir</span>
+        <h3>Le relais</h3>
+        <ul>
+          <li><b>Votre bastion Heimdia</b> : déjà en ligne, déjà derrière Cloudflare ; rien à payer.</li>
+          <li><b>Relais Portunia hébergé</b> : rien à installer pour les utilisateurs de Portunia sans bastion ; un serveur à payer et à surveiller.</li>
+          <li><b>Petit relais à installer</b> (Docker, une seule commande) pour qui veut le sien.</li>
+          <li>Connexion directe pair à pair quand c'est possible (souvent en Wi-Fi domestique), relais sinon.</li>
+        </ul>
+      </div>
+      <div class="prop">
+        <span class="chip tag">Sécurité</span>
+        <h3>La personne garde la main</h3>
+        <ul>
+          <li>Accord à chaque fois (sauf « mes PC », activé par elle), contrôle séparé de la simple vue.</li>
+          <li>Cadre coloré, bandeau toujours visible, « Arrêter » et Échap ×3.</li>
+          <li>Historique des dépannages des deux côtés. Rien ne reste lancé après la session.</li>
+        </ul>
+      </div>
+      <div class="prop">
+        <span class="chip tag">À prévoir</span>
+        <h3>Ce qui coûte</h3>
+        <ul>
+          <li>Signature du programme : sans elle, Windows affiche un écran d'alerte qui fait peur à la personne aidée. Service de signature Microsoft (environ 10 $ par mois) ou certificat classique (quelques centaines d'euros par an).</li>
+          <li>Un relais hébergé (si choisi) : petit serveur, quelques euros par mois.</li>
+          <li>Développement : deux à trois versions (vue et contrôle, puis fichiers et administration, puis accès sans surveillance).</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="pane-q" role="tabpanel" aria-labelledby="tab-q" class="wrap" style="max-width:none" hidden>
+    <div class="qbar">
+      <span><b id="qdone">0</b> / <span id="qtotal">0</span> réponses</span>
+      <span class="prog"><i id="qprog"></i></span>
+      <span class="save" id="save"></span>
+      <button class="btn" type="button" id="copy">Copier mes réponses</button>
+    </div>
+    <p class="muted small">Les options marquées « conseillé » sont celles que je retiendrais. Une question sans réponse prend l'option conseillée.</p>
+    <div id="qlist" class="wrap" style="max-width:none"></div>
+  </section>
+</div>
+
+<script>
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const tabs = { maq: document.getElementById('tab-maq'), prop: document.getElementById('tab-prop'), q: document.getElementById('tab-q') };
+function showTab(k) { for (const [key, b] of Object.entries(tabs)) { b.setAttribute('aria-selected', String(key === k)); document.getElementById('pane-' + key).hidden = key !== k; } }
+for (const [k, b] of Object.entries(tabs)) b.addEventListener('click', () => showTab(k));
+function showScreen(s) {
+  document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+  document.querySelectorAll('[data-screen]').forEach((d) => { d.hidden = d.dataset.screen !== s; });
+}
+document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.s)));
+
+const SECTIONS = [
+  { title: 'Comment on se retrouve', qs: [
+    { id: 'qui', t: 'Qui lance le dépannage ?', why: 'Code lu au téléphone (comme TeamViewer) : simple quand la personne vous appelle. Lien envoyé : rien à lire, utile pour un client par e-mail.', type: 'one', o: ['La personne me lit un code', 'Je lui envoie un lien', 'Les deux'], rec: 2 },
+    { id: 'agent', t: 'Côté personne aidée', why: 'Un navigateur peut montrer l\'écran mais pas recevoir la souris et le clavier. Un programme peut tout faire.', type: 'one', o: ['Petit programme sans installation', 'Page web pour voir seulement, programme pour la main', 'Programme installé (plus simple pour les habitués)'], rec: 0 },
+    { id: 'apres', t: 'Après la session, le programme…', why: 'Le laisser dans Téléchargements permet de le rouvrir la prochaine fois ; le supprimer ne laisse aucune trace.', type: 'one', o: ['Reste dans Téléchargements, inactif', 'Se supprime de lui-même'], rec: 0 },
+    { id: 'plateformes', t: 'PC aidés pris en charge', why: 'Windows d\'abord couvre la famille et les petits clients ; macOS demande d\'autres autorisations (enregistrement d\'écran, accessibilité).', type: 'one', o: ['Windows d\'abord', 'Windows et macOS', 'Windows, macOS et Linux'], rec: 0 },
+  ]},
+  { title: 'Réseau et sécurité', qs: [
+    { id: 'relais', t: 'Par où passe la connexion ?', why: 'Le direct est le plus rapide mais échoue souvent derrière les box et les réseaux d\'entreprise : il faut un relais de secours.', type: 'many', o: ['Direct quand c\'est possible', 'Mon bastion Heimdia', 'Un relais Portunia hébergé', 'Un petit relais à installer (Docker)'], rec: [0, 1, 3] },
+    { id: 'chiffre', t: 'Chiffrement', why: 'Avec un échange de clés authentifié par le code, même le relais ne peut pas lire ni se faire passer pour quelqu\'un.', type: 'one', o: ['De bout en bout, dérivé du code', 'Chiffrement jusqu\'au relais seulement'], rec: 0 },
+    { id: 'code', t: 'Forme du code', why: 'Neuf chiffres se dictent bien ; un code plus long est plus sûr mais pénible au téléphone. Trois essais au plus de toute façon.', type: 'one', o: ['9 chiffres', '6 chiffres + mot de passe de 4 lettres', '12 caractères'], rec: 0 },
+    { id: 'identite', t: 'Comment la personne sait que c\'est vous', why: 'Contre les arnaques « faux support » : votre nom affiché vient d\'un compte vérifié, pas d\'un texte libre.', type: 'one', o: ['Nom et photo de mon compte Portunia, vérifiés', 'Un nom tapé librement'], rec: 0 },
+  ]},
+  { title: 'Pendant la session', qs: [
+    { id: 'controle', t: 'Accord de la personne', why: 'Séparer « voir » et « contrôler » rassure ; elle peut accorder la main ensuite.', type: 'one', o: ['Elle choisit : voir seulement, ou voir et contrôler', 'Contrôle complet dès qu\'elle accepte'], rec: 0 },
+    { id: 'visible', t: 'Ce qui rappelle votre présence', why: 'La personne doit toujours savoir qu\'elle est vue et pouvoir arrêter.', type: 'many', o: ['Cadre coloré autour de l\'écran', 'Bandeau avec « Arrêter »', 'Échap trois fois arrête tout'], rec: [0, 1, 2] },
+    { id: 'fonctions', t: 'Fonctions de la première version', why: 'Le reste viendra ensuite ; le son et l\'impression locale sont rarement utiles en dépannage.', type: 'many', o: ['Discussion', 'Échange de fichiers', 'Presse-papiers', 'Plusieurs écrans', 'Redémarrer et revenir', 'Son'], rec: [0, 1, 2, 3] },
+    { id: 'admin', t: 'Fenêtres administrateur (UAC)', why: 'Sans droits, les fenêtres « Voulez-vous autoriser… » et Ctrl+Alt+Suppr ne peuvent pas être utilisées à distance.', type: 'one', o: ['Bouton « Demander l\'administration » (elle valide une fois)', 'Pas d\'administration à distance'], rec: 0 },
+    { id: 'moteur', t: 'Transport de l\'image', why: 'Le petit serveur RDP réutilise le moteur et l\'onglet Bureau à distance de Portunia. La vidéo H.264 est plus économe en 4G mais demande plus de travail.', type: 'one', o: ['Serveur RDP intégré (IronRDP) d\'abord, vidéo plus tard', 'Vidéo H.264 dès la première version'], rec: 0 },
+    { id: 'enreg', t: 'Enregistrer la session', why: 'Utile pour un client professionnel (preuve de ce qui a été fait) ; la personne doit le savoir.', type: 'one', o: ['Non', 'En option, annoncé sur le bandeau de la personne'], rec: 1 },
+  ]},
+  { title: 'Après', qs: [
+    { id: 'unattended', t: 'Accès sans personne devant (« mes PC »)', why: 'Pratique pour la famille, mais c\'est un accès permanent : à activer par la personne, avec un mot de passe, et révocable.', type: 'one', o: ['Plus tard', 'Dès la première version', 'Jamais'], rec: 0 },
+    { id: 'historique', t: 'Historique des dépannages', why: 'Qui, quand, combien de temps, ce qui a été accordé : chez vous et chez la personne aidée.', type: 'one', o: ['Des deux côtés', 'Chez moi seulement', 'Aucun'], rec: 0 },
+  ]},
+  { title: 'Offre et nom', qs: [
+    { id: 'signature', t: 'Signature du programme de la personne aidée', why: 'Sans signature, Windows SmartScreen affiche un avertissement inquiétant. Le service de Microsoft est le moins cher ; un certificat classique coûte plus.', type: 'one', o: ['Service de signature Microsoft (environ 10 $ par mois)', 'Certificat classique (plusieurs centaines d\'euros par an)', 'Pas de signature au début'], rec: 0 },
+    { id: 'offre', t: 'Dans quelle offre ?', why: 'Gratuit pour la famille attire des utilisateurs ; les clients professionnels paient pour la personnalisation, l\'accès sans surveillance et l\'enregistrement.', type: 'one', o: ['Gratuit en usage personnel, Pro pour les clients (logo, sans surveillance, enregistrement)', 'Tout dans Pro', 'À décider plus tard'], rec: 0 },
+    { id: 'marque', t: 'Personnaliser le programme pour ses clients', why: 'Votre nom et votre logo dans la fenêtre rassurent un client et évitent la confusion avec une arnaque.', type: 'one', o: ['Oui, en Pro', 'Non'], rec: 0 },
+    { id: 'nom', t: 'Nom de l\'extension et du programme', why: 'Le nom que la personne aidée verra et cherchera.', type: 'one', o: ['Dépannage / « Portunia Aide »', 'Assistance / « Portunia Assist »', 'Autre (préciser)'], rec: 0 },
+  ]},
+];
+const ALL = SECTIONS.flatMap((s) => s.qs);
+let answers = {};
+let db = null, saveTimer = null;
+const saveEl = document.getElementById('save');
+function setSave(text, cls) { saveEl.textContent = text; saveEl.className = 'save' + (cls ? ' ' + cls : ''); }
+function answered(q) { const a = answers[q.id]; return !!a && ((Array.isArray(a.v) ? a.v.length : a.v != null) || !!(a.note || '').trim()); }
+function render() {
+  const list = document.getElementById('qlist');
+  list.replaceChildren();
+  let n = 0;
+  for (const sec of SECTIONS) {
+    const box = el('div', 'qsec'); box.append(el('h2', null, sec.title));
+    for (const q of sec.qs) {
+      n++;
+      const card = el('div', 'q');
+      const head = el('div', 'qt'); head.append(el('span', 'qn', String(n)), el('span', null, q.t));
+      card.append(head, el('p', 'why', q.why));
+      const opts = el('div', 'opts');
+      const cur = answers[q.id] || {};
+      q.o.forEach((label, i) => {
+        const lab = el('label', 'opt');
+        const inp = document.createElement('input');
+        inp.type = q.type === 'many' ? 'checkbox' : 'radio'; inp.name = 'q-' + q.id; inp.id = 'q-' + q.id + '-' + i;
+        inp.checked = q.type === 'many' ? (cur.v || []).includes(i) : cur.v === i;
+        inp.addEventListener('change', () => {
+          const a = answers[q.id] || {};
+          if (q.type === 'many') { const set = new Set(a.v || []); inp.checked ? set.add(i) : set.delete(i); a.v = [...set].sort((x, y) => x - y); } else a.v = i;
+          answers[q.id] = a; changed();
+        });
+        const span = el('span', null, label);
+        if (Array.isArray(q.rec) ? q.rec.includes(i) : q.rec === i) span.append(el('span', 'rec', 'conseillé'));
+        lab.append(inp, span); opts.append(lab);
+      });
+      const note = document.createElement('textarea');
+      note.className = 'input'; note.id = 'note-' + q.id; note.rows = 1; note.placeholder = 'Précision (facultatif)'; note.value = cur.note || '';
+      note.addEventListener('input', () => { const a = answers[q.id] || {}; a.note = note.value; answers[q.id] = a; changed(); });
+      card.append(opts, note); box.append(card);
+    }
+    list.append(box);
+  }
+  progress();
+}
+function progress() {
+  const done = ALL.filter(answered).length;
+  document.getElementById('qdone').textContent = done;
+  document.getElementById('qtotal').textContent = ALL.length;
+  document.getElementById('qcount').textContent = done + ' / ' + ALL.length;
+  document.getElementById('qprog').style.width = (100 * done / ALL.length) + '%';
+}
+function changed() {
+  progress();
+  try { localStorage.setItem('portunia-depannage', JSON.stringify(answers)); } catch {}
+  clearTimeout(saveTimer);
+  if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
+}
+async function save() {
+  try { await db.doc('questionnaire/depannage').set({ reponses: answers, misAJour: new Date().toISOString() }); setSave('Enregistré. Claude peut lire vos réponses.', 'ok'); }
+  catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
+}
+function summary() {
+  const lines = ['Réponses : dépannage à distance']; let n = 0;
+  for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(conseillé)') + (a.note ? ' — ' + a.note : '')); } }
+  return lines.join('\n');
+}
+document.getElementById('copy').addEventListener('click', async () => {
+  const text = summary();
+  try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
+});
+try { answers = JSON.parse(localStorage.getItem('portunia-depannage') || '{}') || {}; } catch { answers = {}; }
+render();
+(async () => {
+  const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;
+  if (!api) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
+  db = api;
+  try {
+    const snap = await db.doc('questionnaire/depannage').get();
+    if (snap.exists) {
+      const stored = (snap.data() || {}).reponses || {};
+      answers = Object.assign({}, stored, answers); render();
+      if (JSON.stringify(stored) !== JSON.stringify(answers)) save(); else setSave('Enregistré. Claude peut lire vos réponses.', 'ok');
+    } else if (Object.keys(answers).length) save();
+  } catch { setSave('Lecture impossible : vos réponses restent dans ce navigateur.', 'err'); }
+})();
+</script>
