@@ -113,6 +113,8 @@ pub fn run() {
             bastion::bastion_journal_csv,
             bastion::bastion_export,
             bastion::bastion_rdp_replay,
+            bastion::bastion_assist,
+            bastion::bastion_assist_status,
             bastion::bastion_rdp_replay_seek,
             bastion::bastion_rdp_replay_close,
             bastion::bastion_connect,

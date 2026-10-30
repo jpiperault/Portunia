@@ -1,0 +1,21 @@
+[package]
+name = "assist-proto"
+version = "0.1.0"
+description = "Portunia Assist : code, échange de clés (SPAKE2) et chiffrement de bout en bout"
+edition = "2021"
+
+[dependencies]
+spake2 = "0.4"
+chacha20poly1305 = "0.10"
+hkdf = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+thiserror = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+serde_json = "1"

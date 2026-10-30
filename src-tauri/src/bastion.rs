@@ -162,19 +162,7 @@ fn client(expected: Option<&str>) -> Result<(reqwest::Client, Arc<Mutex<Option<S
 /// Relais local vers l'API du bastion, en TLS avec le certificat épinglé : le moteur RDP s'y
 /// connecte en clair sur 127.0.0.1 (passage RDCleanPath du bastion). Une seule connexion.
 async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u16> {
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let verifier = Pinned { expected: Some(fingerprint.to_string()), seen: Arc::default(), provider: provider.clone() };
-    let config = ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()?
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::new(verifier))
-        .with_no_client_auth();
-    let name = ServerName::try_from(host.to_string()).map_err(|_| anyhow!(t!("Invalid bastion address", "Adresse du bastion invalide")))?;
-    let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| anyhow!("{}", t!(format!("Bastion unreachable ({host}:{port}): {e}"), format!("Bastion injoignable ({host}:{port}) : {e}"))))?;
-    let mut tls = tokio_rustls::TlsConnector::from(Arc::new(config))
-        .connect(name, tcp)
-        .await
-        .map_err(|e| anyhow!("{}", t!(format!("Bastion {host}:{port}: {e}"), format!("Bastion {host}:{port} : {e}"))))?;
+    let mut tls = pinned_tls(host, port, fingerprint).await?;
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
     let local = listener.local_addr()?.port();
     tauri::async_runtime::spawn(async move {
@@ -184,6 +172,24 @@ async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u1
         }
     });
     Ok(local)
+}
+
+/// Connexion TLS à l'API du bastion, certificat vérifié par son empreinte.
+async fn pinned_tls(host: &str, port: u16, fingerprint: &str) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let verifier = Pinned { expected: Some(fingerprint.to_string()), seen: Arc::default(), provider: provider.clone() };
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_no_client_auth();
+    let name = ServerName::try_from(host.to_string()).map_err(|_| anyhow!(t!("Invalid bastion address", "Adresse du bastion invalide")))?;
+    let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| anyhow!("{}", t!(format!("Bastion unreachable ({host}:{port}): {e}"), format!("Bastion injoignable ({host}:{port}) : {e}"))))?;
+    let tls = tokio_rustls::TlsConnector::from(Arc::new(config))
+        .connect(name, tcp)
+        .await
+        .map_err(|e| anyhow!("{}", t!(format!("Bastion {host}:{port}: {e}"), format!("Bastion {host}:{port} : {e}"))))?;
+    Ok(tls)
 }
 
 /// Appel de l'API. Erreur « SESSION_EXPIREE » si le jeton n'est plus valable.
@@ -617,4 +623,148 @@ pub fn bastion_rdp_replay_seek(replay: String, t: f64) -> CmdResult<()> {
 #[tauri::command]
 pub fn bastion_rdp_replay_close(replay: String) {
     replays().lock().unwrap().remove(&replay);
+}
+
+// ---------- Assistance à distance (Portunia Assist) ----------
+
+/// Le relais d'assistance du bastion : actif, autorisé pour ce compte, adresse à donner.
+#[tauri::command]
+pub async fn bastion_assist_status(state: State<'_, AppState>, id: String) -> CmdResult<Value> {
+    state.unlocked()?;
+    let mut b = find(&state.data_dir, &id).map_err(full)?;
+    authed(&state.data_dir, &mut b, reqwest::Method::GET, "/assistance", None).await.map_err(full)
+}
+
+/// Rejoint la personne aidée par le relais du bastion, avec le code qu'elle a lu : échange de
+/// clés authentifié par le code (le relais ne peut ni lire ni se faire passer pour l'un des deux),
+/// attente de son accord, puis Bureau à distance dans le canal chiffré, dans un onglet.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn bastion_assist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    code: String,
+    cols: u16,
+    rows: u16,
+    on_event: Channel,
+) -> CmdResult<ConnectResponse> {
+    use assist_proto::{Code, Handshake, Kind, Role};
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
+
+    state.unlocked()?;
+    let code = Code::parse(&code).map_err(|_| t!("Invalid code: 9 digits expected", "Code invalide : 9 chiffres attendus").to_string())?;
+    let b = find(&state.data_dir, &id).map_err(full)?;
+    let jeton = token(&b).map_err(full)?;
+    let tls = pinned_tls(&b.host, b.api_port, &b.api_fingerprint).await.map_err(full)?;
+    let mut request = format!("wss://{}:{}/api/v1/assistance/{}", b.host, b.api_port, code.nameplate).into_client_request().map_err(err)?;
+    let h = request.headers_mut();
+    h.insert("authorization", format!("Bearer {jeton}").parse().map_err(err)?);
+    h.insert("accept-language", crate::lang::code().parse().map_err(err)?);
+    let (mut ws, _) = tokio_tungstenite::client_async(request, tls).await.map_err(|e| match e {
+        tokio_tungstenite::tungstenite::Error::Http(r) if r.status() == 401 => "SESSION_EXPIREE".to_string(),
+        tokio_tungstenite::tungstenite::Error::Http(r) => {
+            let body = r.body().as_deref().map(String::from_utf8_lossy).unwrap_or_default();
+            serde_json::from_str::<Value>(&body).ok().and_then(|v| v["erreur"].as_str().map(String::from)).unwrap_or_else(|| r.status().to_string())
+        }
+        e => e.to_string(),
+    })?;
+    let fail = |m: &str| m.to_string();
+    // Relais : la place existe-t-elle encore ?
+    loop {
+        match ws.next().await {
+            Some(Ok(Message::Text(t))) => {
+                let v: Value = serde_json::from_str(&t).unwrap_or(Value::Null);
+                match v["type"].as_str() {
+                    Some("relie") => break,
+                    Some("erreur") => return Err(v["message"].as_str().unwrap_or("?").to_string()),
+                    _ => {}
+                }
+            }
+            Some(Ok(_)) => {}
+            _ => return Err(fail(t!("The relay closed the connection", "Le relais a fermé la connexion"))),
+        }
+    }
+    async fn binary<S: StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin>(ws: &mut S) -> Option<Vec<u8>> {
+        loop {
+            match ws.next().await? {
+                Ok(Message::Binary(b)) => return Some(b.to_vec()),
+                Ok(Message::Close(_)) | Err(_) => return None,
+                Ok(_) => {}
+            }
+        }
+    }
+    let gone = || t!("The person closed Portunia Assist", "La personne a fermé Portunia Assist").to_string();
+    // Échange de clés, puis confirmation : prouve que les deux ont le même code.
+    let (hs, mine) = Handshake::start(Role::Helper, &code);
+    ws.send(Message::Binary(mine.into())).await.map_err(err)?;
+    let peer = binary(&mut ws).await.ok_or_else(gone)?;
+    let (pending, confirm) = hs.finish(&peer).map_err(err)?;
+    ws.send(Message::Binary(confirm.into())).await.map_err(err)?;
+    let peer_confirm = binary(&mut ws).await.ok_or_else(|| t!("Wrong code: check the 9 digits with the person", "Code faux : vérifiez les 9 chiffres avec la personne").to_string())?;
+    let (mut sealer, mut opener) = pending
+        .confirm(&peer_confirm)
+        .map_err(|_| t!("Wrong code: check the 9 digits with the person", "Code faux : vérifiez les 9 chiffres avec la personne").to_string())?;
+    // Accord de la personne (elle voit le nom du compte qui se connecte).
+    let control = loop {
+        let frame = binary(&mut ws).await.ok_or_else(gone)?;
+        let (kind, payload) = opener.open(&frame).map_err(err)?;
+        if kind != Kind::Control {
+            continue;
+        }
+        let v: Value = serde_json::from_slice(&payload).unwrap_or(Value::Null);
+        match v["type"].as_str() {
+            Some("accord") => break v["controle"].as_bool().unwrap_or(false),
+            Some("refus") => return Err(t!("The person declined", "La personne a refusé").into()),
+            _ => {}
+        }
+    };
+    // Le moteur RDP se connecte en local ; ce pont chiffre et déchiffre vers la personne aidée.
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await.map_err(err)?;
+    let port = listener.local_addr().map_err(err)?.port();
+    tauri::async_runtime::spawn(async move {
+        let Ok(Ok((socket, _))) = tokio::time::timeout(std::time::Duration::from_secs(60), listener.accept()).await else { return };
+        let _ = socket.set_nodelay(true);
+        let (mut rd, mut wr) = socket.into_split();
+        let (mut tx, mut rx) = ws.split();
+        let mut buf = vec![0u8; 64 * 1024];
+        loop {
+            tokio::select! {
+                n = rd.read(&mut buf) => match n {
+                    Ok(0) | Err(_) => {
+                        // Onglet fermé : on prévient la personne aidée.
+                        let fin = sealer.seal(Kind::Control, json!({ "type": "fin" }).to_string().as_bytes());
+                        let _ = tx.send(Message::Binary(fin.into())).await;
+                        break;
+                    }
+                    Ok(n) => {
+                        let frame = sealer.seal(Kind::Data, &buf[..n]);
+                        if tx.send(Message::Binary(frame.into())).await.is_err() { break; }
+                    }
+                },
+                m = rx.next() => match m {
+                    Some(Ok(Message::Binary(b))) => match opener.open(&b) {
+                        Ok((Kind::Data, data)) => { if wr.write_all(&data).await.is_err() { break; } }
+                        Ok((Kind::Control, _)) => {}
+                        Err(_) => break,
+                    },
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                    _ => {}
+                },
+            }
+        }
+        let _ = tx.close().await;
+    });
+    let mut values: HashMap<String, Value> = HashMap::new();
+    values.insert("host".into(), json!("127.0.0.1"));
+    values.insert("port".into(), json!(port));
+    values.insert("client".into(), json!("tab"));
+    let name = if control {
+        t!(format!("Assistance · {}", code.display()), format!("Assistance · {}", code.display()))
+    } else {
+        t!(format!("Assistance (view only) · {}", code.display()), format!("Assistance (vue seule) · {}", code.display()))
+    };
+    start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await
 }

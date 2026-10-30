@@ -6,6 +6,8 @@ use ironrdp_server::{KeyboardEvent, MouseEvent, RdpServerInputHandler};
 pub struct Input {
     /// Essais : noter les événements au lieu de les rejouer.
     pub dry_run: bool,
+    /// Vue seule (contrôle non accordé) : tout est ignoré.
+    pub ignore: bool,
     /// Taille de l'écran envoyé, pour convertir la position de la souris.
     pub width: u16,
     pub height: u16,
@@ -14,6 +16,9 @@ pub struct Input {
 
 impl RdpServerInputHandler for Input {
     fn keyboard(&mut self, event: KeyboardEvent) {
+        if self.ignore {
+            return;
+        }
         if self.dry_run {
             self.note(format!("{event:?}"));
             return;
@@ -23,6 +28,9 @@ impl RdpServerInputHandler for Input {
     }
 
     fn mouse(&mut self, event: MouseEvent) {
+        if self.ignore {
+            return;
+        }
         if self.dry_run {
             // Les déplacements sont nombreux : seuls les clics et la molette sont notés.
             if !matches!(event, MouseEvent::Move { .. }) {
