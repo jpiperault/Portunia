@@ -1,167 +1,172 @@
 # Portunia
 
-Gestionnaire de sessions distantes pour Windows : toutes vos connexions (SSH, Bureau à distance, consoles web, Telnet…) dans une seule fenêtre. Léger (Tauri 2 + Rust, interface sans framework) et extensible (un protocole = une extension).
+**English** · [Français](README.fr.md)
 
-Portunia s'appelait **Termoria** jusqu'à la version 0.39. La mise à jour vers Portunia retire l'ancienne application et reprend ses données (sessions, coffre, réglages), copiées au premier lancement ; l'ancien dossier `fr.termoria.app` reste comme copie de secours. Le bastion SSH **Heimdia** s'intègre comme une extension (voir ci-dessous).
+Remote session manager for Windows: all your connections (SSH, Remote Desktop, web consoles, Telnet…) in one window. Lightweight (Tauri 2 + Rust, framework-free interface) and extensible (one protocol = one extension).
 
-## Installer Portunia
+Portunia was called **Termoria** until version 0.39. The update to Portunia removes the old app and takes over its data (sessions, vault, settings), copied on first launch; the old `fr.termoria.app` folder stays as a backup copy. The **Heimdia** SSH and Remote Desktop bastion plugs in as an extension (see below).
 
-Téléchargez `Portunia_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Portunia-releases/releases) et lancez-le (installation pour l'utilisateur courant, sans droits administrateur). Portunia se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
+## Installing Portunia
 
-## Installer les outils de développement (une seule fois)
+Download `Portunia_x.y.z_x64-setup.exe` from the [Releases](https://github.com/jpiperault/Portunia-releases/releases) and run it (installs for the current user, no administrator rights). Portunia then updates itself: a banner offers each new version.
 
-1. **Outils de compilation C++ de Visual Studio** : installez « Build Tools for Visual Studio » et cochez « Développement Desktop en C++ ».
-2. **Rust** : installez `rustup` depuis https://rustup.rs (choisissez la chaîne `stable-x86_64-pc-windows-msvc`).
-3. **Node.js LTS** : https://nodejs.org
-4. WebView2 est déjà présent sur Windows 11.
+## Installing the development tools (once)
 
-## Lancer en développement
+1. **Visual Studio C++ build tools**: install "Build Tools for Visual Studio" and tick "Desktop development with C++".
+2. **Rust**: install `rustup` from https://rustup.rs (choose the `stable-x86_64-pc-windows-msvc` toolchain).
+3. **Node.js LTS**: https://nodejs.org
+4. WebView2 is already present on Windows 11.
+
+## Running in development
 
 ```bash
 npm install
 npm run tauri dev
 ```
 
-La première compilation Rust prend quelques minutes, les suivantes sont rapides. Le moteur RDP (`rdp-helper/`) est compilé automatiquement au lancement.
+The first Rust build takes a few minutes, later ones are fast. The RDP engine (`rdp-helper/`) is built automatically on launch.
 
-## Publier une version
+## Publishing a version
 
-1. Mettre à jour le numéro de version dans `package.json`, `src-tauri/Cargo.toml` et `src-tauri/tauri.conf.json`.
-2. Committer, puis pousser un tag `vX.Y.Z` :
+1. Update the version number in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json`.
+2. Commit, then push a `vX.Y.Z` tag:
    ```bash
    git tag v0.13.0
    git push origin main --tags
    ```
-3. GitHub Actions (`.github/workflows/release.yml`) compile l'installateur, le signe et publie la release dans le dépôt **public** `jpiperault/Portunia-releases` (le code reste privé), avec `latest.json` que Portunia consulte pour se mettre à jour. Secret supplémentaire : `RELEASES_TOKEN`, jeton d'accès avec le droit « Contents : Read and write » sur ce dépôt.
+3. GitHub Actions (`.github/workflows/release.yml`) builds the installer, signs it and publishes the release in the **public** `jpiperault/Portunia-releases` repository (the code stays private), with `latest.json`, which Portunia reads to update itself. A copy of the release, with the list of changes, is also created in this repository. Extra secret: `RELEASES_TOKEN`, an access token with "Contents: Read and write" on that repository.
 
-La signature utilise la clé `~/.tauri/termoria.key` (nom d'origine, gardé) (secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` du dépôt). La clé publique est dans `tauri.conf.json`. **Ne perdez pas la clé privée** : sans elle, les versions installées ne peuvent plus être mises à jour.
+Signing uses the `~/.tauri/termoria.key` key (original name, kept) (repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). The public key is in `tauri.conf.json`. **Do not lose the private key**: without it, installed versions can no longer be updated.
 
-Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (chemin ou contenu de la clé) et son mot de passe, puis `npm run tauri build`. L'installateur est dans `src-tauri/target/release/bundle/nsis/`.
+To build the installer locally: set `TAURI_SIGNING_PRIVATE_KEY` (path or content of the key) and its password, then `npm run tauri build`. The installer is in `src-tauri/target/release/bundle/nsis/`.
 
-## Fonctionnalités
+## Features
 
-| Protocole | Affichage | Remarques |
+| Protocol | Display | Notes |
 |---|---|---|
-| SSH | Onglet terminal | Clé privée, mot de passe ou agent (Pageant / OpenSSH). Serveur de rebond (bastion, comme ProxyJump) : une session SSH enregistrée ou `utilisateur@hôte:port`, jusqu'à 3 rebonds enchaînés (`bastion1,bastion2`), repris de ~/.ssh/config à l'import. Les clés des serveurs sont mémorisées à la première connexion, et une clé qui change bloque la connexion. SSH-2 uniquement, compatible OpenSSH 10. Option « Compatibilité anciens équipements » pour les serveurs qui n'acceptent que des algorithmes anciens (diffie-hellman-group1/14-sha1, aes-cbc, 3des-cbc, hmac-sha1, ssh-dss) : ils ne sont utilisés qu'en dernier recours, avec un avertissement dans le terminal. |
-| Bureau à distance (RDP) | Onglet écran (IronRDP) ou client Windows | Dans un onglet avec le moteur IronRDP (authentification NLA, compte de domaine, presse-papiers partagé, écran adapté automatiquement à la taille de l'onglet), ou dans le client Bureau à distance de Windows au choix. |
-| Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
-| Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
-| VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
-| Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console de Windows Terminal livrée avec Portunia (OpenConsole, plus rapide que celle du système : écho de la frappe 47 → 17 ms, sorties volumineuses 11 → 38 Mo/s). Section « Ce PC », menu « + », Ctrl+Maj+T. |
-| Bastion Heimdia (extension) | Onglet terminal | Section « Bastions » de la barre latérale : on ajoute un bastion [Heimdia](https://github.com/jpiperault/Heimdia) (empreinte du certificat vérifiée, mot de passe et code, première connexion avec mot de passe provisoire et enrôlement du code par code QR). Les serveurs autorisés s'affichent par dossier ; chaque ouverture utilise un jeton à usage unique, sans retaper le code. Modes coffre (compte fourni par le bastion), enregistré (identifiants demandés dans le terminal) et rebond (de bout en bout). Serveurs Windows (badge RDP) : ouverts dans un onglet Bureau à distance à travers le bastion, en rebond (bastion 0.6, connexion chiffrée de bout en bout) ou enregistré (bastion 0.8, passage RDCleanPath : le bastion relaie et enregistre la session sans voir le mot de passe) ; identifiants Windows demandés à l'ouverture et jamais gardés. Signale les sessions qui contournent le bastion. Dans Portunia Équipes : administration du bastion (serveurs et coffre, comptes, groupes, règles, réglages) et audit (menu « Audit » du bastion) : relecture des sessions comme une vidéo, avec la frappe en sous-titres, les pauses sautées, les commandes sensibles repérées, la recherche dans toutes les sessions, les mots de passe tapés masqués (révélables par un administrateur), l’export .cast ou en transcription, et le journal vérifié. Option du bastion : chaque compte relit ses propres sessions (« Mes sessions »). Portail web du bastion (Heimdia 0.7 et suivants) : Administrer › Portail web, un interrupteur pour l’activer ou le couper (les sessions web en cours se ferment), l’adresse publique, le groupe autorisé, les durées, le copier-coller, les clés Turnstile, l’état du tunnel Cloudflare et le bouton « Fermer toutes les sessions web ». Activable dans Extensions. Installation du bastion (assistant `installer.sh`) et ajout dans Portunia pas à pas : [README de Heimdia](https://github.com/jpiperault/Heimdia#installer). |
-| FTP / FTPS | Onglet fichiers | Explorateur en pleine largeur (envoi, téléchargement, glisser-déposer, renommage, suppression). FTPS explicite par défaut, avec reprise de session TLS (exigée par FileZilla Server et vsftpd) et certificats vérifiés par Windows ; certificat auto-signé accepté sur demande. Connexion rouverte d'elle-même après inactivité. `ftps://user@hôte` en connexion rapide. |
-| Stockage S3 (Pro) | Onglet fichiers | Amazon S3 et services compatibles (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…) : compartiments, dossiers, envoi et téléchargement (jusqu'à 5 Go par fichier), renommage et suppression de dossiers entiers. Adressage par chemin pour MinIO / Ceph. Client intégré (signature AWS SigV4), sans le SDK d'Amazon. |
-| Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
+| SSH | Terminal tab | Private key, password or agent (Pageant / OpenSSH). Jump host (bastion, like ProxyJump): a saved SSH session or `user@host:port`, up to 3 chained jumps (`bastion1,bastion2`), taken from ~/.ssh/config on import. Server keys are remembered on first connection, and a changed key blocks the connection. SSH-2 only, compatible with OpenSSH 10. "Legacy equipment compatibility" option for servers that only accept old algorithms (diffie-hellman-group1/14-sha1, aes-cbc, 3des-cbc, hmac-sha1, ssh-dss): used only as a last resort, with a warning in the terminal. |
+| Remote Desktop (RDP) | Screen tab (IronRDP) or Windows client | In a tab with the IronRDP engine (NLA authentication, domain account, shared clipboard, screen automatically fitted to the tab), or in the Windows Remote Desktop client if you prefer. |
+| Web interface | Dedicated window | The web window has no access to the app. |
+| Telnet | Terminal tab | Unencrypted: keep it to the local network. |
+| VNC | Screen tab | Keyboard, mouse, wheel, clipboard both ways, Ctrl+Alt+Del, fit to window. Tight, ZRLE, CopyRect, Raw encodings. |
+| Local shell | Terminal tab | PowerShell 7, Windows PowerShell, Command Prompt, WSL distributions, Git Bash and custom shells, through the Windows Terminal console shipped with Portunia (OpenConsole, faster than the system's: keystroke echo 47 → 17 ms, large outputs 11 → 38 MB/s). "This PC" section, "+" menu, Ctrl+Shift+T. |
+| Heimdia bastion (extension) | Terminal or screen tab | "Bastions" section of the sidebar: add a [Heimdia](https://github.com/jpiperault/Heimdia) bastion (certificate fingerprint checked, password and code, first sign-in with a temporary password and code enrolment by QR code). Allowed servers are shown by folder; each opening uses a one-time token, without typing the code again. Vault (account supplied by the bastion), recorded (credentials asked in the terminal) and jump (end-to-end) modes. Windows servers (RDP badge): opened in a Remote Desktop tab through the bastion, in jump mode (bastion 0.6, end-to-end encrypted) or recorded mode (bastion 0.8, RDCleanPath gateway: the bastion relays and records the session without seeing the password); Windows credentials asked when opening and never kept. Flags sessions that bypass the bastion. In Portunia Teams: bastion administration (servers and vault, accounts, groups, rules, settings) and audit ("Audit" menu of the bastion): video-like session replay, with keystrokes as subtitles, idle time skipped, sensitive commands highlighted, search across all sessions, typed passwords masked (an administrator can reveal them), .cast or transcript export, and the verified audit log. Bastion option: each account replays its own sessions ("My sessions"). Bastion web portal (Heimdia 0.7 and later): Administer › Web portal, a switch to turn it on or off (open web sessions close), public address, allowed group, durations, copy and paste, Turnstile keys, Cloudflare tunnel status and a "Close all web sessions" button. Enabled in Extensions. Installing the bastion (`installer.sh` wizard) and adding it to Portunia step by step: [Heimdia README](https://github.com/jpiperault/Heimdia#install). |
+| FTP / FTPS | Files tab | Full-width browser (upload, download, drag and drop, rename, delete). Explicit FTPS by default, with TLS session resumption (required by FileZilla Server and vsftpd) and certificates checked by Windows; self-signed certificate accepted on request. Connection reopened by itself after inactivity. `ftps://user@host` in quick connect. |
+| S3 storage (Pro) | Files tab | Amazon S3 and compatible services (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…): buckets, folders, upload and download (up to 5 GB per file), renaming and deleting whole folders. Path-style addressing for MinIO / Ceph. Built-in client (AWS SigV4 signing), without Amazon's SDK. |
+| Serial port | Terminal tab | COM ports detected automatically, speed, parity, flow control, line ending. |
 
-Autres fonctions :
+Other features:
 
-- fenêtre « Connexion rapide » (bouton à côté de « Nouvelle session », Ctrl+Maj+Q, ou une adresse seule comme `10.0.0.12` dans la recherche puis Entrée) : seule l’adresse est obligatoire ; protocole, identifiant, port, mot de passe, clé et rebond sont des options facultatives. En SSH, ce qui manque se tape dans le terminal comme avec PuTTY (`login as:`, puis le mot de passe masqué si la clé et l’agent sont refusés). Rien n’est enregistré ;
-- session SSH enregistrée sans identifiant ou sans mot de passe : ils se tapent dans le terminal à chaque connexion (Ctrl+C annule) ;
-- connexion rapide sans créer de session : tapez `ssh deploy@10.0.1.12`, `rdp srv-01`, `vnc nas:5901`, `https://nas:5001` ou `COM3@9600` dans la recherche puis Entrée, ou dans la palette (Ctrl+Maj+O). En SSH, clé par défaut puis agent, sinon le mot de passe est demandé (et jamais enregistré). Historique des connexions récentes, bouton « Enregistrer comme session » ;
-- clés SSH : création Ed25519 ou RSA 4096 dans ~/.ssh (phrase secrète conseillée), copie de la clé publique, installation sur le serveur de l'onglet en un clic (authorized_keys et droits corrigés), puis la session passe à l'authentification par clé (bouton « Clé SSH » ou palette) ;
-- notes par session en Markdown (bouton « Notes », panneau de droite) : titres, listes, cases à cocher cliquables, liens, blocs de code envoyés au terminal d'un clic ; enregistrement automatique, repère dans l'arbre, incluses dans la sauvegarde Portunia ;
-- outils réseau (onglet, palette ou clic droit sur une session) : ping et traceroute sans droits administrateur, test de ports TCP (listes et plages, services reconnus), résolution DNS, Wake-on-LAN (adresse MAC enregistrée sur la session, « Réveiller » au clic droit) ;
-- identifiants partagés : un compte (utilisateur, mot de passe, clé ou agent, domaine) choisi dans plusieurs sessions SSH, RDP ou VNC ; on change le mot de passe une fois, toutes suivent ;
-- palette globale (Ctrl+Maj+O) : aller à une session, un shell local ou une action en quelques lettres ;
-- arbre des sessions avec dossiers et sous-dossiers (dossiers vides possibles), glisser-déposer pour ranger, menu clic droit (dupliquer, ouvrir tout un dossier…), recherche (Ctrl+Maj+K), onglets ;
-- mise en évidence dans le terminal : erreurs en rouge, avertissements en orange, succès en vert, adresses IP en cyan ; règles modifiables (mot, expression régulière, couleur ou fond) dans Paramètres, sans effet sur vim, htop ni les enregistrements ;
-- terminal : recherche dans l'historique (Ctrl+Maj+F), police et taille réglables (Ctrl + molette), copier/coller au clic droit, liens ouverts par Ctrl+clic ;
-- écran partagé (jusqu'à 4 sessions côte à côte) et saisie multiple (Ctrl+Maj+B) pour taper la même chose sur plusieurs serveurs ;
-- commandes enregistrées (Ctrl+Maj+P) : par session, par dossier ou pour toutes, avec variables {{host}}, {{username}}… ;
-- tunnels SSH : port local (ssh -L), proxy SOCKS5 (ssh -D) et port du serveur vers ce PC (ssh -R), ouverts à la connexion ou à la demande, n'écoutant que sur les boucles locales ; repris de ~/.ssh/config et de PuTTY ;
-- X11 : les applications graphiques lancées sur le serveur s'affichent sur ce PC (avec VcXsrv ou X410) ;
-- reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
-- explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi et téléchargement de fichiers ou de dossiers entiers (glisser-déposer compris), édition d'un fichier distant dans votre éditeur avec renvoi automatique à chaque enregistrement, création, renommage, suppression, suivi des transferts ;
-- import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Portunia ;
-- apparence : thème sombre, clair ou comme Windows, 9 palettes de terminal (Dracula, Nord, Solarized…), couleur par dossier (bandeau sur les sessions, onglets et barre d'outils, étiquette « PRODUCTION ») ;
-- tableau de bord du serveur (Pro, sessions SSH vers Linux) : processeur et mémoire avec courbes, swap, charge, disques, processus les plus actifs, services systemd en échec (« Voir » affiche leur journal), relevé toutes les 5 s quand le panneau est visible ;
-- commande sur plusieurs serveurs (Pro) : choix des sessions SSH ou d'un dossier entier (clic droit), commande ou commande enregistrée, 8 serveurs à la fois, résultats côte à côte (code de sortie, durée, sortie, filtre des échecs, copie), confirmation renforcée pour les dossiers rouges ;
-- conteneurs (Pro, sessions SSH) : conteneurs Docker ou Podman et pods Kubernetes du serveur, shell dans un conteneur ou suivi des journaux en un clic (nouvel onglet), démarrer, arrêter, redémarrer ;
-- supervision : pastille verte ou rouge et latence pour chaque serveur, vue d'ensemble, notifications quand un serveur tombe ou revient (Pro) ;
-- enregistrement des sessions terminal (Pro) : fichiers asciicast + texte, lecteur intégré avec vitesse et navigation ;
-- verrouillage par mot de passe maître et Windows Hello, au démarrage et après inactivité (Ctrl+Maj+L) ;
-- éditions Gratuit / Pro / Équipes, licences signées vérifiées hors ligne (Paramètres › Licence) ;
-- mots de passe rangés dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ;
-- sessions enregistrées dans `%APPDATA%\fr.portunia.app\sessions.json`.
+- "Quick connect" window (button next to "New session", Ctrl+Shift+Q, or just an address such as `10.0.0.12` in the search box, then Enter): only the address is required; protocol, login, port, password, key and jump host are optional. With SSH, what is missing is typed in the terminal as with PuTTY (`login as:`, then the hidden password if the key and agent are refused). Nothing is saved;
+- saved SSH session without a login or password: they are typed in the terminal on each connection (Ctrl+C cancels);
+- quick connect without creating a session: type `ssh deploy@10.0.1.12`, `rdp srv-01`, `vnc nas:5901`, `https://nas:5001` or `COM3@9600` in the search box then Enter, or in the palette (Ctrl+Shift+O). With SSH, default key then agent, otherwise the password is asked (and never saved). History of recent connections, "Save as session" button;
+- SSH keys: Ed25519 or RSA 4096 creation in ~/.ssh (passphrase recommended), copy of the public key, one-click install on the server of the tab (authorized_keys and permissions fixed), then the session switches to key authentication ("SSH key" button or palette);
+- notes per session in Markdown ("Notes" button, right panel): headings, lists, clickable checkboxes, links, code blocks sent to the terminal with one click; saved automatically, marker in the tree, included in the Portunia backup;
+- network tools (tab, palette or right click on a session): ping and traceroute without administrator rights, TCP port test (lists and ranges, known services), DNS lookup, Wake-on-LAN (MAC address saved on the session, "Wake up" on right click);
+- shared credentials: one account (user, password, key or agent, domain) chosen in several SSH, RDP or VNC sessions; change the password once, they all follow;
+- global palette (Ctrl+Shift+O): go to a session, a local shell or an action in a few letters;
+- session tree with folders and sub-folders (empty folders allowed), drag and drop to organise, right-click menu (duplicate, open a whole folder…), search (Ctrl+Shift+K), tabs;
+- terminal highlighting: errors in red, warnings in orange, successes in green, IP addresses in cyan; editable rules (word, regular expression, colour or background) in Settings, with no effect on vim, htop or recordings;
+- terminal: history search (Ctrl+Shift+F), adjustable font and size (Ctrl + wheel), copy/paste on right click, links opened with Ctrl+click;
+- split screen (up to 4 sessions side by side) and multi-input (Ctrl+Shift+B) to type the same thing on several servers;
+- saved commands (Ctrl+Shift+P): per session, per folder or for all, with {{host}}, {{username}}… variables;
+- SSH tunnels: local port (ssh -L), SOCKS5 proxy (ssh -D) and server port to this PC (ssh -R), opened on connection or on demand, listening on loopback only; taken from ~/.ssh/config and PuTTY;
+- X11: graphical apps started on the server are shown on this PC (with VcXsrv or X410);
+- automatic reconnection after a network cut or sleep (can be turned off in Settings);
+- server file browser (SFTP) to the right of SSH sessions: browsing, upload and download of files or whole folders (drag and drop included), editing a remote file in your editor with automatic upload on every save, create, rename, delete, transfer tracking;
+- import from ~/.ssh/config, PuTTY and mRemoteNG (with preview and duplicate detection), Portunia backup and restore;
+- appearance: dark, light or Windows theme, 9 terminal palettes (Dracula, Nord, Solarized…), colour per folder (band on sessions, tabs and toolbar, "PRODUCTION" label);
+- server dashboard (Pro, SSH sessions to Linux): CPU and memory with charts, swap, load, disks, busiest processes, failed systemd services ("View" shows their log), refreshed every 5 s while the panel is visible;
+- command on several servers (Pro): choice of SSH sessions or a whole folder (right click), command or saved command, 8 servers at a time, results side by side (exit code, duration, output, failure filter, copy), stronger confirmation for red folders;
+- containers (Pro, SSH sessions): the server's Docker or Podman containers and Kubernetes pods, shell in a container or log follow-up in one click (new tab), start, stop, restart;
+- monitoring: green or red dot and latency for each server, overview, notifications when a server goes down or comes back (Pro);
+- terminal session recording (Pro): asciicast + text files, built-in player with speed and navigation;
+- lock with a master password and Windows Hello, at startup and after inactivity (Ctrl+Shift+L);
+- Free / Pro / Teams editions, signed licences checked offline (Settings › Licence);
+- passwords stored in the Windows Credential Manager, never in clear text on disk;
+- sessions saved in `%APPDATA%\fr.portunia.app\sessions.json`.
 
-Performances : la sortie des terminaux est regroupée côté cœur et envoyée en binaire (7 fois plus de débit avec une source réseau), le rendu passe par la carte graphique quand elle existe (Paramètres › Terminal), seules les lignes visibles sont colorées, et le code des écrans peu utilisés n'est chargé qu'à la demande. Scripts de mesure : `tools/bench`.
+Performance: terminal output is batched in the core and sent as binary (7 times more throughput with a network source), rendering uses the graphics card when there is one (Settings › Terminal), only visible lines are coloured, and the code of rarely used screens is loaded on demand. Benchmark scripts: `tools/bench`.
 
-Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F rechercher, Ctrl+Maj+C / Ctrl+Maj+V copier / coller dans le terminal, F2 renommer, Suppr supprimer.
+Shortcuts: Ctrl+Shift+N new session, Ctrl+Shift+W close tab, Ctrl+Shift+F search, Ctrl+Shift+C / Ctrl+Shift+V copy / paste in the terminal, F2 rename, Del delete.
 
-## Sécurité
+## Security
 
-- **Mots de passe** dans le Gestionnaire d'identifiants Windows, jamais en clair sur le disque ; les sauvegardes et imports n'en contiennent pas.
-- **Données chiffrées** dès qu'un mot de passe maître est défini : sessions, notes, identifiants partagés et empreintes des serveurs (AES-256-GCM, clé de données enveloppée par le mot de passe maître via PBKDF2, copie protégée par le compte Windows pour Windows Hello). Mot de passe oublié sans Windows Hello : données perdues, d'où les **sauvegardes protégées par une phrase de passe** (Importer / exporter).
-- **Verrouillage** par mot de passe maître (PBKDF2, 600 000 itérations) ou Windows Hello : verrouillé, le cœur refuse toute action sensible (frappe dans un terminal, fichiers, export…) et l'interface est inerte ; essais limités (attente croissante après 5 échecs).
-- **Serveurs SSH** : empreinte affichée et confirmée à la première connexion (ou reprise de `~/.ssh/known_hosts`), connexion bloquée si la clé change ; algorithmes anciens seulement sur demande.
-- **Fichiers venus d'un serveur** : noms nettoyés (pas de `..\`, de flux NTFS ni de noms réservés) ; « Modifier » refuse les types que Windows exécuterait (.exe, .bat, .js, .lnk…).
-- **Imports** : seules les valeurs prévues par le formulaire sont gardées (pas de commande cachée).
-- **Terminal** : confirmation avant de coller plusieurs lignes ; liens ouverts seulement en http(s).
-- **Interface** : politique de contenu stricte, fenêtres web sans accès à l'application, mises à jour signées.
-- **Recette** : la liste des tests avant la vente est dans `docs/recette-avant-vente.html` ; le labo de test (serveurs jetables avec Docker Desktop) dans `tools/labo`.
-- **Dépendances** : `cargo audit` et `npm audit` chaque semaine sur GitHub (`.github/workflows/securite.yml`) ; exception documentée dans `src-tauri/.cargo/audit.toml`.
+- **Passwords** in the Windows Credential Manager, never in clear text on disk; backups and imports contain none.
+- **Encrypted data** as soon as a master password is set: sessions, notes, shared credentials and server fingerprints (AES-256-GCM, data key wrapped by the master password via PBKDF2, copy protected by the Windows account for Windows Hello). Forgotten password without Windows Hello: data lost, hence **passphrase-protected backups** (Import / export).
+- **Lock** with a master password (PBKDF2, 600,000 iterations) or Windows Hello: when locked, the core refuses every sensitive action (typing in a terminal, files, export…) and the interface is inert; limited attempts (growing delay after 5 failures).
+- **SSH servers**: fingerprint shown and confirmed on first connection (or taken from `~/.ssh/known_hosts`), connection blocked if the key changes; old algorithms only on request.
+- **Files from a server**: names cleaned (no `..\`, NTFS streams or reserved names); "Edit" refuses types Windows would run (.exe, .bat, .js, .lnk…).
+- **Imports**: only the values expected by the form are kept (no hidden command).
+- **Terminal**: confirmation before pasting several lines; links opened only over http(s).
+- **Interface**: strict content security policy, web windows without access to the app, signed updates.
+- **Acceptance tests**: the pre-sale test list is in `docs/recette-avant-vente.html`; the test lab (throwaway servers with Docker Desktop) in `tools/labo`.
+- **Dependencies**: `cargo audit` and `npm audit` every week on GitHub (`.github/workflows/securite.yml`); documented exception in `src-tauri/.cargo/audit.toml`.
 
 ## Architecture
 
 ```
-src-tauri/src/       cœur (Rust)
-  connector.rs       contrat d'une extension (trait Connector, manifeste, champs, vues)
-  registry.rs        liste des extensions disponibles
-  connectors/        une extension par fichier : ssh, rdp, vnc, web, telnet, serial, local
-                     (+ sftp.rs : fichiers, forward.rs : tunnels)
-  commands.rs        commandes appelées par l'interface
-  store.rs           sessions, dossiers, couleurs et commandes enregistrés (JSON)
-  secrets.rs         Gestionnaire d'identifiants Windows
-  importers.rs       import ssh config / PuTTY / mRemoteNG, sauvegarde
-  license.rs         éditions et vérification des licences (point de contrôle unique)
-  lock.rs            verrouillage (mot de passe maître, Windows Hello)
-  recording.rs       enregistrement des sessions (asciicast, texte)
-  monitor.rs         supervision (test de connexion TCP)
-  transfer.rs        transferts de dossiers entiers, édition de fichiers distants
-src/                 interface (TypeScript, sans framework)
-  main.ts            arbre, onglets, écran partagé, barre d'outils
-  dialog.ts          formulaire généré à partir du manifeste de l'extension
-  terminal.ts        vue terminal (xterm.js)
-  screen.ts          vue écran distant (canvas, clavier, souris)
-  files.ts           explorateur de fichiers du serveur
-  tree.ts            arbre des sessions (dossiers, glisser-déposer)
-  menu.ts            menu contextuel
-  settings.ts        paramètres de l'interface
-  snippets.ts        commandes enregistrées (palette et gestion)
-  tunnels.ts         tunnels SSH (éditeur et suivi)
+src-tauri/src/       core (Rust)
+  connector.rs       extension contract (Connector trait, manifest, fields, views)
+  registry.rs        list of available extensions
+  connectors/        one extension per file: ssh, rdp, vnc, web, telnet, serial, local
+                     (+ sftp.rs: files, forward.rs: tunnels)
+  commands.rs        commands called by the interface
+  store.rs           saved sessions, folders, colours and commands (JSON)
+  secrets.rs         Windows Credential Manager
+  importers.rs       ssh config / PuTTY / mRemoteNG import, backup
+  license.rs         editions and licence checks (single control point)
+  lock.rs            lock (master password, Windows Hello)
+  recording.rs       session recording (asciicast, text)
+  monitor.rs         monitoring (TCP connection test)
+  transfer.rs        whole-folder transfers, remote file editing
+  bastion.rs         Heimdia bastions (API with pinned certificate, one-time tokens)
+src/                 interface (TypeScript, no framework)
+  main.ts            tree, tabs, split screen, toolbar
+  dialog.ts          form generated from the extension's manifest
+  terminal.ts        terminal view (xterm.js)
+  screen.ts          remote screen view (canvas, keyboard, mouse)
+  files.ts           server file browser
+  tree.ts            session tree (folders, drag and drop)
+  menu.ts            context menu
+  settings.ts        interface settings
+  snippets.ts        saved commands (palette and management)
+  tunnels.ts         SSH tunnels (editor and status)
   importexport.ts    import / export
-  updates.ts         mises à jour automatiques
-  security.ts        écran de verrouillage, licence
-  recordings.ts      liste et lecteur des enregistrements
-  monitoring.ts      supervision : pastilles, vue d'ensemble, alertes
-  theme.ts           thèmes, palettes du terminal, couleurs de dossier
-  localshells.ts     shells locaux : section « Ce PC » et réglages
-  extensions.ts      page Extensions
-rdp-helper/          moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
-scripts/             compilation du moteur RDP
-tools/license-tool/  outil de l'éditeur : clé de signature et génération des licences (ne pas distribuer)
-screenshot.html      démonstration avec données fictives pour les captures d'écran
-                     (npx vite, puis /screenshot.html?scene=main ou ?scene=split&theme=light)
-.github/workflows/   publication automatique des versions
+  updates.ts         automatic updates
+  security.ts        lock screen, licence
+  recordings.ts      recordings list and player
+  monitoring.ts      monitoring: dots, overview, alerts
+  theme.ts           themes, terminal palettes, folder colours
+  localshells.ts     local shells: "This PC" section and settings
+  extensions.ts      Extensions page
+  bastion.ts         Heimdia extension: sidebar, sign-in, administration
+  audit.ts           Heimdia audit: sessions and log
+  auditplayer.ts     session player (subtitles, markers, skipped idle time)
+rdp-helper/          RDP engine (IronRDP), separate program started for each RDP session
+scripts/             RDP engine build
+tools/license-tool/  publisher tool: signing key and licence generation (do not distribute)
+screenshot.html      demo with fake data for screenshots
+                     (npx vite, then /screenshot.html?scene=main or ?scene=split&theme=light)
+.github/workflows/   automatic release publishing
 ```
 
-Le cœur ne connaît aucun protocole. Une extension :
+The core knows no protocol. An extension:
 
-1. décrit ses champs (`Manifest.fields`) : l'interface génère le formulaire toute seule ;
-2. indique sa vue : `terminal`, `screen` (écran distant dans un onglet), `desktop` (application externe) ou `web` ;
-3. implémente `connect()`, qui renvoie soit une connexion terminal, soit « ouvert ailleurs ».
+1. describes its fields (`Manifest.fields`): the interface builds the form by itself;
+2. states its view: `terminal`, `screen` (remote screen in a tab), `desktop` (external app) or `web`;
+3. implements `connect()`, which returns either a terminal connection or "opened elsewhere".
 
-### Ajouter un protocole
+### Adding a protocol
 
-1. Créez `src-tauri/src/connectors/monproto.rs` qui implémente `Connector` (prenez `telnet.rs` comme modèle).
-2. Déclarez-le dans `connectors/mod.rs` et enregistrez-le dans `Registry::with_builtins()`.
-3. Facultatif : ajoutez une couleur `.badge-monproto` dans `src/styles.css`.
+1. Create `src-tauri/src/connectors/myproto.rs` implementing `Connector` (use `telnet.rs` as a model).
+2. Declare it in `connectors/mod.rs` and register it in `Registry::with_builtins()`.
+3. Optional: add a `.badge-myproto` colour in `src/styles.css`.
 
-## Composants tiers
+## Third-party components
 
-- Console de Windows Terminal (`conpty.dll`, `OpenConsole.exe`) : Microsoft, licence MIT — voir `src-tauri/conpty/`.
+- Windows Terminal console (`conpty.dll`, `OpenConsole.exe`): Microsoft, MIT licence — see `src-tauri/conpty/`.
 
-## Pistes pour la suite
+## Ideas for later
 
-- Extensions externes chargées sans recompiler (modules WASM).
-
+- External extensions loaded without rebuilding (WASM modules).

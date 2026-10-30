@@ -53,7 +53,7 @@ jobs:
           releaseCommitish: main
           tagName: ${{ github.ref_name }}
           releaseName: Portunia ${{ github.ref_name }}
-          releaseBody: Installez Portunia avec le fichier « setup.exe » ci-dessous. Les versions suivantes s'installent ensuite automatiquement depuis l'application.
+          releaseBody: "Install Portunia with the « setup.exe » file below; later versions then install automatically from the app. — Installez Portunia avec le fichier « setup.exe » ci-dessous ; les versions suivantes s'installent ensuite automatiquement depuis l'application."
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
