@@ -4,10 +4,11 @@
 // enregistrée, la frappe en sous-titres. Mêmes commandes que le lecteur des sessions SSH.
 import { h, icon } from './dom';
 import { LOCALE, t } from './i18n';
+import { detectLayout, LayoutChoice, Line, lineText, typedLines } from './rdpkeys';
 
 /** Réponse de GET /audit/sessions/{id}/enregistrement pour une session RDP. */
 export interface RdpRecording {
-  session: { id: string; compte: string; serveur: string; type: string; detail: string; mode: string; adresse: string; debut: string; fin: string | null; frappe: boolean; octets: number };
+session: { id: string; compte: string; serveur: string; type: string; detail: string; mode: string; adresse: string; debut: string; fin: string | null; frappe: boolean; octets: number };
   rdp: { evenements: RdpEvent[]; duree: number; images: number };
   revele: boolean;
   saisies_masquees: number;
@@ -19,6 +20,7 @@ export interface RdpRecording {
 
 export type RdpEvent =
   | { t: number; k: 'clavier'; disposition: number }
+  | { t: number; k: 'voyants'; f: number }
   | { t: number; k: 'touche'; c: number; e: boolean; r: boolean }
   | { t: number; k: 'unicode'; u: number; r: boolean }
   | { t: number; k: 'clic'; x: number; y: number; b: 'g' | 'd' | 'm' }
@@ -49,6 +51,7 @@ export interface RdpPlayerOptions {
 }
 
 const IDLE = 5;
+const LAYOUT_KEY = 'portunia.rdpReplayLayout';
 
 const fmt = (s: number) => {
   s = Math.max(0, Math.floor(s));
@@ -58,102 +61,13 @@ const fmt = (s: number) => {
   return hh ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`;
 };
 
-// ---------- Frappe : codes de touche → caractères ----------
-
-/** Une touche par code (jeu 1) : [normal, majuscule, AltGr]. */
-type Layout = Record<number, [string, string, string?]>;
-
-const LETTERS_US: Layout = {
-  0x02: ['1', '!'], 0x03: ['2', '@'], 0x04: ['3', '#'], 0x05: ['4', '$'], 0x06: ['5', '%'], 0x07: ['6', '^'], 0x08: ['7', '&'], 0x09: ['8', '*'], 0x0a: ['9', '('], 0x0b: ['0', ')'], 0x0c: ['-', '_'], 0x0d: ['=', '+'],
-  0x10: ['q', 'Q'], 0x11: ['w', 'W'], 0x12: ['e', 'E'], 0x13: ['r', 'R'], 0x14: ['t', 'T'], 0x15: ['y', 'Y'], 0x16: ['u', 'U'], 0x17: ['i', 'I'], 0x18: ['o', 'O'], 0x19: ['p', 'P'], 0x1a: ['[', '{'], 0x1b: [']', '}'],
-  0x1e: ['a', 'A'], 0x1f: ['s', 'S'], 0x20: ['d', 'D'], 0x21: ['f', 'F'], 0x22: ['g', 'G'], 0x23: ['h', 'H'], 0x24: ['j', 'J'], 0x25: ['k', 'K'], 0x26: ['l', 'L'], 0x27: [';', ':'], 0x28: ['\'', '"'], 0x29: ['`', '~'], 0x2b: ['\\', '|'],
-  0x2c: ['z', 'Z'], 0x2d: ['x', 'X'], 0x2e: ['c', 'C'], 0x2f: ['v', 'V'], 0x30: ['b', 'B'], 0x31: ['n', 'N'], 0x32: ['m', 'M'], 0x33: [',', '<'], 0x34: ['.', '>'], 0x35: ['/', '?'], 0x56: ['\\', '|'],
-  0x39: [' ', ' '],
-};
-
-const LETTERS_FR: Layout = {
-  0x02: ['&', '1'], 0x03: ['é', '2', '~'], 0x04: ['"', '3', '#'], 0x05: ['\'', '4', '{'], 0x06: ['(', '5', '['], 0x07: ['-', '6', '|'], 0x08: ['è', '7', '`'], 0x09: ['_', '8', '\\'], 0x0a: ['ç', '9', '^'], 0x0b: ['à', '0', '@'], 0x0c: [')', '°', ']'], 0x0d: ['=', '+', '}'],
-  0x10: ['a', 'A'], 0x11: ['z', 'Z'], 0x12: ['e', 'E', '€'], 0x13: ['r', 'R'], 0x14: ['t', 'T'], 0x15: ['y', 'Y'], 0x16: ['u', 'U'], 0x17: ['i', 'I'], 0x18: ['o', 'O'], 0x19: ['p', 'P'], 0x1a: ['^', '¨'], 0x1b: ['$', '£', '¤'],
-  0x1e: ['q', 'Q'], 0x1f: ['s', 'S'], 0x20: ['d', 'D'], 0x21: ['f', 'F'], 0x22: ['g', 'G'], 0x23: ['h', 'H'], 0x24: ['j', 'J'], 0x25: ['k', 'K'], 0x26: ['l', 'L'], 0x27: ['m', 'M'], 0x28: ['ù', '%'], 0x29: ['²', '²'], 0x2b: ['*', 'µ'],
-  0x2c: ['w', 'W'], 0x2d: ['x', 'X'], 0x2e: ['c', 'C'], 0x2f: ['v', 'V'], 0x30: ['b', 'B'], 0x31: ['n', 'N'], 0x32: [',', '?'], 0x33: [';', '.'], 0x34: [':', '/'], 0x35: ['!', '§'], 0x56: ['<', '>'],
-  0x39: [' ', ' '],
-};
-
-/** Pavé numérique (verrouillage numérique actif). */
-const NUMPAD: Record<number, string> = { 0x47: '7', 0x48: '8', 0x49: '9', 0x4a: '-', 0x4b: '4', 0x4c: '5', 0x4d: '6', 0x4e: '+', 0x4f: '1', 0x50: '2', 0x51: '3', 0x52: '0', 0x53: '.', 0x37: '*' };
-
-/** Touches spéciales, montrées comme des pastilles. Clé : code, « e » pour une touche étendue. */
-const SPECIAL: Record<string, string> = {
-  '28': t('Enter', 'Entrée'), 'e28': t('Enter', 'Entrée'), '14': '⌫', '15': 'Tab', '1': t('Esc', 'Échap'),
-  'e83': t('Del', 'Suppr'), 'e71': t('Home', 'Début'), 'e79': t('End', 'Fin'), 'e72': '↑', 'e80': '↓', 'e75': '←', 'e77': '→', 'e82': 'Ins', 'e73': t('PgUp', 'Pg↑'), 'e81': t('PgDn', 'Pg↓'), 'e91': 'Win', 'e92': 'Win',
-  '59': 'F1', '60': 'F2', '61': 'F3', '62': 'F4', '63': 'F5', '64': 'F6', '65': 'F7', '66': 'F8', '67': 'F9', '68': 'F10', '87': 'F11', '88': 'F12',
-};
-
-/** Disposition française (France, Belgique, Suisse romande, Canada, Luxembourg) : AZERTY sauf Canada/Suisse, gardés en AZERTY par simplicité. */
-const isAzerty = (id: number) => [0x040c, 0x080c, 0x140c, 0x180c].includes(id & 0xffff);
-
-/** Une ligne de frappe : du premier caractère à Entrée (ou un clic). */
-interface Line { t: number; end: number; text: string; keys: { t: number; text?: string; chip?: string }[]; level: '' | 'w' | 'x' }
-
-function typedLines(events: RdpEvent[], sensitive: string[]): Line[] {
-  let layout = LETTERS_US;
-  const mods = { shift: false, ctrl: false, alt: false, altgr: false, caps: false };
-  const lines: Line[] = [];
-  let cur: Line | null = null;
-  const close = (at: number) => {
-    if (cur) { cur.end = at; lines.push(cur); cur = null; }
-  };
-  const add = (at: number, text?: string, chip?: string) => {
-    if (!cur) cur = { t: at, end: Infinity, text: '', keys: [], level: '' };
-    cur.keys.push({ t: at, text, chip });
-    if (text) cur.text += text;
-    if (chip === '⌫') cur.text = cur.text.slice(0, -1);
-  };
-  for (const e of events) {
-    if (e.k === 'clavier') { layout = isAzerty(e.disposition) ? LETTERS_FR : LETTERS_US; continue; }
-    if (e.k === 'clic') { close(e.t); continue; }
-    if (e.k === 'unicode') { if (!e.r) add(e.t, String.fromCharCode(e.u)); continue; }
-    if (e.k !== 'touche') continue;
-    const down = !e.r;
-    // Modificateurs.
-    if (e.c === 0x2a || e.c === 0x36) { mods.shift = down; continue; }
-    if (e.c === 0x1d) { mods.ctrl = down; continue; }
-    if (e.c === 0x38) { if (e.e) mods.altgr = down; else mods.alt = down; continue; }
-    if (e.c === 0x3a) { if (down) mods.caps = !mods.caps; continue; }
-    if (!down) continue;
-    const special = SPECIAL[`${e.e ? 'e' : ''}${e.c}`];
-    if (special) {
-      add(e.t, undefined, special);
-      if (e.c === 0x1c) close(e.t);
-      continue;
-    }
-    if (!e.e && NUMPAD[e.c]) { add(e.t, NUMPAD[e.c]); continue; }
-    if (e.e && e.c === 0x35) { add(e.t, '/'); continue; }
-    const key = layout[e.c];
-    if (!key) continue;
-    if ((mods.ctrl && !mods.alt) || (mods.alt && !mods.ctrl && !mods.altgr)) {
-      // Raccourci (Ctrl+C, Alt+Tab…) : une pastille.
-      add(e.t, undefined, `${mods.ctrl ? 'Ctrl+' : 'Alt+'}${key[0].toUpperCase()}`);
-      continue;
-    }
-    const altgr = mods.altgr || (mods.ctrl && mods.alt);
-    const letter = /^[a-z]$/.test(key[0]);
-    const upper = letter ? mods.shift !== mods.caps : mods.shift || (layout === LETTERS_FR && mods.caps && /^[0-9]$/.test(key[1]));
-    add(e.t, altgr ? key[2] ?? '' : upper ? key[1] : key[0]);
-  }
-  close(Infinity);
-  for (const l of lines) {
-    const text = l.text.toLowerCase();
-    l.level = sensitive.some((c) => text.includes(c)) ? 'x' : l.keys.some((k) => k.chip === 'Ctrl+C') ? 'w' : '';
-  }
-  return lines.filter((l) => l.keys.length);
-}
-
 export class RdpPlayer {
   private readonly events: RdpEvent[];
   private readonly duration: number;
   private readonly idle: [number, number][] = [];
-  private readonly lines: Line[];
+  private lines: Line[] = [];
+  private readonly sensitive: string[];
+  private layout: LayoutChoice = 'auto';
   private readonly clicks: RdpEvent[];
   private readonly clips: Extract<RdpEvent, { k: 'presse-papiers' }>[];
   private readonly moves: Extract<RdpEvent, { k: 'souris' | 'clic' }>[];
@@ -195,13 +109,15 @@ export class RdpPlayer {
     this.events = [...rec.rdp.evenements].sort((a, b) => a.t - b.t);
     this.duration = Math.max(1, rec.rdp.duree + 1);
     // Pauses : rien de la part de l'utilisateur pendant plus de IDLE secondes.
-    const activity = this.events.filter((e) => e.k !== 'clavier').map((e) => e.t);
+    const activity = this.events.filter((e) => e.k !== 'clavier' && e.k !== 'voyants').map((e) => e.t);
     for (let i = 1; i < activity.length; i++) {
       if (activity[i] - activity[i - 1] > IDLE) this.idle.push([activity[i - 1] + 1, activity[i] - 0.5]);
     }
     if (activity.length && this.duration - activity[activity.length - 1] > IDLE + 2) this.idle.push([activity[activity.length - 1] + 1, this.duration - 1]);
     this.withInput = this.events.some((e) => e.k === 'touche' || e.k === 'unicode');
-    this.lines = typedLines(this.events, rec.commandes_sensibles.map((c) => c.toLowerCase()).filter(Boolean));
+    this.sensitive = rec.commandes_sensibles.map((c) => c.toLowerCase()).filter(Boolean);
+    try { this.layout = (localStorage.getItem(LAYOUT_KEY) as LayoutChoice | null) ?? 'auto'; } catch { /* valeur par défaut */ }
+    this.decodeKeys();
     this.clicks = this.events.filter((e) => e.k === 'clic');
     this.clips = this.events.filter((e): e is Extract<RdpEvent, { k: 'presse-papiers' }> => e.k === 'presse-papiers');
     this.moves = this.events.filter((e): e is Extract<RdpEvent, { k: 'souris' | 'clic' }> => e.k === 'souris' || e.k === 'clic');
@@ -214,6 +130,11 @@ export class RdpPlayer {
       this.engine = engine;
       this.seek(Math.max(0, (opts.start ?? 0) - 0.5));
     }).catch((e) => { this.loading.textContent = String(e?.message ?? e); this.loading.classList.add('err'); });
+  }
+
+  /** Relit la frappe avec la disposition choisie. */
+  private decodeKeys() {
+    this.lines = typedLines(this.events, this.sensitive, this.layout === 'auto' ? detectLayout(this.events) : this.layout);
   }
 
   // ---------- Moteur ----------
@@ -309,6 +230,14 @@ export class RdpPlayer {
     this.track.addEventListener('pointerdown', (e) => { this.track.setPointerCapture(e.pointerId); fromPointer(e); });
     this.track.addEventListener('pointermove', (e) => { if (this.track.hasPointerCapture(e.pointerId)) fromPointer(e); });
 
+    const detected = detectLayout(this.events).toUpperCase();
+    const layout = this.withInput ? h('select', { class: 'ap-speed', 'aria-label': t('Keyboard layout', 'Disposition du clavier'), title: t('Keyboard layout used to read the keystrokes', 'Disposition du clavier utilisée pour lire la frappe'), onchange: (e: Event) => {
+      this.layout = (e.target as HTMLSelectElement).value as LayoutChoice;
+      try { localStorage.setItem(LAYOUT_KEY, this.layout); } catch { /* choix non retenu */ }
+      this.decodeKeys();
+      this.renderList();
+      this.render();
+    } }, ...[['auto', `Auto (${detected})`], ['azerty', 'AZERTY'], ['qwerty', 'QWERTY']].map(([v, label]) => h('option', { value: v, selected: v === this.layout }, label))) : null;
     const speed = h('select', { class: 'ap-speed', 'aria-label': t('Speed', 'Vitesse'), onchange: (e: Event) => { this.speed = Number((e.target as HTMLSelectElement).value); } },
       ...[1, 2, 4, 8, 16].map((v) => h('option', { value: String(v), selected: v === this.speed }, `${v}×`)));
     const toggleBtn = (label: (Node | string)[], title: string, on: boolean, change: (on: boolean) => void, disabled = false) => {
@@ -331,7 +260,7 @@ export class RdpPlayer {
         h('button', { class: 'ap-btn', 'aria-label': t('Forward 10 seconds', 'Avancer de 10 secondes'), onclick: () => this.seek(this.position + 10) }, '+10 s'),
         this.clock, h('span', { class: 'grow' }),
         toggleBtn([t('Skip pauses', 'Sauter les pauses')], t(`Skips moments without activity (more than ${IDLE} s)`, `Passe les moments sans activité (plus de ${IDLE} s)`), true, (v) => { this.skip = v; }),
-        speed, cc, full));
+        layout, speed, cc, full));
 
     // Panneau : événements, informations.
     const tabs = h('div', { class: 'ap-tabs', role: 'tablist' });
@@ -400,8 +329,10 @@ export class RdpPlayer {
     let typed = '';
     const flush = () => { if (typed) { out.push(h('span', { class: 'ap-typed' }, typed)); typed = ''; } };
     for (const k of l.keys) {
-      if (k.t > until) break;
+      // Les touches restent à leur place dans la ligne : l'ordre n'est pas toujours celui du temps.
+      if (k.t > until) continue;
       if (k.chip) { flush(); out.push(h('span', { class: `${chip}${k.chip === '⌫' ? ' del' : ''}` }, k.chip)); }
+      else if (k.gone !== undefined && k.gone <= until) { flush(); out.push(h('s', { class: 'ap-erased', title: t('Erased', 'Effacé') }, k.text ?? '')); }
       else if (k.text) typed += k.text;
     }
     flush();
@@ -533,10 +464,11 @@ export class RdpPlayer {
         `Début ${new Date(s.debut).toLocaleString(LOCALE)} · fin ${s.fin ? new Date(s.fin).toLocaleString(LOCALE) : 'en cours'}`),
       `Signature ${this.rec.signature} · SHA-256 ${this.rec.empreinte}`,
       this.withInput ? t('Keystrokes recorded', 'Frappe enregistrée') : t('Keystrokes not recorded', 'Frappe non enregistrée'),
+      this.withInput ? t('Erased text is shown between ~tildes~.', 'Le texte effacé figure entre ~tildes~.') : '',
       '',
     ];
     const rows: [number, string][] = [
-      ...this.lines.map((l): [number, string] => [l.t, l.keys.map((k) => k.text ?? `[${k.chip}]`).join('')]),
+      ...this.lines.map((l): [number, string] => [l.t, lineText(l)]),
       ...this.clicks.map((c): [number, string] => [c.t, t(`(click ${c.k === 'clic' ? `${c.x},${c.y}` : ''})`, `(clic ${c.k === 'clic' ? `${c.x},${c.y}` : ''})`)]),
       ...this.clips.map((c): [number, string] => [c.t, `(${this.clipLabel(c)})`]),
     ].sort((a, b) => a[0] - b[0]);

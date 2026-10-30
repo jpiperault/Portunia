@@ -735,6 +735,7 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .ap-typed { white-space: pre-wrap; }
 .ap-key { font: 600 11px 'Segoe UI', system-ui, sans-serif; background: #3a3d46; border: 1px solid #555a66; border-bottom-width: 2px; border-radius: 4px; padding: 0 6px; color: #fff; }
 .ap-key.del { color: #ffb4b4; }
+.ap-erased { opacity: .55; text-decoration-color: #ff9c9c; white-space: pre-wrap; }
 .ap-mask { font: 600 11px 'Segoe UI', system-ui, sans-serif; color: #ffd28a; background: rgb(240 163 91 / .22); border-radius: 4px; padding: 1px 6px; }
 .ap-key.sm, .ap-mask.sm { font-size: 10px; padding: 0 4px; }
 .ap-key.sm { background: var(--chip-bg); border-color: var(--line-strong); color: var(--text-2); }

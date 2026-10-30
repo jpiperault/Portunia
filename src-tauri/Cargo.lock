@@ -3762,7 +3762,7 @@ dependencies = [
 
 [[package]]
 name = "portunia"
-version = "0.48.1"
+version = "0.48.2"
 dependencies = [
  "anyhow",
  "assist-proto",
