@@ -91,7 +91,7 @@ pub fn detect() -> Vec<ShellSpec> {
     }
     let cmd = env_path("ComSpec").unwrap_or_else(|| system.join("cmd.exe"));
     if cmd.is_file() {
-        out.push(spec("cmd", "Invite de commandes", cmd, &[], "cmd"));
+        out.push(spec("cmd", t!("Command Prompt", "Invite de commandes"), cmd, &[], "cmd"));
     }
     if let Some(wsl) = Some(system.join("wsl.exe")).filter(|p| p.is_file()) {
         for distro in wsl_distributions() {
@@ -117,11 +117,11 @@ fn home() -> PathBuf {
 pub fn open(shell: &ShellSpec, cols: u16, rows: u16, sink: Arc<dyn Sink>) -> Result<Box<dyn TerminalConnection>> {
     let program = Path::new(&shell.command);
     if program.is_absolute() && !program.is_file() {
-        bail!("Programme introuvable : {}", shell.command);
+        bail!("{}", t!(format!("Program not found: {}", shell.command), format!("Programme introuvable : {}", shell.command)));
     }
     let pty = native_pty_system()
         .openpty(PtySize { rows: rows.max(2), cols: cols.max(2), pixel_width: 0, pixel_height: 0 })
-        .map_err(|e| anyhow!("Console Windows indisponible : {e}"))?;
+        .map_err(|e| anyhow!("{}", t!(format!("Windows console unavailable: {e}"), format!("Console Windows indisponible : {e}"))))?;
     let mut command = CommandBuilder::new(&shell.command);
     command.args(&shell.args);
     let cwd = if shell.cwd.trim().is_empty() { home() } else { PathBuf::from(shell.cwd.trim()) };
@@ -130,7 +130,7 @@ pub fn open(shell: &ShellSpec, cols: u16, rows: u16, sink: Arc<dyn Sink>) -> Res
     let child = pty
         .slave
         .spawn_command(command)
-        .map_err(|e| anyhow!("Impossible de lancer {} : {e}", shell.name))?;
+        .map_err(|e| anyhow!("{}", t!(format!("Cannot start {}: {e}", shell.name), format!("Impossible de lancer {} : {e}", shell.name))))?;
     // Le côté « esclave » appartient maintenant au processus lancé.
     drop(pty.slave);
 
@@ -154,7 +154,7 @@ pub fn open(shell: &ShellSpec, cols: u16, rows: u16, sink: Arc<dyn Sink>) -> Res
             let reason = status.filter(|s| !s.success()).map(|s| format!("le shell s'est arrêté (code {})", s.exit_code()));
             sink.closed(reason);
         })
-        .context("Impossible de démarrer la lecture du shell")?;
+        .context(t!("Cannot start reading the shell", "Impossible de démarrer la lecture du shell"))?;
 
     Ok(Box::new(LocalShell { writer: Mutex::new(writer), master: Mutex::new(pty.master), child }))
 }
@@ -208,7 +208,7 @@ pub fn open_elevated(shell: &ShellSpec) -> Result<()> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000);
     }
-    cmd.spawn().context("Impossible de demander les droits administrateur")?;
+    cmd.spawn().context(t!("Cannot ask for administrator rights", "Impossible de demander les droits administrateur"))?;
     Ok(())
 }
 
@@ -219,19 +219,19 @@ impl Connector for LocalShellConnector {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "local".into(),
-            name: "Shell local".into(),
+            name: t!("Local shell", "Shell local").into(),
             version: "0.1.0".into(),
-            description: "PowerShell, Invite de commandes, WSL, Git Bash… de ce PC, dans un onglet.".into(),
+            description: t!("PowerShell, Command Prompt, WSL, Git Bash… of this PC, in a tab.", "PowerShell, Invite de commandes, WSL, Git Bash… de ce PC, dans un onglet.").into(),
             view: ViewKind::Terminal,
             builtin: true,
             file_browser: false,
             port_forwarding: false,
             fields: vec![
-                Field::new("command", "Programme", FieldKind::Suggest { source: "shells".into() })
+                Field::new("command", t!("Program", "Programme"), FieldKind::Suggest { source: "shells".into() })
                     .required()
                     .placeholder("pwsh.exe"),
                 Field::new("args", "Arguments", FieldKind::Text).placeholder("-NoLogo"),
-                Field::new("cwd", "Dossier de départ", FieldKind::File).placeholder("Vide : dossier personnel"),
+                Field::new("cwd", t!("Start folder", "Dossier de départ"), FieldKind::File).placeholder(t!("Empty: home folder", "Vide : dossier personnel")),
             ],
         }
     }
@@ -247,7 +247,7 @@ impl Connector for LocalShellConnector {
     }
 
     fn connect(&self, ctx: ConnectContext) -> Result<Outcome> {
-        let command = ctx.require("command", "Programme")?;
+        let command = ctx.require("command", t!("Program", "Programme"))?;
         let shell = ShellSpec {
             id: "session".into(),
             name: ctx.session_name.clone(),

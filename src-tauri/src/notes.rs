@@ -59,7 +59,7 @@ impl Notes {
 
     fn save(&self) -> Result<()> {
         if self.locked {
-            anyhow::bail!("Portunia est verrouillé : les notes ne sont pas chargées");
+            anyhow::bail!(t!("Portunia is locked: notes are not loaded", "Portunia est verrouillé : les notes ne sont pas chargées"));
         }
         // Écriture atomique (fichier temporaire puis remplacement), chiffrée si besoin.
         crate::vault::write(&self.path, &serde_json::to_string_pretty(&self.notes)?)

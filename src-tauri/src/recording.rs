@@ -180,9 +180,9 @@ pub fn list(dir: &Path) -> Vec<RecordingInfo> {
 pub fn read(dir: &Path, path: &str) -> Result<String> {
     let file = PathBuf::from(path);
     let dir = fs::canonicalize(dir)?;
-    let real = fs::canonicalize(&file).context("Enregistrement introuvable")?;
+    let real = fs::canonicalize(&file).context(t!("Recording not found", "Enregistrement introuvable"))?;
     if !real.starts_with(&dir) || real.extension().is_none_or(|x| x != "cast") {
-        anyhow::bail!("Ce fichier n'est pas un enregistrement de Portunia");
+        anyhow::bail!(t!("This file is not a Portunia recording", "Ce fichier n'est pas un enregistrement de Portunia"));
     }
     Ok(fs::read_to_string(real)?)
 }

@@ -38,55 +38,55 @@ impl Connector for SshConnector {
             id: "ssh".into(),
             name: "SSH".into(),
             version: "0.5.0".into(),
-            description: "Terminal sécurisé : clé privée, mot de passe ou agent.".into(),
+            description: t!("Secure terminal: private key, password or agent.", "Terminal sécurisé : clé privée, mot de passe ou agent.").into(),
             view: ViewKind::Terminal,
             builtin: true,
             file_browser: true,
             port_forwarding: true,
             fields: vec![
-                Field::new("host", "Hôte", FieldKind::Text)
+                Field::new("host", t!("Host", "Hôte"), FieldKind::Text)
                     .required()
-                    .placeholder("serveur.exemple.fr ou 10.0.0.12"),
+                    .placeholder(t!("server.example.com or 10.0.0.12", "serveur.exemple.fr ou 10.0.0.12")),
                 Field::new("port", "Port", FieldKind::Number).default(22),
-                Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
-                    .placeholder("Vide = identifiants propres à cette session"),
-                Field::new("username", "Utilisateur", FieldKind::Text)
-                    .placeholder("Vide = demandé à chaque connexion")
+                Field::new("credential", t!("Shared credentials", "Identifiants partagés"), FieldKind::Suggest { source: "credentials".into() })
+                    .placeholder(t!("Empty = this session's own credentials", "Vide = identifiants propres à cette session")),
+                Field::new("username", t!("User", "Utilisateur"), FieldKind::Text)
+                    .placeholder(t!("Empty = asked at every connection", "Vide = demandé à chaque connexion"))
                     .hidden_by("credential"),
                 Field::new(
                     "auth",
-                    "Authentification",
+                    t!("Authentication", "Authentification"),
                     choice(&[
-                        ("key", "Clé privée"),
-                        ("password", "Mot de passe"),
-                        ("agent", "Agent (Pageant / OpenSSH)"),
+                        ("key", t!("Private key", "Clé privée")),
+                        ("password", t!("Password", "Mot de passe")),
+                        ("agent", t!("Agent (Pageant / OpenSSH)", "Agent (Pageant / OpenSSH)")),
                     ]),
                 )
                 .default("key")
                 .hidden_by("credential"),
-                Field::new("keyPath", "Fichier de clé privée", FieldKind::File)
-                    .placeholder("Vide = ~/.ssh/id_ed25519, id_ecdsa ou id_rsa")
+                Field::new("keyPath", t!("Private key file", "Fichier de clé privée"), FieldKind::File)
+                    .placeholder(t!("Empty = ~/.ssh/id_ed25519, id_ecdsa or id_rsa", "Vide = ~/.ssh/id_ed25519, id_ecdsa ou id_rsa"))
                     .show_if("auth", "key")
                     .hidden_by("credential"),
-                Field::new("passphrase", "Phrase de passe de la clé", FieldKind::Secret)
+                Field::new("passphrase", t!("Key passphrase", "Phrase de passe de la clé"), FieldKind::Secret)
                     .show_if("auth", "key")
                     .hidden_by("credential"),
-                Field::new("password", "Mot de passe", FieldKind::Secret)
-                    .placeholder("Vide = demandé à chaque connexion")
+                Field::new("password", t!("Password", "Mot de passe"), FieldKind::Secret)
+                    .placeholder(t!("Empty = asked at every connection", "Vide = demandé à chaque connexion"))
                     .show_if("auth", "password")
                     .hidden_by("credential"),
                 Field::new(
                     "legacy",
-                    "Compatibilité anciens équipements (autorise des algorithmes faibles)",
+                    t!("Compatibility with older equipment (allows weak algorithms)", "Compatibilité anciens équipements (autorise des algorithmes faibles)"),
                     FieldKind::Bool,
                 )
                 .default(false),
-                Field::new("jump", "Serveur de rebond (bastion)", FieldKind::Suggest { source: "ssh-sessions".into() })
-                    .placeholder("Vide = connexion directe. Session SSH ou utilisateur@hôte:port"),
-                Field::new("mac", "Adresse MAC (Wake-on-LAN)", FieldKind::Text)
-                    .placeholder("Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine"),
-                Field::new("x11", "Afficher les applications graphiques du serveur (X11)", FieldKind::Bool).default(false),
-                Field::new("x11Display", "Serveur X de ce PC", FieldKind::Text)
+                Field::new("jump", t!("Jump server (bastion)", "Serveur de rebond (bastion)"), FieldKind::Suggest { source: "ssh-sessions".into() })
+                    .placeholder(t!("Empty = direct connection. SSH session or user@host:port", "Vide = connexion directe. Session SSH ou utilisateur@hôte:port")),
+                Field::new("mac", t!("MAC address (Wake-on-LAN)", "Adresse MAC (Wake-on-LAN)"), FieldKind::Text)
+                    .placeholder(t!("Optional: AA:BB:CC:DD:EE:FF, to wake the machine up", "Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine")),
+                Field::new("x11", t!("Show the server's graphical applications (X11)", "Afficher les applications graphiques du serveur (X11)"), FieldKind::Bool).default(false),
+                Field::new("x11Display", t!("X server of this PC", "Serveur X de ce PC"), FieldKind::Text)
                     .placeholder("localhost:0 (VcXsrv, X410…)")
                     .show_if("x11", "true"),
                 Field::new("tunnels", "Tunnels", FieldKind::Tunnels),
@@ -117,8 +117,14 @@ impl Connector for SshConnector {
             .unwrap_or_default();
         for spec in tunnels.into_iter().filter(|t| t.auto_start) {
             let line = match tauri::async_runtime::block_on(forwarder.start(spec.clone())) {
-                Ok(()) => format!("\x1b[90m[Portunia] Tunnel ouvert : {}\x1b[0m\r\n", spec.describe()),
-                Err(e) => format!("\x1b[33m[Portunia] Tunnel {} impossible : {e:#}\x1b[0m\r\n", spec.describe()),
+                Ok(()) => t!(
+                    format!("\x1b[90m[Portunia] Tunnel open: {}\x1b[0m\r\n", spec.describe()),
+                    format!("\x1b[90m[Portunia] Tunnel ouvert : {}\x1b[0m\r\n", spec.describe())
+                ),
+                Err(e) => t!(
+                    format!("\x1b[33m[Portunia] Tunnel {} failed: {e:#}\x1b[0m\r\n", spec.describe()),
+                    format!("\x1b[33m[Portunia] Tunnel {} impossible : {e:#}\x1b[0m\r\n", spec.describe())
+                ),
             };
             sink.data(line.as_bytes());
         }
@@ -149,13 +155,13 @@ impl TerminalConnection for SshConnection {
     fn write(&self, data: &[u8]) -> Result<()> {
         self.tx
             .send(Cmd::Write(data.to_vec()))
-            .map_err(|_| anyhow!("Session fermée"))
+            .map_err(|_| anyhow!(t!("Session closed", "Session fermée")))
     }
 
     fn resize(&self, cols: u16, rows: u16) -> Result<()> {
         self.tx
             .send(Cmd::Resize(cols, rows))
-            .map_err(|_| anyhow!("Session fermée"))
+            .map_err(|_| anyhow!(t!("Session closed", "Session fermée")))
     }
 
     fn close(&self) {
@@ -199,7 +205,7 @@ impl RemoteExec for SshExec {
             };
             tokio::time::timeout(Duration::from_secs(30), collect)
                 .await
-                .map_err(|_| anyhow!("Le serveur n'a pas répondu à temps"))?;
+                .map_err(|_| anyhow!(t!("The server did not answer in time", "Le serveur n'a pas répondu à temps")))?;
             Ok(ExecOutput {
                 status,
                 stdout: String::from_utf8_lossy(&stdout).into_owned(),
@@ -227,7 +233,7 @@ async fn open(ctx: &ConnectContext, extras: &Extras) -> Result<(Handle, Channel,
         channel
             .request_x11(false, false, "MIT-MAGIC-COOKIE-1", cookie, 0)
             .await
-            .map_err(|e| anyhow!("Affichage X11 refusé par le serveur : {e} (X11Forwarding yes dans sshd_config ?)"))?;
+            .map_err(|e| anyhow!("{}", t!(format!("X11 display refused by the server: {e} (X11Forwarding yes in sshd_config?)"), format!("Affichage X11 refusé par le serveur : {e} (X11Forwarding yes dans sshd_config ?)"))))?;
     }
     // « remoteCommand » (shell d'un conteneur, journaux…) : lancée à la place du shell, avec terminal.
     match ctx.str("remoteCommand") {
@@ -266,7 +272,7 @@ pub async fn run_command(ctx: &ConnectContext, command: &str, timeout: Duration)
     .await;
     let _ = handle.disconnect(Disconnect::ByApplication, "", "fr").await;
     drop(hops);
-    result.map_err(|_| anyhow!("Pas de fin de la commande après {} s", timeout.as_secs()))?
+    result.map_err(|_| anyhow!("{}", t!(format!("Command did not finish after {} s", timeout.as_secs()), format!("Pas de fin de la commande après {} s", timeout.as_secs()))))?
 }
 
 /// Destination des messages d'une connexion sans terminal : rien n'est affiché.
@@ -290,8 +296,8 @@ fn x11_display(ctx: &ConnectContext) -> Result<Option<String>> {
         return Ok(None);
     }
     let display = ctx.str("x11Display").unwrap_or_else(|| "localhost:0".into());
-    let (host, rest) = display.rsplit_once(':').ok_or_else(|| anyhow!("Écran X11 invalide : {display} (ex. localhost:0)"))?;
-    let number: u16 = rest.split('.').next().unwrap_or("0").parse().map_err(|_| anyhow!("Écran X11 invalide : {display}"))?;
+    let (host, rest) = display.rsplit_once(':').ok_or_else(|| anyhow!("{}", t!(format!("Invalid X11 display: {display} (e.g. localhost:0)"), format!("Écran X11 invalide : {display} (ex. localhost:0)"))))?;
+    let number: u16 = rest.split('.').next().unwrap_or("0").parse().map_err(|_| anyhow!("{}", t!(format!("Invalid X11 display: {display}"), format!("Écran X11 invalide : {display}"))))?;
     let host = if host.is_empty() || host == "localhost" { "127.0.0.1" } else { host };
     Ok(Some(format!("{host}:{}", 6000 + number)))
 }
@@ -306,7 +312,7 @@ const MAX_HOPS: usize = 3;
 /// Renvoie le port local, sur 127.0.0.1, qui accepte une seule connexion (celle du moteur).
 pub fn local_tunnel(ctx: &ConnectContext, host: &str, port: u16) -> Result<u16> {
     let Some(Value::Object(jump)) = ctx.values.get("jumpHost") else {
-        bail!("Serveur de rebond manquant");
+        bail!(t!("Jump server missing", "Serveur de rebond manquant"));
     };
     let mut hop = ctx.clone();
     hop.values = jump.clone().into_iter().collect();
@@ -339,9 +345,9 @@ pub fn local_tunnel(ctx: &ConnectContext, host: &str, port: u16) -> Result<u16> 
 /// (valeurs complètes d'une autre session, préparées par le cœur).
 fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>) -> Pin<Box<dyn Future<Output = Result<(Handle, Hops)>> + Send + 'a>> {
     Box::pin(async move {
-        let host = ctx.require("host", "Hôte")?;
+        let host = ctx.require("host", t!("Host", "Hôte"))?;
         let port = ctx.port(22)?;
-        let user = ctx.require("username", "Utilisateur")?;
+        let user = ctx.require("username", t!("User", "Utilisateur"))?;
 
         let config = Arc::new(client::Config {
             // Détecte une connexion morte en moins d'une minute (réseau coupé, veille).
@@ -365,7 +371,7 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
         let connected = match ctx.values.get("jumpHost") {
             Some(Value::Object(jump)) => {
                 if depth >= MAX_HOPS {
-                    bail!("Trop de serveurs de rebond enchaînés (maximum {MAX_HOPS})");
+                    bail!("{}", t!(format!("Too many chained jump servers (maximum {MAX_HOPS})"), format!("Trop de serveurs de rebond enchaînés (maximum {MAX_HOPS})")));
                 }
                 let mut hop = ctx.clone();
                 hop.values = jump.clone().into_iter().collect();
@@ -373,7 +379,7 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
                 let (bastion, earlier) = session(&hop, depth + 1, None)
                     .await
                     .with_context(|| format!("Serveur de rebond {via}"))?;
-                ctx.sink.data(format!("\x1b[90m[Portunia] Rebond par {via} vers {host}:{port}\x1b[0m\r\n").as_bytes());
+                ctx.sink.data(t!(format!("\x1b[90m[Portunia] Jump through {via} to {host}:{port}\x1b[0m\r\n"), format!("\x1b[90m[Portunia] Rebond par {via} vers {host}:{port}\x1b[0m\r\n")).as_bytes());
                 let tunnel = bastion
                     .channel_open_direct_tcpip(host.clone(), port as u32, "127.0.0.1", 0)
                     .await
@@ -384,7 +390,7 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
             }
             // TCP : 15 s au plus. Poignée de main : plus longue, l'utilisateur peut avoir une empreinte à vérifier.
             _ => match tokio::time::timeout(Duration::from_secs(15), tokio::net::TcpStream::connect((host.as_str(), port))).await {
-                Err(_) => bail!("Pas de réponse de {host}:{port} (délai dépassé)"),
+                Err(_) => bail!("{}", t!(format!("No answer from {host}:{port} (timed out)"), format!("Pas de réponse de {host}:{port} (délai dépassé)"))),
                 Ok(Err(e)) => return Err(anyhow!(e).context(format!("Connexion impossible à {host}:{port}"))),
                 Ok(Ok(tcp)) => {
                     let _ = tcp.set_nodelay(true);
@@ -393,7 +399,7 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
             },
         };
         let mut handle = match connected {
-            Err(_) => bail!("Pas de réponse de {host}:{port} pendant l'établissement de la connexion (délai dépassé)"),
+            Err(_) => bail!("{}", t!(format!("No answer from {host}:{port} while establishing the connection (timed out)"), format!("Pas de réponse de {host}:{port} pendant l'établissement de la connexion (délai dépassé)"))),
             Ok(Ok(handle)) => handle,
             Ok(Err(e)) => {
                 // Clé du serveur refusée : on affiche l'explication détaillée.
@@ -408,7 +414,7 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
             "password" => {
                 let password = ctx
                     .raw("password")
-                    .ok_or_else(|| anyhow!("Aucun mot de passe enregistré pour cette session"))?;
+                    .ok_or_else(|| anyhow!(t!("No saved password for this session", "Aucun mot de passe enregistré pour cette session")))?;
                 auth_password(&mut handle, &user, &password).await?
             }
             "agent" => auth_agent(&mut handle, &user).await?,
@@ -432,7 +438,7 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
                     .str("keyPath")
                     .map(PathBuf::from)
                     .or_else(default_key)
-                    .ok_or_else(|| anyhow!("Aucune clé privée trouvée dans ~/.ssh"))?;
+                    .ok_or_else(|| anyhow!(t!("No private key found in ~/.ssh", "Aucune clé privée trouvée dans ~/.ssh")))?;
                 let key = load_secret_key(&path, ctx.raw("passphrase").as_deref())
                     .with_context(|| format!("Lecture de la clé impossible : {}", path.display()))?;
                 let hash = handle.best_supported_rsa_hash().await?.flatten();
@@ -444,9 +450,19 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
         };
         if !ok {
             bail!(
-                "Authentification refusée pour {user}@{host}.\n\
-                 Vérifiez l'identifiant. Note : par défaut, OpenSSH interdit la connexion \
-                 de root par mot de passe (PermitRootLogin prohibit-password)."
+                "{}",
+                t!(
+                    format!(
+                        "Authentication refused for {user}@{host}.\n\
+                         Check the login. Note: by default, OpenSSH forbids root sign-in \
+                         with a password (PermitRootLogin prohibit-password)."
+                    ),
+                    format!(
+                        "Authentification refusée pour {user}@{host}.\n\
+                         Vérifiez l'identifiant. Note : par défaut, OpenSSH interdit la connexion \
+                         de root par mot de passe (PermitRootLogin prohibit-password)."
+                    )
+                )
             );
         }
 
@@ -488,7 +504,7 @@ async fn auth_agent(handle: &mut client::Handle<Handler>, user: &str) -> Result<
     if let Ok(agent) = AgentClient::connect_pageant().await {
         return try_agent(handle, user, agent).await;
     }
-    bail!("Aucun agent SSH trouvé (service « OpenSSH Authentication Agent » ou Pageant)")
+    bail!(t!("No SSH agent found (« OpenSSH Authentication Agent » service or Pageant)", "Aucun agent SSH trouvé (service « OpenSSH Authentication Agent » ou Pageant)"))
 }
 
 async fn try_agent<S>(handle: &mut client::Handle<Handler>, user: &str, mut agent: AgentClient<S>) -> Result<bool>
@@ -498,14 +514,14 @@ where
     let identities = agent
         .request_identities()
         .await
-        .map_err(|e| anyhow!("Agent SSH : {e}"))?;
+        .map_err(|e| anyhow!("{}", t!(format!("SSH agent: {e}"), format!("Agent SSH : {e}"))))?;
     let hash = handle.best_supported_rsa_hash().await?.flatten();
     for identity in identities {
         let key = identity.public_key().into_owned();
         let result = handle
             .authenticate_publickey_with(user, key, hash, &mut agent)
             .await
-            .map_err(|e| anyhow!("Agent SSH : {e:?}"))?;
+            .map_err(|e| anyhow!("{}", t!(format!("SSH agent: {e:?}"), format!("Agent SSH : {e:?}"))))?;
         if result.success() {
             return Ok(true);
         }
@@ -560,8 +576,8 @@ fn weak_algorithms(names: &Names) -> Vec<String> {
         }
     }
     match names.key {
-        Algorithm::Dsa => weak.push("clé de serveur ssh-dss".into()),
-        Algorithm::Rsa { hash: None } => weak.push("clé de serveur ssh-rsa (SHA-1)".into()),
+        Algorithm::Dsa => weak.push(t!("ssh-dss server key", "clé de serveur ssh-dss").into()),
+        Algorithm::Rsa { hash: None } => weak.push(t!("ssh-rsa server key (SHA-1)", "clé de serveur ssh-rsa (SHA-1)").into()),
         _ => {}
     }
     weak
@@ -593,7 +609,7 @@ async fn pump(
                 Some(ChannelMsg::Data { data }) | Some(ChannelMsg::ExtendedData { data, .. }) => sink.data(&data),
                 Some(ChannelMsg::Eof | ChannelMsg::Close | ChannelMsg::ExitStatus { .. }) => return Ok(()),
                 // Canal coupé sans fin de session : connexion perdue (réseau, veille…).
-                None => bail!("connexion interrompue"),
+                None => bail!(t!("connection interrupted", "connexion interrompue")),
                 Some(_) => {}
             },
         }
@@ -664,9 +680,15 @@ impl client::Handler for Handler {
                     let _ = tokio::io::copy_bidirectional(&mut remote, &mut local).await;
                 }
                 Err(_) if !warned.swap(true, std::sync::atomic::Ordering::Relaxed) => {
-                    sink.data(format!(
-                        "\r\n\x1b[33m[Portunia] Une application graphique veut s'afficher, mais aucun serveur X ne répond sur {display}.\r\n\
-                         Démarrez VcXsrv (« Disable access control » coché) ou X410, puis relancez l'application.\x1b[0m\r\n"
+                    sink.data(t!(
+                        format!(
+                            "\r\n\x1b[33m[Portunia] A graphical application wants to display, but no X server answers on {display}.\r\n\
+                             Start VcXsrv (« Disable access control » checked) or X410, then restart the application.\x1b[0m\r\n"
+                        ),
+                        format!(
+                            "\r\n\x1b[33m[Portunia] Une application graphique veut s'afficher, mais aucun serveur X ne répond sur {display}.\r\n\
+                             Démarrez VcXsrv (« Disable access control » coché) ou X410, puis relancez l'application.\x1b[0m\r\n"
+                        )
                     ).as_bytes());
                 }
                 Err(_) => {}
@@ -685,10 +707,9 @@ impl client::Handler for Handler {
         let weak = weak_algorithms(names);
         if !weak.is_empty() {
             self.sink.data(
-                format!(
-                    "\x1b[33m[Portunia] Attention : connexion peu sûre ({}). \
-                     Mettez à jour l'équipement si possible.\x1b[0m\r\n",
-                    weak.join(", ")
+                t!(
+                    format!("\x1b[33m[Portunia] Warning: weak connection ({}). Update the equipment if possible.\x1b[0m\r\n", weak.join(", ")),
+                    format!("\x1b[33m[Portunia] Attention : connexion peu sûre ({}). Mettez à jour l'équipement si possible.\x1b[0m\r\n", weak.join(", "))
                 )
                 .as_bytes(),
             );
@@ -730,7 +751,7 @@ impl client::Handler for Handler {
         let (host, port) = self.host_id.rsplit_once(':').map(|(h, p)| (h.to_string(), p.parse().unwrap_or(22))).unwrap_or((self.host_id.clone(), 22));
         let openssh = openssh_fingerprints(&host, port);
         let accepted = if openssh.contains(&fingerprint) {
-            self.sink.data(b"\x1b[90m[Portunia] Serveur reconnu (~/.ssh/known_hosts)\x1b[0m\r\n");
+            self.sink.data(t!("\x1b[90m[Portunia] Known server (~/.ssh/known_hosts)\x1b[0m\r\n", "\x1b[90m[Portunia] Serveur reconnu (~/.ssh/known_hosts)\x1b[0m\r\n").as_bytes());
             true
         } else if !openssh.is_empty() {
             *self.rejection.lock().unwrap() = Some(format!(
@@ -742,27 +763,32 @@ impl client::Handler for Handler {
         } else {
             // Première connexion : l'utilisateur confirme l'empreinte, comme avec OpenSSH.
             let question = Confirm {
-                title: format!("Nouveau serveur : {}", self.host_id),
-                message: "Portunia ne connaît pas encore ce serveur. Vérifiez que l'empreinte ci-dessous est bien celle du \
-                          serveur (son administrateur peut l'obtenir avec « ssh-keygen -lf » sur la clé de l'hôte). \
-                          Elle sera mémorisée : un changement futur bloquera la connexion."
-                    .into(),
+                title: t!(format!("New server: {}", self.host_id), format!("Nouveau serveur : {}", self.host_id)),
+                message: t!(
+                    "Portunia does not know this server yet. Check that the fingerprint below is really the \
+                     server's (its administrator can get it with « ssh-keygen -lf » on the host key). \
+                     It will be remembered: a future change will block the connection.",
+                    "Portunia ne connaît pas encore ce serveur. Vérifiez que l'empreinte ci-dessous est bien celle du \
+                     serveur (son administrateur peut l'obtenir avec « ssh-keygen -lf » sur la clé de l'hôte). \
+                     Elle sera mémorisée : un changement futur bloquera la connexion."
+                )
+                .into(),
                 detail: format!("{} {fingerprint}", public.algorithm().as_str()),
-                accept: "Faire confiance et se connecter".into(),
-                reject: "Annuler".into(),
+                accept: t!("Trust and connect", "Faire confiance et se connecter").into(),
+                reject: t!("Cancel", "Annuler").into(),
             };
             let answer = match self.sink.confirm(question) {
                 Some(rx) => matches!(tokio::time::timeout(Duration::from_secs(300), rx).await, Ok(Ok(true))),
                 None => {
-                    *self.rejection.lock().unwrap() = Some(format!(
-                        "Serveur {} jamais vérifié : ouvrez-le une fois dans un onglet pour confirmer sa clé.",
-                        self.host_id
+                    *self.rejection.lock().unwrap() = Some(t!(
+                        format!("Server {} never checked: open it once in a tab to confirm its key.", self.host_id),
+                        format!("Serveur {} jamais vérifié : ouvrez-le une fois dans un onglet pour confirmer sa clé.", self.host_id)
                     ));
                     return Ok(false);
                 }
             };
             if !answer {
-                *self.rejection.lock().unwrap() = Some("Clé du serveur non confirmée : connexion annulée.".into());
+                *self.rejection.lock().unwrap() = Some(t!("Server key not confirmed: connection cancelled.", "Clé du serveur non confirmée : connexion annulée.").into());
             }
             answer
         };
@@ -773,7 +799,7 @@ impl client::Handler for Handler {
             if let Ok(text) = serde_json::to_string_pretty(&known) {
                 let _ = crate::vault::write(&self.known_hosts, &text);
             }
-            self.sink.data(format!("\x1b[90m[Portunia] Nouveau serveur mémorisé ({fingerprint})\x1b[0m\r\n").as_bytes());
+            self.sink.data(t!(format!("\x1b[90m[Portunia] New server remembered ({fingerprint})\x1b[0m\r\n"), format!("\x1b[90m[Portunia] Nouveau serveur mémorisé ({fingerprint})\x1b[0m\r\n")).as_bytes());
         }
         Ok(accepted)
     }

@@ -32,7 +32,7 @@ pub struct KeyInfo {
 }
 
 pub fn ssh_dir() -> Result<PathBuf> {
-    let home = std::env::var_os("USERPROFILE").ok_or_else(|| anyhow!("Dossier personnel introuvable"))?;
+    let home = std::env::var_os("USERPROFILE").ok_or_else(|| anyhow!(t!("Home folder not found", "Dossier personnel introuvable")))?;
     Ok(PathBuf::from(home).join(".ssh"))
 }
 
@@ -105,23 +105,23 @@ fn generate_in(
     rng: &mut impl CryptoRng,
 ) -> Result<KeyInfo> {
     if !valid_name(name) {
-        bail!("Nom de fichier invalide : lettres, chiffres, « . », « - » et « _ » uniquement");
+        bail!(t!("Invalid file name: letters, digits, « . », « - » and « _ » only", "Nom de fichier invalide : lettres, chiffres, « . », « - » et « _ » uniquement"));
     }
     let private_path = dir.join(name);
     let public_path = dir.join(format!("{name}.pub"));
     if private_path.exists() || public_path.exists() {
-        bail!("Une clé « {name} » existe déjà dans {}", dir.display());
+        bail!("{}", t!(format!("A key « {name} » already exists in {}", dir.display()), format!("Une clé « {name} » existe déjà dans {}", dir.display())));
     }
     let algorithm = match kind {
         "ed25519" => Algorithm::Ed25519,
         "rsa" => Algorithm::Rsa { hash: None },
-        other => bail!("Type de clé inconnu : {other}"),
+        other => bail!("{}", t!(format!("Unknown key type: {other}"), format!("Type de clé inconnu : {other}"))),
     };
-    let mut key = PrivateKey::random(rng, algorithm).context("Création de la clé impossible")?;
+    let mut key = PrivateKey::random(rng, algorithm).context(t!("Cannot create the key", "Création de la clé impossible"))?;
     key.set_comment(clean_comment(comment));
     let public = key.public_key().to_openssh()?;
     if let Some(pass) = passphrase.filter(|p| !p.is_empty()) {
-        key = key.encrypt(rng, pass).map_err(|e| anyhow!("Chiffrement de la clé impossible : {e}"))?;
+        key = key.encrypt(rng, pass).map_err(|e| anyhow!("{}", t!(format!("Cannot encrypt the key: {e}"), format!("Chiffrement de la clé impossible : {e}"))))?;
     }
     let private = key.to_openssh(LineEnding::LF)?;
     fs::create_dir_all(dir)?;
@@ -176,7 +176,7 @@ fn install_command(line: &str) -> String {
 }
 
 pub async fn install(exec: &dyn RemoteExec, public: &str) -> Result<Installed> {
-    let line = safe_public_line(public).ok_or_else(|| anyhow!("Clé publique illisible"))?;
+    let line = safe_public_line(public).ok_or_else(|| anyhow!(t!("Unreadable public key", "Clé publique illisible")))?;
     let out = exec.run(install_command(&line)).await?;
     if out.stdout.contains("PORTUNIA_DEJA") {
         Ok(Installed::AlreadyThere)
@@ -185,11 +185,21 @@ pub async fn install(exec: &dyn RemoteExec, public: &str) -> Result<Installed> {
     } else {
         let code = out.status.map(|c| format!(" (code {c})")).unwrap_or_default();
         let detail = format!("{}{code}", out.stderr.trim());
+        let detail = if detail.is_empty() { String::new() } else { format!(" : {detail}") };
         bail!(
-            "Installation impossible{}.\nLe serveur doit être un système de type Unix (Linux, BSD, macOS). \
-             Sous Windows, ajoutez la clé à C:\\Users\\<compte>\\.ssh\\authorized_keys \
-             (administrateurs : C:\\ProgramData\\ssh\\administrators_authorized_keys).",
-            if detail.is_empty() { String::new() } else { format!(" : {detail}") }
+            "{}",
+            t!(
+                format!(
+                    "Installation failed{detail}.\nThe server must be a Unix-like system (Linux, BSD, macOS). \
+                     On Windows, add the key to C:\\Users\\<account>\\.ssh\\authorized_keys \
+                     (administrators: C:\\ProgramData\\ssh\\administrators_authorized_keys)."
+                ),
+                format!(
+                    "Installation impossible{detail}.\nLe serveur doit être un système de type Unix (Linux, BSD, macOS). \
+                     Sous Windows, ajoutez la clé à C:\\Users\\<compte>\\.ssh\\authorized_keys \
+                     (administrateurs : C:\\ProgramData\\ssh\\administrators_authorized_keys)."
+                )
+            )
         )
     }
 }

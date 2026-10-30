@@ -28,22 +28,22 @@ impl Connector for S3Connector {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "s3".into(),
-            name: "Stockage S3".into(),
+            name: t!("S3 storage", "Stockage S3").into(),
             version: "0.1.0".into(),
-            description: "Fichiers d'un stockage objet S3 : AWS, MinIO, Scaleway, OVH, Wasabi…".into(),
+            description: t!("Files on S3 object storage: AWS, MinIO, Scaleway, OVH, Wasabi…", "Fichiers d'un stockage objet S3 : AWS, MinIO, Scaleway, OVH, Wasabi…").into(),
             view: ViewKind::Files,
             builtin: true,
             file_browser: true,
             port_forwarding: false,
             fields: vec![
-                Field::new("endpoint", "Adresse du service", FieldKind::Text)
-                    .placeholder("Vide = Amazon S3 ; ex. https://s3.fr-par.scw.cloud"),
-                Field::new("region", "Région", FieldKind::Text).default("us-east-1").placeholder("eu-west-3, fr-par…"),
-                Field::new("bucket", "Compartiment (bucket)", FieldKind::Text).placeholder("Vide = liste de tous les compartiments"),
-                Field::new("accessKey", "Clé d'accès", FieldKind::Text).required(),
-                Field::new("secretKey", "Clé secrète", FieldKind::Secret),
-                Field::new("pathStyle", "Adressage par chemin (MinIO, Ceph…)", FieldKind::Bool).default(false),
-                Field::new("insecureTls", "Accepter un certificat non vérifié (auto-signé)", FieldKind::Bool).default(false),
+                Field::new("endpoint", t!("Service address", "Adresse du service"), FieldKind::Text)
+                    .placeholder(t!("Empty = Amazon S3; e.g. https://s3.fr-par.scw.cloud", "Vide = Amazon S3 ; ex. https://s3.fr-par.scw.cloud")),
+                Field::new("region", t!("Region", "Région"), FieldKind::Text).default("us-east-1").placeholder("eu-west-3, fr-par…"),
+                Field::new("bucket", t!("Bucket", "Compartiment (bucket)"), FieldKind::Text).placeholder(t!("Empty = list of all buckets", "Vide = liste de tous les compartiments")),
+                Field::new("accessKey", t!("Access key", "Clé d'accès"), FieldKind::Text).required(),
+                Field::new("secretKey", t!("Secret key", "Clé secrète"), FieldKind::Secret),
+                Field::new("pathStyle", t!("Path-style addressing (MinIO, Ceph…)", "Adressage par chemin (MinIO, Ceph…)"), FieldKind::Bool).default(false),
+                Field::new("insecureTls", t!("Accept an unverified certificate (self-signed)", "Accepter un certificat non vérifié (auto-signé)"), FieldKind::Bool).default(false),
             ],
         }
     }
@@ -52,7 +52,7 @@ impl Connector for S3Connector {
         let endpoint = ctx.str("endpoint").map(|e| e.trim_end_matches('/').to_string());
         if let Some(e) = &endpoint {
             if !e.starts_with("https://") && !e.starts_with("http://") {
-                bail!("L'adresse du service doit commencer par https:// (ou http:// pour un service local)");
+                bail!(t!("The service address must start with https:// (or http:// for a local service)", "L'adresse du service doit commencer par https:// (ou http:// pour un service local)"));
             }
         }
         let client = Client {
@@ -62,8 +62,8 @@ impl Connector for S3Connector {
                 .build()?,
             endpoint,
             region: ctx.str("region").unwrap_or_else(|| "us-east-1".into()),
-            access: ctx.require("accessKey", "Clé d'accès")?,
-            secret: ctx.raw("secretKey").ok_or_else(|| anyhow!("Clé secrète manquante"))?,
+            access: ctx.require("accessKey", t!("Access key", "Clé d'accès"))?,
+            secret: ctx.raw("secretKey").ok_or_else(|| anyhow!(t!("Secret key missing", "Clé secrète manquante")))?,
             path_style: ctx.bool("pathStyle"),
         };
         let files = Arc::new(S3Files { client: Arc::new(client), bucket: ctx.str("bucket") });
@@ -232,7 +232,7 @@ impl Client {
             Payload::Empty => req,
             Payload::Unsigned(body, len) => req.header("content-length", len).body(body),
         };
-        let resp = req.send().await.map_err(|e| anyhow!("Service S3 injoignable : {e}"))?;
+        let resp = req.send().await.map_err(|e| anyhow!("{}", t!(format!("S3 service unreachable: {e}"), format!("Service S3 injoignable : {e}"))))?;
         if resp.status().is_success() {
             return Ok(resp);
         }
@@ -267,16 +267,16 @@ fn explain(status: u16, body: &str) -> String {
     let code = tag(body, "Code").unwrap_or_default();
     let message = tag(body, "Message").unwrap_or_default();
     match code.as_str() {
-        "InvalidAccessKeyId" => "Clé d'accès inconnue de ce service S3".into(),
-        "SignatureDoesNotMatch" => "Clé secrète incorrecte (signature refusée)".into(),
-        "AccessDenied" => "Accès refusé : ces clés n'ont pas les droits nécessaires".into(),
-        "NoSuchBucket" => "Compartiment introuvable".into(),
-        "NoSuchKey" => "Fichier introuvable".into(),
+        "InvalidAccessKeyId" => t!("Access key unknown to this S3 service", "Clé d'accès inconnue de ce service S3").into(),
+        "SignatureDoesNotMatch" => t!("Wrong secret key (signature refused)", "Clé secrète incorrecte (signature refusée)").into(),
+        "AccessDenied" => t!("Access denied: these keys lack the needed rights", "Accès refusé : ces clés n'ont pas les droits nécessaires").into(),
+        "NoSuchBucket" => t!("Bucket not found", "Compartiment introuvable").into(),
+        "NoSuchKey" => t!("File not found", "Fichier introuvable").into(),
         "AuthorizationHeaderMalformed" | "IllegalLocationConstraintException" | "PermanentRedirect" => {
             let region = tag(body, "Region").map(|r| format!(" (région attendue : {r})")).unwrap_or_default();
             format!("Mauvaise région pour ce compartiment{region}")
         }
-        "RequestTimeTooSkewed" => "L'horloge de ce PC est trop décalée : la signature est refusée".into(),
+        "RequestTimeTooSkewed" => t!("This PC's clock is too far off: the signature is refused", "L'horloge de ce PC est trop décalée : la signature est refusée").into(),
         "" => format!("Le service S3 a répondu {status}"),
         _ => format!("{code} : {message}"),
     }
@@ -428,7 +428,7 @@ impl S3Files {
 fn need_bucket<'a>(path: &'a str, what: &str) -> Result<(&'a str, &'a str)> {
     match split_path(path) {
         (Some(b), k) if !k.is_empty() => Ok((b, k)),
-        _ => bail!("{what} : choisissez d'abord un compartiment"),
+        _ => bail!("{}", t!(format!("{what}: first choose a bucket"), format!("{what} : choisissez d'abord un compartiment"))),
     }
 }
 
@@ -443,7 +443,7 @@ impl RemoteFiles for S3Files {
 
     fn download(&self, remote: String, local: PathBuf, progress: Progress) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            let (bucket, key) = need_bucket(&remote, "Téléchargement")?;
+            let (bucket, key) = need_bucket(&remote, t!("Download", "Téléchargement"))?;
             let mut resp = self.client.send(reqwest::Method::GET, Some(bucket), key, &[], &[], Payload::Empty).await?;
             let total = resp.content_length().unwrap_or(0);
             let mut file = tokio::fs::File::create(&local).await.with_context(|| format!("Écriture impossible : {}", local.display()))?;
@@ -464,10 +464,10 @@ impl RemoteFiles for S3Files {
 
     fn upload(&self, local: PathBuf, remote: String, progress: Progress) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            let (bucket, key) = need_bucket(&remote, "Envoi")?;
+            let (bucket, key) = need_bucket(&remote, t!("Upload", "Envoi"))?;
             let total = tokio::fs::metadata(&local).await?.len();
             if total > MAX_SINGLE_PUT {
-                bail!("Fichier de plus de 5 Go : envoi en plusieurs parties pas encore pris en charge");
+                bail!(t!("File larger than 5 GB: multipart upload not supported yet", "Fichier de plus de 5 Go : envoi en plusieurs parties pas encore pris en charge"));
             }
             let file = tokio::fs::File::open(&local).await.with_context(|| format!("Lecture impossible : {}", local.display()))?;
             // Le corps est lu par morceaux ; la progression suit ce qui part.
@@ -495,7 +495,7 @@ impl RemoteFiles for S3Files {
 
     fn mkdir(&self, path: String) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            let (bucket, key) = need_bucket(&path, "Nouveau dossier")?;
+            let (bucket, key) = need_bucket(&path, t!("New folder", "Nouveau dossier"))?;
             // S3 n'a pas de dossiers : un objet vide « dossier/ » en tient lieu.
             let marker = format!("{}/", key.trim_end_matches('/'));
             self.client
@@ -507,7 +507,7 @@ impl RemoteFiles for S3Files {
 
     fn remove(&self, path: String, is_dir: bool) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            let (bucket, key) = need_bucket(&path, "Suppression")?;
+            let (bucket, key) = need_bucket(&path, t!("Deletion", "Suppression"))?;
             if !is_dir {
                 return self.delete_key(bucket, key).await;
             }
@@ -522,10 +522,10 @@ impl RemoteFiles for S3Files {
 
     fn rename(&self, from: String, to: String) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            let (bucket, from_key) = need_bucket(&from, "Renommage")?;
-            let (to_bucket, to_key) = need_bucket(&to, "Renommage")?;
+            let (bucket, from_key) = need_bucket(&from, t!("Renaming", "Renommage"))?;
+            let (to_bucket, to_key) = need_bucket(&to, t!("Renaming", "Renommage"))?;
             if bucket != to_bucket {
-                bail!("Renommage entre deux compartiments impossible");
+                bail!(t!("Cannot rename across two buckets", "Renommage entre deux compartiments impossible"));
             }
             // S3 ne renomme pas : copie puis suppression, objet par objet pour un dossier.
             let keys = self.all_keys(bucket, &format!("{from_key}/")).await?;
@@ -549,7 +549,7 @@ struct S3Connection {
 
 impl TerminalConnection for S3Connection {
     fn write(&self, _data: &[u8]) -> Result<()> {
-        bail!("Cet onglet n'a pas de terminal")
+        bail!(t!("This tab has no terminal", "Cet onglet n'a pas de terminal"))
     }
 
     fn resize(&self, _cols: u16, _rows: u16) -> Result<()> {
@@ -615,7 +615,7 @@ mod tests {
         assert_eq!(blocks(xml, "Contents").len(), 1);
         assert_eq!(tag(blocks(xml, "Contents")[0], "Key").unwrap(), "a&b.txt");
         assert_eq!(tag(xml, "IsTruncated").unwrap(), "false");
-        assert!(explain(403, "<Error><Code>SignatureDoesNotMatch</Code></Error>").contains("Clé secrète"));
+        assert!(explain(403, "<Error><Code>SignatureDoesNotMatch</Code></Error>").contains(t!("secret key", "Clé secrète")));
     }
 }
 

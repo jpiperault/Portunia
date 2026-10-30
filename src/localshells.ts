@@ -2,6 +2,7 @@
 import { errorText, shells, ShellSpec } from './api';
 import { h, icon } from './dom';
 import { settings, updateSettings } from './settings';
+import { t } from './i18n';
 
 let detected: ShellSpec[] = [];
 let loaded = false;
@@ -60,11 +61,11 @@ export function shellSettings(toast: (m: string, k?: 'info' | 'error') => void):
         }),
         shellIcon(s),
         h('div', { class: 'grow', style: 'min-width: 0' },
-          h('div', {}, s.name, def?.id === s.id && h('span', { class: 'chip', style: 'margin-left: 8px' }, 'par défaut')),
+          h('div', {}, s.name, def?.id === s.id && h('span', { class: 'chip', style: 'margin-left: 8px' }, t('default', 'par défaut'))),
           h('div', { class: 'mono muted small ellipsis', title: `${s.command} ${s.args.join(' ')}` }, `${s.command} ${s.args.join(' ')}`)),
-        def?.id !== s.id && h('button', { type: 'button', class: 'btn sm', onclick: () => { setDefaultShell(s.id); render(); } }, 'Par défaut'),
+        def?.id !== s.id && h('button', { type: 'button', class: 'btn sm', onclick: () => { setDefaultShell(s.id); render(); } }, t('Default', 'Par défaut')),
         custom && h('button', {
-          type: 'button', class: 'icon-btn sm', 'aria-label': `Retirer ${s.name}`, title: 'Retirer',
+          type: 'button', class: 'icon-btn sm', 'aria-label': `Retirer ${s.name}`, title: t('Remove', 'Retirer'),
           onclick: () => { setLocal({ custom: cfg.custom.filter((c) => c.id !== s.id) }); render(); },
         }, icon('trash', 14)));
     });
@@ -72,23 +73,23 @@ export function shellSettings(toast: (m: string, k?: 'info' | 'error') => void):
     const name = h('input', { type: 'text', placeholder: 'Python 3.13' });
     const command = h('input', { type: 'text', placeholder: 'py.exe', spellcheck: 'false' });
     const args = h('input', { type: 'text', placeholder: '-3.13', spellcheck: 'false' });
-    const cwd = h('input', { type: 'text', placeholder: 'Vide : dossier personnel', spellcheck: 'false' });
+    const cwd = h('input', { type: 'text', placeholder: t('Empty: home folder', 'Vide : dossier personnel'), spellcheck: 'false' });
 
     box.replaceChildren(
-      h('p', { class: 'muted small', style: 'margin: 0' }, 'Shells trouvés sur ce PC. Ceux qui sont cochés apparaissent dans « Ce PC » et dans le menu « + » des onglets. Ctrl+Maj+T ouvre le shell par défaut.'),
-      ...(rows.length ? rows : [h('p', { class: 'muted' }, 'Aucun shell détecté.')]),
+      h('p', { class: 'muted small', style: 'margin: 0' }, t('Shells found on this PC. Checked ones appear under « This PC » and in the tabs\' « + » menu. Ctrl+Shift+T opens the default shell.', 'Shells trouvés sur ce PC. Ceux qui sont cochés apparaissent dans « Ce PC » et dans le menu « + » des onglets. Ctrl+Maj+T ouvre le shell par défaut.')),
+      ...(rows.length ? rows : [h('p', { class: 'muted' }, t('No shell detected.', 'Aucun shell détecté.'))]),
       h('details', { class: 'shell-add' },
-        h('summary', {}, 'Ajouter un shell personnalisé'),
+        h('summary', {}, t('Add a custom shell', 'Ajouter un shell personnalisé')),
         h('div', { class: 'row2' },
-          h('label', { class: 'fld' }, 'Nom', name),
-          h('label', { class: 'fld' }, 'Programme', command)),
+          h('label', { class: 'fld' }, t('Name', 'Nom'), name),
+          h('label', { class: 'fld' }, t('Program', 'Programme'), command)),
         h('div', { class: 'row2' },
           h('label', { class: 'fld' }, 'Arguments', args),
-          h('label', { class: 'fld' }, 'Dossier de départ', cwd)),
+          h('label', { class: 'fld' }, t('Start folder', 'Dossier de départ'), cwd)),
         h('button', {
           type: 'button', class: 'btn primary', style: 'align-self: flex-end',
           onclick: () => {
-            if (!name.value.trim() || !command.value.trim()) return toast('Indiquez un nom et un programme', 'error');
+            if (!name.value.trim() || !command.value.trim()) return toast(t('Give a name and a program', 'Indiquez un nom et un programme'), 'error');
             const spec: ShellSpec = {
               id: `custom:${crypto.randomUUID()}`, name: name.value.trim(), command: command.value.trim(),
               args: splitArgs(args.value), cwd: cwd.value.trim(), icon: 'custom',
@@ -96,10 +97,10 @@ export function shellSettings(toast: (m: string, k?: 'info' | 'error') => void):
             setLocal({ custom: [...cfg.custom, spec] });
             render();
           },
-        }, 'Ajouter')),
+        }, t('Add', 'Ajouter'))),
       h('label', { class: 'check setting' },
         h('input', { type: 'checkbox', checked: cfg.atStartup, onchange: (e: Event) => setLocal({ atStartup: (e.target as HTMLInputElement).checked }) }),
-        h('span', {}, 'Ouvrir le shell par défaut au démarrage de Portunia', h('span', { class: 'muted small block' }, 'Pratique si Portunia remplace Windows Terminal.'))));
+        h('span', {}, t('Open the default shell when Portunia starts', 'Ouvrir le shell par défaut au démarrage de Portunia'), h('span', { class: 'muted small block' }, t('Handy if Portunia replaces Windows Terminal.', 'Pratique si Portunia remplace Windows Terminal.')))));
   };
 
   if (detected.length) render();

@@ -20,26 +20,26 @@ impl Connector for VncConnector {
             id: "vnc".into(),
             name: "VNC".into(),
             version: "0.1.0".into(),
-            description: "Écran distant (Linux, macOS, Raspberry Pi…) affiché dans un onglet.".into(),
+            description: t!("Remote screen (Linux, macOS, Raspberry Pi…) shown in a tab.", "Écran distant (Linux, macOS, Raspberry Pi…) affiché dans un onglet.").into(),
             view: ViewKind::Screen,
             builtin: true,
             file_browser: false,
             port_forwarding: false,
             fields: vec![
-                Field::new("host", "Hôte", FieldKind::Text).required(),
+                Field::new("host", t!("Host", "Hôte"), FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(5900),
-                Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
-                    .placeholder("Vide = identifiants propres à cette session"),
-                Field::new("password", "Mot de passe VNC", FieldKind::Secret).hidden_by("credential"),
-                Field::new("viewOnly", "Lecture seule (ni clavier ni souris)", FieldKind::Bool).default(false),
-                Field::new("mac", "Adresse MAC (Wake-on-LAN)", FieldKind::Text)
-                    .placeholder("Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine"),
+                Field::new("credential", t!("Shared credentials", "Identifiants partagés"), FieldKind::Suggest { source: "credentials".into() })
+                    .placeholder(t!("Empty = this session's own credentials", "Vide = identifiants propres à cette session")),
+                Field::new("password", t!("VNC password", "Mot de passe VNC"), FieldKind::Secret).hidden_by("credential"),
+                Field::new("viewOnly", t!("View only (no keyboard or mouse)", "Lecture seule (ni clavier ni souris)"), FieldKind::Bool).default(false),
+                Field::new("mac", t!("MAC address (Wake-on-LAN)", "Adresse MAC (Wake-on-LAN)"), FieldKind::Text)
+                    .placeholder(t!("Optional: AA:BB:CC:DD:EE:FF, to wake the machine up", "Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine")),
             ],
         }
     }
 
     fn connect(&self, ctx: ConnectContext) -> Result<Outcome> {
-        let host = ctx.require("host", "Hôte")?;
+        let host = ctx.require("host", t!("Host", "Hôte"))?;
         let port = ctx.port(5900)?;
         let password = ctx.raw("password").unwrap_or_default();
         let view_only = ctx.bool("viewOnly");
@@ -47,7 +47,7 @@ impl Connector for VncConnector {
         let client = tauri::async_runtime::block_on(async {
             let tcp = tokio::time::timeout(Duration::from_secs(10), TcpStream::connect((host.as_str(), port)))
                 .await
-                .map_err(|_| anyhow!("Pas de réponse de {host}:{port} (délai dépassé)"))?
+                .map_err(|_| anyhow!("{}", t!(format!("No answer from {host}:{port} (timed out)"), format!("Pas de réponse de {host}:{port} (délai dépassé)"))))?
                 .with_context(|| format!("Connexion impossible à {host}:{port}"))?;
             let handshake = Rfb::new(tcp)
                 .set_auth_method(async move { Ok(password) })
@@ -63,8 +63,8 @@ impl Connector for VncConnector {
                 .try_start();
             let client = tokio::time::timeout(Duration::from_secs(20), handshake)
                 .await
-                .map_err(|_| anyhow!("Le serveur VNC ne répond pas"))?
-                .map_err(|e| anyhow!("Échec de la connexion VNC : {e}"))?
+                .map_err(|_| anyhow!(t!("The VNC server is not answering", "Le serveur VNC ne répond pas")))?
+                .map_err(|e| anyhow!("{}", t!(format!("VNC connection failed: {e}"), format!("Échec de la connexion VNC : {e}"))))?
                 .finish()
                 .map_err(|e| anyhow!("{e}"))?;
             Ok::<VncClient, anyhow::Error>(client)
@@ -112,7 +112,7 @@ impl TerminalConnection for VncSession {
         if matches!(event, InputEvent::Resize { .. }) {
             return Ok(());
         }
-        self.tx.send(Msg::Input(event)).map_err(|_| anyhow!("Session fermée"))
+        self.tx.send(Msg::Input(event)).map_err(|_| anyhow!(t!("Session closed", "Session fermée")))
     }
 }
 

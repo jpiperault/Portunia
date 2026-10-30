@@ -87,9 +87,9 @@ fn explain(engine: &str, output: &str) -> String {
     if lower.contains("permission denied") {
         format!("{engine} refuse l'accès à ce compte. Ajoutez-le au groupe « docker » (sudo usermod -aG docker $USER, puis reconnectez-vous).")
     } else if lower.contains("cannot connect to the docker daemon") || lower.contains("is the docker daemon running") {
-        "Le service Docker n'est pas démarré sur ce serveur.".into()
+        t!("The Docker service is not started on this server.", "Le service Docker n'est pas démarré sur ce serveur.").into()
     } else if lower.contains("connection refused") || lower.contains("unable to connect to the server") || lower.contains("the server could not find") {
-        "kubectl ne joint pas le cluster (configuration ~/.kube/config ?).".into()
+        t!("kubectl cannot reach the cluster (~/.kube/config configuration?).", "kubectl ne joint pas le cluster (configuration ~/.kube/config ?).").into()
     } else {
         output.lines().take(3).collect::<Vec<_>>().join(" ")
     }
@@ -97,7 +97,7 @@ fn explain(engine: &str, output: &str) -> String {
 
 pub fn parse(text: &str) -> Result<Inventory> {
     if !text.contains("@@end") {
-        bail!("Ce serveur ne ressemble pas à un Linux : conteneurs indisponibles");
+        bail!(t!("This server does not look like Linux: containers unavailable", "Ce serveur ne ressemble pas à un Linux : conteneurs indisponibles"));
     }
     let docker = match section(text, "docker") {
         None => Source::Absent,
@@ -155,7 +155,7 @@ fn safe(value: &str) -> Result<&str> {
         && value.len() <= 253
         && value.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
         && !value.starts_with('-');
-    if ok { Ok(value) } else { Err(anyhow!("Nom invalide : {value}")) }
+    if ok { Ok(value) } else { Err(anyhow!("{}", t!(format!("Invalid name: {value}"), format!("Nom invalide : {value}")))) }
 }
 
 /// Shell interactif : bash s'il existe, sinon sh.
@@ -169,7 +169,7 @@ pub fn terminal_command(kind: &str, what: &str, id: &str, namespace: Option<&str
         ("docker", "logs") => format!("exec {ENGINE} logs -f --tail 300 {id}"),
         ("kube", "shell") => format!("exec kubectl exec -it -n {} {id} -- {BEST_SHELL}", safe(namespace.unwrap_or("default"))?),
         ("kube", "logs") => format!("exec kubectl logs -f --tail 300 -n {} {id}", safe(namespace.unwrap_or("default"))?),
-        _ => bail!("Action inconnue : {kind} {what}"),
+        _ => bail!("{}", t!(format!("Unknown action: {kind} {what}"), format!("Action inconnue : {kind} {what}"))),
     })
 }
 
@@ -179,7 +179,7 @@ pub async fn action(exec: &dyn RemoteExec, kind: &str, action: &str, id: &str, n
     let command = match (kind, action) {
         ("docker", "start" | "stop" | "restart") => format!("{ENGINE} {action} {id}"),
         ("kube", "delete") => format!("kubectl delete pod -n {} {id} --wait=false", safe(namespace.unwrap_or("default"))?),
-        _ => bail!("Action inconnue : {kind} {action}"),
+        _ => bail!("{}", t!(format!("Unknown action: {kind} {action}"), format!("Action inconnue : {kind} {action}"))),
     };
     let out = exec.run(format!("{command} 2>&1")).await?;
     if out.status.unwrap_or(1) != 0 {

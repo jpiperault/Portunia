@@ -18,7 +18,7 @@ use anyhow::{bail, Result};
 /// dans un fichier de configuration généré.
 pub fn single_line(value: &str, label: &str) -> Result<()> {
     if value.contains(['\r', '\n']) {
-        bail!("{label} ne doit pas contenir de retour à la ligne");
+        bail!("{}", t!(format!("{label} must not contain a line break"), format!("{label} ne doit pas contenir de retour à la ligne")));
     }
     Ok(())
 }

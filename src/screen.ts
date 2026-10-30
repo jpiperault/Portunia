@@ -3,6 +3,7 @@ import { handleConfirm } from './confirm';
 import { api, ConnectResponse, errorText, InputEvent, ScreenEvent, TermEvent } from './api';
 import { h } from './dom';
 import type { TermState } from './terminal';
+import { t } from './i18n';
 
 /** Ouvre la connexion à la taille demandée (session enregistrée ou connexion rapide). */
 export type ScreenOpener = (width: number, height: number, onEvent: (e: TermEvent) => void) => Promise<ConnectResponse>;
@@ -37,7 +38,7 @@ function decode(b64: string): Uint8Array<ArrayBuffer> {
 }
 
 export class ScreenView {
-  private readonly canvas = h('canvas', { class: 'screen-canvas', tabindex: '0', 'aria-label': 'Écran distant' });
+  private readonly canvas = h('canvas', { class: 'screen-canvas', tabindex: '0', 'aria-label': t('Remote screen', 'Écran distant') });
   private readonly ctx = this.canvas.getContext('2d', { alpha: false })!;
   private readonly status = h('div', { class: 'screen-status' });
   private connectionId: string | null = null;
@@ -83,7 +84,7 @@ export class ScreenView {
   async connectWith(opener: ScreenOpener, label: string) {
     this.opener = opener;
     this.label = label;
-    this.setStatus(`Connexion à ${label}…`);
+    this.setStatus(t(`Connecting to ${label}…`, `Connexion à ${label}…`));
     this.onState('connecting');
     this.connecting = true;
     try {
@@ -104,7 +105,7 @@ export class ScreenView {
       this.focus();
     } catch (e) {
       const reason = errorText(e);
-      this.setStatus(`${reason}\nCliquez ici ou appuyez sur Entrée pour réessayer.`, true);
+      this.setStatus(t(`${reason}\nClick here or press Enter to try again.`, `${reason}\nCliquez ici ou appuyez sur Entrée pour réessayer.`), true);
       this.onState('closed', reason);
     }
   }
@@ -128,7 +129,7 @@ export class ScreenView {
     else if (e.event === 'closed') {
       this.connectionId = null;
       if (this.disposed) return;
-      this.setStatus(e.data ? `Connexion perdue : ${e.data}\nCliquez ici pour vous reconnecter.` : 'Session terminée. Cliquez ici pour vous reconnecter.', !!e.data);
+      this.setStatus(e.data ? t(`Connection lost: ${e.data}\nClick here to reconnect.`, `Connexion perdue : ${e.data}\nCliquez ici pour vous reconnecter.`) : t('Session ended. Click here to reconnect.', 'Session terminée. Cliquez ici pour vous reconnecter.'), !!e.data);
       this.onState('closed', e.data ?? undefined);
     }
   }

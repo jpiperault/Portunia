@@ -13,19 +13,19 @@ use serde::Serialize;
 pub fn resolve(host: &str) -> Result<Vec<IpAddr>> {
     let host = host.trim().trim_start_matches('[').trim_end_matches(']');
     if host.is_empty() {
-        bail!("Indiquez un hôte");
+        bail!(t!("Give a host", "Indiquez un hôte"));
     }
     if let Ok(ip) = host.parse::<IpAddr>() {
         return Ok(vec![ip]);
     }
     let mut ips: Vec<IpAddr> = (host, 0)
         .to_socket_addrs()
-        .map_err(|e| anyhow!("Nom introuvable : {host} ({e})"))?
+        .map_err(|e| anyhow!("{}", t!(format!("Name not found: {host} ({e})"), format!("Nom introuvable : {host} ({e})"))))?
         .map(|a| a.ip())
         .collect();
     ips.dedup();
     if ips.is_empty() {
-        bail!("Nom introuvable : {host}");
+        bail!("{}", t!(format!("Name not found: {host}"), format!("Nom introuvable : {host}")));
     }
     Ok(ips)
 }
@@ -38,7 +38,7 @@ pub fn resolve_v4(host: &str) -> Result<Ipv4Addr> {
             IpAddr::V4(v4) => Some(v4),
             IpAddr::V6(_) => None,
         })
-        .ok_or_else(|| anyhow!("{host} n'a qu'une adresse IPv6 : ping et traceroute ne gèrent que l'IPv4 pour l'instant"))
+        .ok_or_else(|| anyhow!("{}", t!(format!("{host} only has an IPv6 address: ping and traceroute only handle IPv4 for now"), format!("{host} n'a qu'une adresse IPv6 : ping et traceroute ne gèrent que l'IPv4 pour l'instant"))))
 }
 
 /// Réponse à une requête d'écho.
@@ -107,8 +107,8 @@ mod icmp {
 
     fn reason(code: u32) -> String {
         match code {
-            IP_DEST_NET_UNREACHABLE => "réseau injoignable".into(),
-            IP_DEST_HOST_UNREACHABLE => "hôte injoignable".into(),
+            IP_DEST_NET_UNREACHABLE => t!("network unreachable", "réseau injoignable").into(),
+            IP_DEST_HOST_UNREACHABLE => t!("host unreachable", "hôte injoignable").into(),
             IP_DEST_PROT_UNREACHABLE => "protocole injoignable".into(),
             IP_DEST_PORT_UNREACHABLE => "port injoignable".into(),
             other => format!("erreur ICMP {other}"),
@@ -121,7 +121,7 @@ pub use icmp::echo;
 
 #[cfg(not(windows))]
 pub fn echo(_target: Ipv4Addr, _ttl: u8, _timeout: Duration) -> Result<Echo> {
-    bail!("Ping disponible uniquement sous Windows")
+    bail!(t!("Ping only available on Windows", "Ping disponible uniquement sous Windows"))
 }
 
 // ---------- Ports TCP ----------
@@ -141,20 +141,20 @@ pub fn parse_ports(spec: &str) -> Result<Vec<u16>> {
     let mut ports = Vec::new();
     for part in spec.split([',', ' ', ';']).map(str::trim).filter(|p| !p.is_empty()) {
         let (a, b) = part.split_once('-').unwrap_or((part, part));
-        let a: u16 = a.trim().parse().map_err(|_| anyhow!("Port invalide : {part}"))?;
-        let b: u16 = b.trim().parse().map_err(|_| anyhow!("Port invalide : {part}"))?;
+        let a: u16 = a.trim().parse().map_err(|_| anyhow!("{}", t!(format!("Invalid port: {part}"), format!("Port invalide : {part}"))))?;
+        let b: u16 = b.trim().parse().map_err(|_| anyhow!("{}", t!(format!("Invalid port: {part}"), format!("Port invalide : {part}"))))?;
         if a == 0 || b < a {
-            bail!("Plage invalide : {part}");
+            bail!("{}", t!(format!("Invalid range: {part}"), format!("Plage invalide : {part}")));
         }
         ports.extend(a..=b);
         if ports.len() > 1024 {
-            bail!("1024 ports au plus par test");
+            bail!(t!("1024 ports at most per test", "1024 ports au plus par test"));
         }
     }
     ports.sort_unstable();
     ports.dedup();
     if ports.is_empty() {
-        bail!("Indiquez au moins un port");
+        bail!(t!("Give at least one port", "Indiquez au moins un port"));
     }
     Ok(ports)
 }
@@ -204,7 +204,7 @@ pub fn parse_mac(text: &str) -> Result<[u8; 6]> {
     let hex: String = text.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     let separators_ok = text.chars().all(|c| c.is_ascii_hexdigit() || ":-. ".contains(c));
     if hex.len() != 12 || !separators_ok {
-        bail!("Adresse MAC invalide : {text} (attendu AA:BB:CC:DD:EE:FF)");
+        bail!("{}", t!(format!("Invalid MAC address: {text} (expected AA:BB:CC:DD:EE:FF)"), format!("Adresse MAC invalide : {text} (attendu AA:BB:CC:DD:EE:FF)")));
     }
     let mut mac = [0u8; 6];
     for (i, byte) in mac.iter_mut().enumerate() {
@@ -225,7 +225,7 @@ pub fn magic_packet(mac: [u8; 6]) -> Vec<u8> {
 pub fn wake(mac: &str, broadcast: Option<&str>) -> Result<String> {
     let mac = parse_mac(mac)?;
     let target: Ipv4Addr = match broadcast.map(str::trim).filter(|b| !b.is_empty()) {
-        Some(b) => b.parse().map_err(|_| anyhow!("Adresse de diffusion invalide : {b}"))?,
+        Some(b) => b.parse().map_err(|_| anyhow!("{}", t!(format!("Invalid broadcast address: {b}"), format!("Adresse de diffusion invalide : {b}"))))?,
         None => Ipv4Addr::BROADCAST,
     };
     let socket = UdpSocket::bind("0.0.0.0:0")?;

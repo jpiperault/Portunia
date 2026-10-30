@@ -1,5 +1,6 @@
 // Connexion rapide : « ssh deploy@10.0.1.12 », « rdp srv-01 », « https://nas:5001 »…
 import { h, icon } from './dom';
+import { t } from './i18n';
 
 export interface QuickTarget {
   protocol: string;
@@ -98,7 +99,7 @@ export function parseQuick(input: string): QuickTarget | null {
 }
 
 /** Texte d'aide affiché sous la barre de connexion rapide. */
-export const QUICK_HELP = 'adresse seule (fenêtre de connexion) · ssh user@hôte[:port] · ssh -J bastion user@hôte · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · ftps://user@hôte · COM3@9600';
+export const QUICK_HELP = t('address only (connection window) · ssh user@host[:port] · ssh -J bastion user@host · rdp host · vnc host:5901 · telnet host · https://address · ftps://user@host · COM3@9600', 'adresse seule (fenêtre de connexion) · ssh user@hôte[:port] · ssh -J bastion user@hôte · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · ftps://user@hôte · COM3@9600');
 
 // ---------- Historique des connexions rapides ----------
 
@@ -151,16 +152,16 @@ function score(q: string, text: string): number {
 export function openCommandPalette(entries: PaletteEntry[], onQuick: (target: QuickTarget, input: string) => void, initial = '', onAddress?: (address: string) => void) {
   const input = h('input', {
     type: 'search', class: 'palette-input', value: initial, spellcheck: 'false',
-    placeholder: 'Session, shell, action… ou connexion rapide : ssh user@hôte', 'aria-label': 'Rechercher ou se connecter',
+    placeholder: t('Session, shell, action… or quick connect: ssh user@host', 'Session, shell, action… ou connexion rapide : ssh user@hôte'), 'aria-label': t('Search or connect', 'Rechercher ou se connecter'),
   });
   const results = h('div', { class: 'palette-list', role: 'listbox' });
   let shown: PaletteEntry[] = [];
   let index = 0;
 
   const quickEntry = (text: string, target: QuickTarget, recent = false): PaletteEntry => ({
-    label: recent ? text : `Connexion rapide : ${target.name}`,
-    hint: recent ? `${target.protocol.toUpperCase()} · récent` : `${target.protocol.toUpperCase()} · non enregistrée`,
-    group: 'Connexion rapide', icon: target.protocol === 'web' ? 'web' : target.protocol === 'rdp' || target.protocol === 'vnc' ? 'desktop' : 'link',
+    label: recent ? text : t(`Quick connect: ${target.name}`, `Connexion rapide : ${target.name}`),
+    hint: recent ? t(`${target.protocol.toUpperCase()} · recent`, `${target.protocol.toUpperCase()} · récent`) : t(`${target.protocol.toUpperCase()} · not saved`, `${target.protocol.toUpperCase()} · non enregistrée`),
+    group: t('Quick connect', 'Connexion rapide'), icon: target.protocol === 'web' ? 'web' : target.protocol === 'rdp' || target.protocol === 'vnc' ? 'desktop' : 'link',
     action: () => { rememberQuick(text); onQuick(target, text); },
   });
 
@@ -182,7 +183,7 @@ export function openCommandPalette(entries: PaletteEntry[], onQuick: (target: Qu
           .map((x) => x.e)
       : entries;
     const address: PaletteEntry[] = !quick && onAddress && looksLikeAddress(raw)
-      ? [{ label: `Se connecter à ${raw}…`, hint: 'identifiant et mot de passe saisis à la main', group: 'Connexion rapide', icon: 'link', action: () => onAddress(raw) }]
+      ? [{ label: t(`Connect to ${raw}…`, `Se connecter à ${raw}…`), hint: t('login and password typed by hand', 'identifiant et mot de passe saisis à la main'), group: t('Quick connect', 'Connexion rapide'), icon: 'link', action: () => onAddress(raw) }]
       : [];
     shown = [...(quick ? [quickEntry(raw, quick)] : []), ...address, ...recent, ...matched].slice(0, 60);
     index = Math.min(index, Math.max(0, shown.length - 1));
@@ -205,16 +206,16 @@ export function openCommandPalette(entries: PaletteEntry[], onQuick: (target: Qu
     if (e.key === 'ArrowDown') { e.preventDefault(); index = Math.min(index + 1, shown.length - 1); render(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); index = Math.max(index - 1, 0); render(); }
     else if (e.key === 'Enter' && shown[index]) { e.preventDefault(); run(shown[index]); }
-    else if (e.key === 'Delete' && e.shiftKey && shown[index]?.group === 'Connexion rapide') {
+    else if (e.key === 'Delete' && e.shiftKey && shown[index]?.group === t('Quick connect', 'Connexion rapide')) {
       // Maj+Suppr : retirer une entrée de l'historique
       e.preventDefault(); forgetQuick(shown[index].label); render();
     }
   });
 
-  const dialog = h('dialog', { class: 'dialog palette', 'aria-label': 'Palette de commandes' },
+  const dialog = h('dialog', { class: 'dialog palette', 'aria-label': t('Command palette', 'Palette de commandes') },
     input, results,
     h('footer', { class: 'palette-foot' },
-      h('span', { class: 'muted small grow' }, '↑↓ choisir · Entrée ouvrir · Maj+Suppr oublier un récent · Échap fermer')));
+      h('span', { class: 'muted small grow' }, t('↑↓ choose · Enter open · Shift+Del forget a recent one · Esc close', '↑↓ choisir · Entrée ouvrir · Maj+Suppr oublier un récent · Échap fermer'))));
   dialog.addEventListener('close', () => dialog.remove());
   document.body.append(dialog);
   dialog.showModal();
@@ -233,17 +234,17 @@ export function askCredentials(target: QuickTarget, reason: string, passwordOpti
     const pass = h('input', { type: 'password', required: !passwordOptional, autocomplete: 'off' });
     let result: { username: string; password: string } | null = null;
     const form = h('form', { method: 'dialog' },
-      h('header', { class: 'dlg-head' }, h('h2', {}, `Connexion à ${target.values.host ?? target.name}`)),
+      h('header', { class: 'dlg-head' }, h('h2', {}, t(`Connecting to ${target.values.host ?? target.name}`, `Connexion à ${target.values.host ?? target.name}`))),
       h('div', { class: 'dlg-body' },
         h('p', { class: 'muted small', style: 'margin: 0; white-space: pre-line' }, reason),
-        h('label', { class: 'fld' }, 'Identifiant', user),
-        h('label', { class: 'fld' }, passwordOptional ? 'Mot de passe (vide = clé de la session)' : 'Mot de passe', pass),
-        h('p', { class: 'muted small', style: 'margin: 0' }, 'Le mot de passe sert uniquement à cette connexion : il n\'est pas enregistré.')),
+        h('label', { class: 'fld' }, t('Login', 'Identifiant'), user),
+        h('label', { class: 'fld' }, passwordOptional ? t('Password (empty = session key)', 'Mot de passe (vide = clé de la session)') : t('Password', 'Mot de passe'), pass),
+        h('p', { class: 'muted small', style: 'margin: 0' }, t('The password is only used for this connection: it is not saved.', 'Le mot de passe sert uniquement à cette connexion : il n\'est pas enregistré.'))),
       h('footer', { class: 'dlg-foot' },
-        h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, 'Annuler'),
-        h('button', { type: 'submit', class: 'btn primary' }, 'Se connecter')));
+        h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, t('Cancel', 'Annuler')),
+        h('button', { type: 'submit', class: 'btn primary' }, t('Connect', 'Se connecter'))));
     form.addEventListener('submit', () => { result = { username: user.value.trim(), password: pass.value }; });
-    const dialog = h('dialog', { class: 'dialog', 'aria-label': 'Identifiants' }, form);
+    const dialog = h('dialog', { class: 'dialog', 'aria-label': t('Credentials', 'Identifiants') }, form);
     dialog.addEventListener('close', () => { dialog.remove(); resolve(result); });
     document.body.append(dialog);
     dialog.showModal();
@@ -256,7 +257,7 @@ export function askCredentials(target: QuickTarget, reason: string, passwordOpti
 /** Protocoles proposés, et les identifiants que chacun demande. */
 const QUICK_PROTOCOLS: { id: string; label: string; user: boolean; password: boolean }[] = [
   { id: 'ssh', label: 'SSH', user: true, password: true },
-  { id: 'rdp', label: 'Bureau à distance', user: true, password: true },
+  { id: 'rdp', label: t('Remote Desktop', 'Bureau à distance'), user: true, password: true },
   { id: 'ftp', label: 'FTP / FTPS', user: true, password: true },
   { id: 'vnc', label: 'VNC', user: false, password: true },
   { id: 'telnet', label: 'Telnet', user: false, password: false },
@@ -282,21 +283,21 @@ export function openQuickConnect(enabled: (protocol: string) => boolean, initial
     const first = splitTarget(initial);
     let protocol = choices[0];
     const field = (attrs: Record<string, unknown>) => h('input', { type: 'text', spellcheck: 'false', autocomplete: 'off', ...attrs }) as HTMLInputElement;
-    const address = field({ required: true, class: 'quick-address', placeholder: '10.0.0.12, serveur.exemple.fr ou hôte:2222', value: first ? `${first.host}${first.port ? `:${first.port}` : ''}` : initial });
+    const address = field({ required: true, class: 'quick-address', placeholder: t('10.0.0.12, server.example.com or host:2222', '10.0.0.12, serveur.exemple.fr ou hôte:2222'), value: first ? `${first.host}${first.port ? `:${first.port}` : ''}` : initial });
     const user = field({ value: first?.user ?? '' });
     const port = field({ inputmode: 'numeric' });
     const pass = field({ type: 'password' });
-    const key = field({ placeholder: 'Vide = ~/.ssh/id_ed25519, id_ecdsa, id_rsa ou agent' });
-    const jump = field({ placeholder: 'Session SSH ou utilisateur@bastion:port' });
+    const key = field({ placeholder: t('Empty = ~/.ssh/id_ed25519, id_ecdsa, id_rsa or agent', 'Vide = ~/.ssh/id_ed25519, id_ecdsa, id_rsa ou agent') });
+    const jump = field({ placeholder: t('SSH session or user@bastion:port', 'Session SSH ou utilisateur@bastion:port') });
     const optional = h('span', { class: 'muted small' }, ' facultatif');
-    const userField = h('label', { class: 'fld' }, h('span', {}, 'Identifiant', optional.cloneNode(true)), user);
+    const userField = h('label', { class: 'fld' }, h('span', {}, t('Login', 'Identifiant'), optional.cloneNode(true)), user);
     const portField = h('label', { class: 'fld fld-port' }, 'Port', port);
-    const passField = h('label', { class: 'fld' }, h('span', {}, 'Mot de passe', optional.cloneNode(true)), pass);
-    const keyField = h('label', { class: 'fld' }, h('span', {}, 'Clé privée', optional.cloneNode(true)), key);
-    const jumpField = h('label', { class: 'fld' }, h('span', {}, 'Serveur de rebond', optional.cloneNode(true)), jump);
+    const passField = h('label', { class: 'fld' }, h('span', {}, t('Password', 'Mot de passe'), optional.cloneNode(true)), pass);
+    const keyField = h('label', { class: 'fld' }, h('span', {}, t('Private key', 'Clé privée'), optional.cloneNode(true)), key);
+    const jumpField = h('label', { class: 'fld' }, h('span', {}, t('Jump server', 'Serveur de rebond'), optional.cloneNode(true)), jump);
     const optionsHint = h('span', { class: 'muted small' });
     const error = h('p', { class: 'form-error', role: 'alert' });
-    const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Protocole' });
+    const seg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': t('Protocol', 'Protocole') });
     const DEFAULT_PORT: Record<string, string> = { ssh: '22', rdp: '3389', ftp: '21', vnc: '5900', telnet: '23' };
     const renderProtocol = () => {
       seg.replaceChildren(...choices.map((p) => h('button', {
@@ -308,14 +309,14 @@ export function openQuickConnect(enabled: (protocol: string) => boolean, initial
       passField.hidden = !protocol.password;
       keyField.hidden = jumpField.hidden = !ssh;
       port.placeholder = DEFAULT_PORT[protocol.id] ?? '';
-      const ask = ssh ? 'Vide : demandé dans le terminal' : protocol.id === 'telnet' ? 'L’identifiant se tape dans le terminal' : 'Vide : demandé à la connexion';
+      const ask = ssh ? t('Empty: asked in the terminal', 'Vide : demandé dans le terminal') : protocol.id === 'telnet' ? t('The login is typed in the terminal', 'L’identifiant se tape dans le terminal') : t('Empty: asked when connecting', 'Vide : demandé à la connexion');
       user.placeholder = pass.placeholder = ask;
-      optionsHint.textContent = ssh || protocol.id === 'telnet' ? ' : sinon demandés dans le terminal' : ' : sinon demandés à la connexion';
+      optionsHint.textContent = ssh || protocol.id === 'telnet' ? t(': otherwise asked in the terminal', ' : sinon demandés dans le terminal') : t(': otherwise asked when connecting', ' : sinon demandés à la connexion');
     };
     renderProtocol();
 
     const options = h('details', { class: 'quick-options' },
-      h('summary', {}, h('span', {}, 'Options', optionsHint)),
+      h('summary', {}, h('span', {}, t('Options', 'Options'), optionsHint)),
       h('div', { class: 'quick-options-body' },
         h('div', { class: 'quick-row' }, userField, portField),
         passField, keyField, jumpField));
@@ -324,24 +325,24 @@ export function openQuickConnect(enabled: (protocol: string) => boolean, initial
 
     let result: { target: QuickTarget; text: string } | null = null;
     const form = h('form', { method: 'dialog' },
-      h('header', { class: 'dlg-head' }, h('h2', {}, 'Connexion rapide')),
+      h('header', { class: 'dlg-head' }, h('h2', {}, t('Quick connect', 'Connexion rapide'))),
       h('div', { class: 'dlg-body' },
-        h('label', { class: 'fld' }, 'Adresse du serveur', address),
-        h('div', { class: 'fld' }, h('span', {}, 'Protocole'), seg),
+        h('label', { class: 'fld' }, t('Server address', 'Adresse du serveur'), address),
+        h('div', { class: 'fld' }, h('span', {}, t('Protocol', 'Protocole')), seg),
         options,
         error),
       h('footer', { class: 'dlg-foot' },
-        h('span', { class: 'muted small grow' }, 'Rien n\'est enregistré.'),
-        h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, 'Annuler'),
-        h('button', { type: 'submit', class: 'btn primary' }, 'Se connecter')));
+        h('span', { class: 'muted small grow' }, t('Nothing is saved.', 'Rien n\'est enregistré.')),
+        h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, t('Cancel', 'Annuler')),
+        h('button', { type: 'submit', class: 'btn primary' }, t('Connect', 'Se connecter'))));
     form.addEventListener('submit', (e) => {
-      const t = splitTarget(address.value);
+      const dest = splitTarget(address.value);
       const p = port.value.trim();
-      if (!t) { e.preventDefault(); error.textContent = 'Adresse non comprise. Exemples : 10.0.0.12, serveur.exemple.fr:2222.'; address.focus(); return; }
-      if (p && !/^\d{1,5}$/.test(p)) { e.preventDefault(); error.textContent = 'Port : un nombre, par exemple 22.'; options.setAttribute('open', ''); port.focus(); return; }
-      const username = (protocol.user ? user.value.trim() : '') || t.user || '';
-      const values: Record<string, unknown> = { host: t.host };
-      const finalPort = p ? Number(p) : t.port;
+      if (!dest) { e.preventDefault(); error.textContent = t('Address not understood. Examples: 10.0.0.12, server.example.com:2222.', 'Adresse non comprise. Exemples : 10.0.0.12, serveur.exemple.fr:2222.'); address.focus(); return; }
+      if (p && !/^\d{1,5}$/.test(p)) { e.preventDefault(); error.textContent = t('Port: a number, for example 22.', 'Port : un nombre, par exemple 22.'); options.setAttribute('open', ''); port.focus(); return; }
+      const username = (protocol.user ? user.value.trim() : '') || dest.user || '';
+      const values: Record<string, unknown> = { host: dest.host };
+      const finalPort = p ? Number(p) : dest.port;
       if (finalPort) values.port = finalPort;
       if (username) values.username = username;
       if (protocol.password && pass.value) values.password = pass.value;
@@ -352,12 +353,12 @@ export function openQuickConnect(enabled: (protocol: string) => boolean, initial
       }
       if (protocol.id === 'rdp') values.client = 'tab';
       if (protocol.id === 'ftp') values.security = 'explicit';
-      const where = `${username ? `${username}@` : ''}${t.host}${finalPort ? `:${finalPort}` : ''}`;
+      const where = `${username ? `${username}@` : ''}${dest.host}${finalPort ? `:${finalPort}` : ''}`;
       const scheme = protocol.id === 'ftp' ? `ftps://${where}` : `${protocol.id} ${where}${values.jump ? ` -J ${values.jump}` : ''}`;
       const name = `${where}${values.jump ? ` via ${values.jump}` : ''}`;
       result = { target: { protocol: protocol.id, name, values }, text: protocol.id === 'ssh' && values.jump ? `ssh -J ${values.jump} ${where}` : scheme };
     });
-    const dialog = h('dialog', { class: 'dialog quick-dialog', 'aria-label': 'Connexion rapide' }, form);
+    const dialog = h('dialog', { class: 'dialog quick-dialog', 'aria-label': t('Quick connect', 'Connexion rapide') }, form);
     dialog.addEventListener('close', () => { dialog.remove(); resolve(result); });
     document.body.append(dialog);
     dialog.showModal();

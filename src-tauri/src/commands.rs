@@ -130,11 +130,11 @@ pub fn save_session(state: State<'_, AppState>, input: SaveSessionInput) -> CmdR
     let manifest = state
         .registry
         .get(&session.protocol)
-        .ok_or("Protocole inconnu")?
+        .ok_or(t!("Unknown protocol", "Protocole inconnu"))?
         .manifest();
     session.name = session.name.trim().to_string();
     if session.name.is_empty() {
-        return Err("Donnez un nom à la session".into());
+        return Err(t!("Give the session a name", "Donnez un nom à la session").into());
     }
     session.folder = crate::store::normalize_folder(&session.folder);
     if session.id.is_empty() {
@@ -338,7 +338,7 @@ pub async fn connect(
         .lock()
         .unwrap()
         .get(&session_id)
-        .ok_or("Session introuvable")?;
+        .ok_or(t!("Session not found", "Session introuvable"))?;
     let values = session_values(&state, &session)?;
     start_connection(&app, &state, &session.protocol, session.name.clone(), values, cols, rows, on_event).await
 }
@@ -423,7 +423,7 @@ pub(crate) async fn start_connection(
 pub fn term_write(state: State<'_, AppState>, connection_id: String, data: String) -> CmdResult<()> {
     state.unlocked()?;
     let connections = state.connections.lock().unwrap();
-    let connection = connections.get(&connection_id).ok_or("Session fermée")?;
+    let connection = connections.get(&connection_id).ok_or(t!("Session closed", "Session fermée"))?;
     connection.write(data.as_bytes()).map_err(err)
 }
 
@@ -456,10 +456,10 @@ pub fn disconnect(state: State<'_, AppState>, connection_id: String) {
 
 fn files_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteFiles>> {
     let connections = state.connections.lock().unwrap();
-    let connection = connections.get(connection_id).ok_or("Session fermée")?;
+    let connection = connections.get(connection_id).ok_or(t!("Session closed", "Session fermée"))?;
     connection
         .files()
-        .ok_or_else(|| "Ce protocole ne propose pas d'explorateur de fichiers".into())
+        .ok_or_else(|| t!("This protocol has no file browser", "Ce protocole ne propose pas d'explorateur de fichiers").into())
 }
 
 pub(crate) fn full(e: anyhow::Error) -> String {
@@ -593,7 +593,7 @@ pub fn move_sessions(state: State<'_, AppState>, ids: Vec<String>, folder: Strin
 pub fn duplicate_session(state: State<'_, AppState>, id: String) -> CmdResult<Session> {
     state.unlocked()?;
     let mut store = state.store.lock().unwrap();
-    let original = store.get(&id).ok_or("Session introuvable")?;
+    let original = store.get(&id).ok_or(t!("Session not found", "Session introuvable"))?;
     let mut copy = original.clone();
     copy.id = uuid::Uuid::new_v4().to_string();
     copy.name = format!("{} (copie)", original.name);
@@ -632,10 +632,10 @@ pub fn delete_snippet(state: State<'_, AppState>, id: String) -> CmdResult<()> {
 
 fn forwarder_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn PortForwarder>> {
     let connections = state.connections.lock().unwrap();
-    let connection = connections.get(connection_id).ok_or("Session fermée")?;
+    let connection = connections.get(connection_id).ok_or(t!("Session closed", "Session fermée"))?;
     connection
         .forwarder()
-        .ok_or_else(|| "Ce protocole ne propose pas de tunnels".into())
+        .ok_or_else(|| t!("This protocol has no tunnels", "Ce protocole ne propose pas de tunnels").into())
 }
 
 #[tauri::command]
@@ -687,7 +687,7 @@ pub fn import_preview(
         "ssh-config" => importers::ssh_config(&import_path(&source, path), &folder),
         "putty" => importers::putty(&folder),
         "mremoteng" => importers::mremoteng(&import_path(&source, path), &folder),
-        _ => return Err("Source d'import inconnue".into()),
+        _ => return Err(t!("Unknown import source", "Source d'import inconnue").into()),
     }
     .map_err(full)?;
     let existing: Vec<String> = state.store.lock().unwrap().list().iter().map(importers::identity).collect();
@@ -801,7 +801,7 @@ pub fn field_suggestions(state: State<'_, AppState>, protocol: String, source: S
 pub fn screen_input(state: State<'_, AppState>, connection_id: String, event: InputEvent) -> CmdResult<()> {
     state.unlocked()?;
     let connections = state.connections.lock().unwrap();
-    let connection = connections.get(&connection_id).ok_or("Session fermée")?;
+    let connection = connections.get(&connection_id).ok_or(t!("Session closed", "Session fermée"))?;
     connection.input(event).map_err(err)
 }
 
@@ -900,15 +900,15 @@ fn apply_data_change(state: &AppState, change: lock::DataChange) -> CmdResult<()
 #[tauri::command]
 pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResult<bool> {
     if !state.lock.lock().unwrap().hello_enabled() {
-        return Err("Windows Hello n'est pas activé pour Portunia".into());
+        return Err(t!("Windows Hello is not enabled for Portunia", "Windows Hello n'est pas activé pour Portunia").into());
     }
-    let window = app.get_webview_window("main").ok_or("Fenêtre introuvable")?;
+    let window = app.get_webview_window("main").ok_or(t!("Window not found", "Fenêtre introuvable"))?;
     #[cfg(windows)]
     let hwnd = window.hwnd().map_err(err)?.0 as usize;
     #[cfg(not(windows))]
     let hwnd = { let _ = window; 0usize };
     let verified = tauri::async_runtime::spawn_blocking(move || {
-        lock::hello::verify(hwnd as *mut core::ffi::c_void, "Déverrouiller Portunia")
+        lock::hello::verify(hwnd as *mut core::ffi::c_void, t!("Unlock Portunia", "Déverrouiller Portunia"))
     })
     .await
     .map_err(err)?
@@ -956,7 +956,7 @@ pub fn recording_start(
     state.unlocked()?;
     state.license.lock().unwrap().require(Feature::SessionRecording).map_err(full)?;
     if !state.connections.lock().unwrap().contains_key(&connection_id) {
-        return Err("Session fermée".into());
+        return Err(t!("Session closed", "Session fermée").into());
     }
     let mut recordings = state.recordings.lock().unwrap();
     if let Some(existing) = recordings.get(&connection_id) {
@@ -1059,7 +1059,7 @@ pub async fn fs_upload_any(
     if local.is_dir() {
         return transfer::upload_tree(files.as_ref(), &local, &remote_dir, progress).await.map_err(full);
     }
-    let name = local.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or("Fichier invalide")?;
+    let name = local.file_name().map(|n| n.to_string_lossy().into_owned()).ok_or(t!("Invalid file", "Fichier invalide"))?;
     let remote = if remote_dir.ends_with('/') { format!("{remote_dir}{name}") } else { format!("{remote_dir}/{name}") };
     files.upload(local, remote, progress).await.map_err(full)?;
     Ok(1)
@@ -1087,8 +1087,9 @@ pub async fn fs_edit_start(
     state.unlocked()?;
     let name = remote.rsplit('/').next().unwrap_or_default();
     if transfer::runs_when_opened(name) {
-        return Err(format!(
-            "« {name} » serait exécuté par Windows au lieu de s'ouvrir dans un éditeur : modification refusée par sécurité. Téléchargez-le si vous voulez l'examiner."
+        return Err(t!(
+            format!("« {name} » would be run by Windows instead of opening in an editor: editing refused for safety. Download it if you want to inspect it."),
+            format!("« {name} » serait exécuté par Windows au lieu de s'ouvrir dans un éditeur : modification refusée par sécurité. Téléchargez-le si vous voulez l'examiner.")
         ));
     }
     let files = files_of(&state, &connection_id)?;
@@ -1298,8 +1299,8 @@ pub async fn ssh_key_install(state: State<'_, AppState>, connection_id: String, 
     state.unlocked()?;
     let exec = {
         let connections = state.connections.lock().unwrap();
-        let connection = connections.get(&connection_id).ok_or("Session fermée")?;
-        connection.exec().ok_or("Ce protocole ne permet pas d'installer une clé")?
+        let connection = connections.get(&connection_id).ok_or(t!("Session closed", "Session fermée"))?;
+        connection.exec().ok_or(t!("This protocol cannot install a key", "Ce protocole ne permet pas d'installer une clé"))?
     };
     keys::install(exec.as_ref(), &public).await.map_err(full)
 }
@@ -1425,7 +1426,7 @@ pub fn net_traceroute(host: String, on_event: Channel<NetEvent>) -> String {
             let _ = on_event.send(NetEvent::Start { ip: ip.to_string() });
             for hop in 1..=30u8 {
                 if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                    return Ok("Interrompu".into());
+                    return Ok(t!("Interrupted", "Interrompu").into());
                 }
                 let (mut from, mut rtts, mut arrived) = (String::new(), Vec::new(), false);
                 for _ in 0..3 {
@@ -1463,7 +1464,7 @@ pub fn net_ports(host: String, ports: String, on_event: Channel<NetEvent>) -> Cm
             let mut open = 0;
             for chunk in list.chunks(64) {
                 if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                    return Ok("Interrompu".to_string());
+                    return Ok(t!("Interrupted", "Interrompu").to_string());
                 }
                 let checks = chunk.iter().map(|&p| nettools::check_port(ip, p, std::time::Duration::from_secs(3)));
                 let mut set = tokio::task::JoinSet::new();
@@ -1571,8 +1572,8 @@ pub fn credential_delete(state: State<'_, AppState>, id: String) -> CmdResult<()
 
 fn exec_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteExec>> {
     let connections = state.connections.lock().unwrap();
-    let connection = connections.get(connection_id).ok_or("Session fermée")?;
-    connection.exec().ok_or_else(|| "Ce protocole ne permet pas de lancer des commandes".into())
+    let connection = connections.get(connection_id).ok_or(t!("Session closed", "Session fermée"))?;
+    connection.exec().ok_or_else(|| t!("This protocol cannot run commands", "Ce protocole ne permet pas de lancer des commandes").into())
 }
 
 #[tauri::command]
@@ -1612,13 +1613,13 @@ pub fn multi_exec(
     state.unlocked()?;
     state.license.lock().unwrap().require(Feature::MultiExec).map_err(full)?;
     if command.trim().is_empty() {
-        return Err("Indiquez une commande".into());
+        return Err(t!("Give a command", "Indiquez une commande").into());
     }
     // Valeurs préparées tout de suite (secrets, identifiants partagés, bastions) : erreurs par serveur.
     let mut targets = Vec::new();
     for id in &session_ids {
         let prepared = (|| -> CmdResult<(String, HashMap<String, Value>)> {
-            let session = state.store.lock().unwrap().get(id).ok_or("Session introuvable")?;
+            let session = state.store.lock().unwrap().get(id).ok_or(t!("Session not found", "Session introuvable"))?;
             if session.protocol != "ssh" {
                 return Err(format!("« {} » n'est pas une session SSH", session.name));
             }
@@ -1641,7 +1642,7 @@ pub fn multi_exec(
                 let _permit = limit.acquire_owned().await;
                 let started = std::time::Instant::now();
                 if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                    let _ = channel.send(MultiEvent::Failed { session_id, error: "Annulé".into(), ms: 0 });
+                    let _ = channel.send(MultiEvent::Failed { session_id, error: t!("Cancelled", "Annulé").into(), ms: 0 });
                     return false;
                 }
                 let result = match prepared {
@@ -1724,7 +1725,7 @@ pub async fn connect_with(
     on_event: Channel,
 ) -> CmdResult<ConnectResponse> {
     state.unlocked()?;
-    let session = state.store.lock().unwrap().get(&session_id).ok_or("Session introuvable")?;
+    let session = state.store.lock().unwrap().get(&session_id).ok_or(t!("Session not found", "Session introuvable"))?;
     let mut values = session_values(&state, &session)?;
     values.extend(extra);
     start_connection(&app, &state, &session.protocol, label, values, cols, rows, on_event).await

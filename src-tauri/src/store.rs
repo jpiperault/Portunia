@@ -147,7 +147,7 @@ impl Store {
 
     fn persist(&self) -> Result<()> {
         if self.locked {
-            bail!("Portunia est verrouillé : les sessions ne sont pas chargées");
+            bail!(t!("Portunia is locked: sessions are not loaded", "Portunia est verrouillé : les sessions ne sont pas chargées"));
         }
         let file = FileFormat {
             version: 4,
@@ -192,7 +192,7 @@ impl Store {
     pub fn create_folder(&mut self, path: &str) -> Result<String> {
         let path = normalize_folder(path);
         if path.is_empty() {
-            bail!("Donnez un nom au dossier");
+            bail!(t!("Give the folder a name", "Donnez un nom au dossier"));
         }
         if !self.folders.contains(&path) {
             self.folders.push(path.clone());
@@ -205,16 +205,16 @@ impl Store {
     pub fn rename_folder(&mut self, from: &str, to: &str) -> Result<()> {
         let (from, to) = (normalize_folder(from), normalize_folder(to));
         if from.is_empty() || to.is_empty() {
-            bail!("Nom de dossier invalide");
+            bail!(t!("Invalid folder name", "Nom de dossier invalide"));
         }
         if from == to {
             return Ok(());
         }
         if reparent(&to, &from, "").is_some() {
-            bail!("Impossible de déplacer un dossier dans lui-même");
+            bail!(t!("Cannot move a folder into itself", "Impossible de déplacer un dossier dans lui-même"));
         }
         if self.folders().contains(&to) {
-            bail!("Le dossier « {to} » existe déjà");
+            bail!("{}", t!(format!("The folder « {to} » already exists"), format!("Le dossier « {to} » existe déjà")));
         }
         for folder in &mut self.folders {
             if let Some(moved) = reparent(folder, &from, &to) {
@@ -273,7 +273,7 @@ impl Store {
             session.id = uuid::Uuid::new_v4().to_string();
             session.name = session.name.trim().to_string();
             if session.name.is_empty() {
-                session.name = "Session importée".into();
+                session.name = t!("Imported session", "Session importée").into();
             }
             session.folder = normalize_folder(&session.folder);
             session.secret_keys.clear();
@@ -340,7 +340,7 @@ impl Store {
     pub fn set_folder_color(&mut self, path: &str, color: Option<String>) -> Result<()> {
         let path = normalize_folder(path);
         if path.is_empty() {
-            bail!("Dossier invalide");
+            bail!(t!("Invalid folder", "Dossier invalide"));
         }
         match color.filter(|c| !c.is_empty()) {
             Some(c) => self.folder_colors.insert(path, c),
@@ -370,7 +370,7 @@ impl Store {
     pub fn upsert_snippet(&mut self, mut snippet: Snippet) -> Result<Snippet> {
         snippet.name = snippet.name.trim().to_string();
         if snippet.name.is_empty() || snippet.command.trim().is_empty() {
-            bail!("Donnez un nom et une commande");
+            bail!(t!("Give a name and a command", "Donnez un nom et une commande"));
         }
         if let Scope::Folder { path } = &snippet.scope {
             let path = normalize_folder(path);

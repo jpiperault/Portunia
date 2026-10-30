@@ -93,7 +93,7 @@ fn cpu_times(line: &str) -> Option<(u64, u64)> {
 pub fn parse(text: &str) -> Result<ServerStats> {
     let parts = sections(text);
     if !parts.iter().any(|(n, _)| *n == "end") || !parts.iter().any(|(n, l)| *n == "uptime" && !l.is_empty()) {
-        bail!("Ce serveur ne ressemble pas à un Linux (pas de /proc) : tableau de bord indisponible");
+        bail!(t!("This server does not look like Linux (no /proc): dashboard unavailable", "Ce serveur ne ressemble pas à un Linux (pas de /proc) : tableau de bord indisponible"));
     }
     let first = |name: &str| parts.iter().find(|(n, _)| *n == name).and_then(|(_, l)| l.first().copied()).unwrap_or("").trim();
     let lines = |name: &str| parts.iter().find(|(n, _)| *n == name).map(|(_, l)| l.clone()).unwrap_or_default();

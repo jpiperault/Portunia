@@ -55,18 +55,18 @@ pub fn key() -> Option<[u8; 32]> {
 
 pub fn random_bytes<const N: usize>() -> Result<[u8; N]> {
     let mut out = [0u8; N];
-    SystemRandom::new().fill(&mut out).map_err(|_| anyhow!("Générateur aléatoire indisponible"))?;
+    SystemRandom::new().fill(&mut out).map_err(|_| anyhow!(t!("Random generator unavailable", "Générateur aléatoire indisponible")))?;
     Ok(out)
 }
 
 /// nonce ‖ texte chiffré ‖ étiquette.
 pub fn seal(key: &[u8; 32], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
-    let sealing = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!("Clé invalide"))?);
+    let sealing = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?);
     let nonce_bytes = random_bytes::<NONCE_LEN>()?;
     let mut buf = plain.to_vec();
     sealing
         .seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce_bytes), Aad::from(aad), &mut buf)
-        .map_err(|_| anyhow!("Chiffrement impossible"))?;
+        .map_err(|_| anyhow!(t!("Encryption failed", "Chiffrement impossible")))?;
     let mut out = nonce_bytes.to_vec();
     out.extend_from_slice(&buf);
     Ok(out)
@@ -74,15 +74,15 @@ pub fn seal(key: &[u8; 32], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
 
 pub fn open(key: &[u8; 32], sealed: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
     if sealed.len() < NONCE_LEN + 16 {
-        bail!("Données chiffrées tronquées");
+        bail!(t!("Truncated encrypted data", "Données chiffrées tronquées"));
     }
-    let opening = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!("Clé invalide"))?);
+    let opening = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?);
     let (nonce, rest) = sealed.split_at(NONCE_LEN);
     let mut buf = rest.to_vec();
-    let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| anyhow!("Nonce invalide"))?;
+    let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| anyhow!(t!("Invalid nonce", "Nonce invalide")))?;
     let plain = opening
         .open_in_place(nonce, Aad::from(aad), &mut buf)
-        .map_err(|_| anyhow!("Déchiffrement impossible : clé incorrecte ou fichier modifié"))?;
+        .map_err(|_| anyhow!(t!("Decryption failed: wrong key or modified file", "Déchiffrement impossible : clé incorrecte ou fichier modifié")))?;
     Ok(plain.to_vec())
 }
 
@@ -120,18 +120,18 @@ pub fn read(path: &Path) -> Result<Content> {
         Err(e) => return Err(e).with_context(|| format!("Lecture impossible : {}", path.display())),
     };
     let Some(sealed) = bytes.strip_prefix(MAGIC) else {
-        return Ok(Content::Text(String::from_utf8(bytes).context("Fichier illisible (encodage)")?));
+        return Ok(Content::Text(String::from_utf8(bytes).context(t!("Unreadable file (encoding)", "Fichier illisible (encodage)"))?));
     };
     let Some(key) = key() else { return Ok(Content::Locked) };
-    let sealed = B64.decode(sealed.trim_ascii()).context("Fichier chiffré illisible")?;
+    let sealed = B64.decode(sealed.trim_ascii()).context(t!("Unreadable encrypted file", "Fichier chiffré illisible"))?;
     let plain = open(&key, &sealed, &aad(path)).with_context(|| format!("{}", path.display()))?;
-    Ok(Content::Text(String::from_utf8(plain).context("Fichier illisible (encodage)")?))
+    Ok(Content::Text(String::from_utf8(plain).context(t!("Unreadable file (encoding)", "Fichier illisible (encodage)"))?))
 }
 
 /// Écrit un fichier (atomiquement), chiffré si le chiffrement est actif.
 pub fn write(path: &Path, text: &str) -> Result<()> {
     let bytes = if enabled() {
-        let key = key().ok_or_else(|| anyhow!("Portunia est verrouillé : écriture refusée"))?;
+        let key = key().ok_or_else(|| anyhow!(t!("Portunia is locked: write refused", "Portunia est verrouillé : écriture refusée")))?;
         let mut out = MAGIC.to_vec();
         out.extend_from_slice(B64.encode(seal(&key, text.as_bytes(), &aad(path))?).as_bytes());
         out.push(b'\n');
@@ -181,11 +181,11 @@ pub mod dpapi {
     }
 
     pub fn protect(data: &[u8]) -> Result<Vec<u8>> {
-        run(data, true).map_err(|e| anyhow!("Protection Windows impossible : {e}"))
+        run(data, true).map_err(|e| anyhow!("{}", t!(format!("Windows protection failed: {e}"), format!("Protection Windows impossible : {e}"))))
     }
 
     pub fn unprotect(data: &[u8]) -> Result<Vec<u8>> {
-        run(data, false).map_err(|e| anyhow!("Clé Windows Hello illisible (autre compte ou autre PC ?) : {e}"))
+        run(data, false).map_err(|e| anyhow!("{}", t!(format!("Unreadable Windows Hello key (another account or another PC?): {e}"), format!("Clé Windows Hello illisible (autre compte ou autre PC ?) : {e}"))))
     }
 }
 

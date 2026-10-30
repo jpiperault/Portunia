@@ -1,5 +1,13 @@
 // Appels vers le cœur Rust (voir src-tauri/src/commands.rs).
-import { Channel, invoke } from '@tauri-apps/api/core';
+import { Channel, invoke as rawInvoke, InvokeArgs } from '@tauri-apps/api/core';
+import { LANG } from './i18n';
+
+// Le cœur écrit ses messages dans la langue de l'interface : on la lui donne avant tout autre appel.
+const languageReady = rawInvoke('set_language', { lang: LANG }).catch(() => {});
+export async function invoke<T>(cmd: string, args?: InvokeArgs): Promise<T> {
+  await languageReady;
+  return rawInvoke<T>(cmd, args);
+}
 
 export type ViewKind = 'terminal' | 'screen' | 'desktop' | 'web' | 'files';
 

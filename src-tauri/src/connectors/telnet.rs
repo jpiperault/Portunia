@@ -18,26 +18,26 @@ impl Connector for TelnetConnector {
             id: "telnet".into(),
             name: "Telnet".into(),
             version: "0.1.0".into(),
-            description: "Équipements réseau anciens. Non chiffré : à réserver au réseau local.".into(),
+            description: t!("Older network equipment. Unencrypted: keep it to the local network.", "Équipements réseau anciens. Non chiffré : à réserver au réseau local.").into(),
             view: ViewKind::Terminal,
             builtin: true,
             file_browser: false,
             port_forwarding: false,
             fields: vec![
-                Field::new("host", "Hôte", FieldKind::Text).required(),
+                Field::new("host", t!("Host", "Hôte"), FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(23),
             ],
         }
     }
 
     fn connect(&self, ctx: ConnectContext) -> Result<Outcome> {
-        let host = ctx.require("host", "Hôte")?;
+        let host = ctx.require("host", t!("Host", "Hôte"))?;
         let port = ctx.port(23)?;
         let addr = (host.as_str(), port)
             .to_socket_addrs()
             .with_context(|| format!("Hôte introuvable : {host}"))?
             .next()
-            .ok_or_else(|| anyhow!("Hôte introuvable : {host}"))?;
+            .ok_or_else(|| anyhow!("{}", t!(format!("Host not found: {host}"), format!("Hôte introuvable : {host}"))))?;
         let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(10))
             .with_context(|| format!("Connexion impossible à {host}:{port}"))?;
         stream.set_nodelay(true)?;

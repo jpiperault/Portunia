@@ -18,9 +18,9 @@ impl Connector for SerialConnector {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "serial".into(),
-            name: "Port série".into(),
+            name: t!("Serial port", "Port série").into(),
             version: "0.1.0".into(),
-            description: "Ports COM : microcontrôleurs, consoles de switchs et de routeurs.".into(),
+            description: t!("COM ports: microcontrollers, switch and router consoles.", "Ports COM : microcontrôleurs, consoles de switchs et de routeurs.").into(),
             view: ViewKind::Terminal,
             builtin: true,
             file_browser: false,
@@ -31,7 +31,7 @@ impl Connector for SerialConnector {
                     .placeholder("COM3"),
                 Field::new(
                     "baud",
-                    "Vitesse (bauds)",
+                    t!("Speed (baud)", "Vitesse (bauds)"),
                     choice(&[
                         ("9600", "9600"),
                         ("19200", "19200"),
@@ -42,23 +42,23 @@ impl Connector for SerialConnector {
                     ]),
                 )
                 .default("115200"),
-                Field::new("dataBits", "Bits de données", choice(&[("8", "8"), ("7", "7")])).default("8"),
+                Field::new("dataBits", t!("Data bits", "Bits de données"), choice(&[("8", "8"), ("7", "7")])).default("8"),
                 Field::new(
                     "parity",
-                    "Parité",
-                    choice(&[("none", "Aucune"), ("even", "Paire"), ("odd", "Impaire")]),
+                    t!("Parity", "Parité"),
+                    choice(&[("none", t!("None", "Aucune")), ("even", t!("Even", "Paire")), ("odd", t!("Odd", "Impaire"))]),
                 )
                 .default("none"),
-                Field::new("stopBits", "Bits d'arrêt", choice(&[("1", "1"), ("2", "2")])).default("1"),
+                Field::new("stopBits", t!("Stop bits", "Bits d'arrêt"), choice(&[("1", "1"), ("2", "2")])).default("1"),
                 Field::new(
                     "flow",
-                    "Contrôle de flux",
-                    choice(&[("none", "Aucun"), ("software", "XON/XOFF"), ("hardware", "RTS/CTS")]),
+                    t!("Flow control", "Contrôle de flux"),
+                    choice(&[("none", t!("None", "Aucun")), ("software", "XON/XOFF"), ("hardware", "RTS/CTS")]),
                 )
                 .default("none"),
                 Field::new(
                     "enter",
-                    "Touche Entrée envoie",
+                    t!("Enter key sends", "Touche Entrée envoie"),
                     choice(&[("cr", "CR"), ("crlf", "CR LF"), ("lf", "LF")]),
                 )
                 .default("cr"),
@@ -97,7 +97,7 @@ impl Connector for SerialConnector {
             .str("baud")
             .unwrap_or_else(|| "115200".into())
             .parse()
-            .map_err(|_| anyhow!("Vitesse invalide"))?;
+            .map_err(|_| anyhow!(t!("Invalid speed", "Vitesse invalide")))?;
         let data_bits = if ctx.str("dataBits").as_deref() == Some("7") { DataBits::Seven } else { DataBits::Eight };
         let parity = match ctx.str("parity").as_deref() {
             Some("even") => Parity::Even,
@@ -128,7 +128,7 @@ impl Connector for SerialConnector {
         let writer = Arc::new(Mutex::new(port));
         let (connection, rx) = WorkerConnection::new();
 
-        ctx.sink.data(format!("\x1b[90m[Portunia] {name} ouvert à {baud} bauds\x1b[0m\r\n").as_bytes());
+        ctx.sink.data(t!(format!("\x1b[90m[Portunia] {name} opened at {baud} baud\x1b[0m\r\n"), format!("\x1b[90m[Portunia] {name} ouvert à {baud} bauds\x1b[0m\r\n")).as_bytes());
 
         let sink = ctx.sink.clone();
         let stop = Arc::new(Mutex::new(false));

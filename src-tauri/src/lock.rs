@@ -61,7 +61,7 @@ fn wrap(password: &str, salt: &[u8], iterations: u32, key: &[u8; 32]) -> Result<
 fn unwrap_key(password: &str, salt: &[u8], iterations: u32, wrapped: &str) -> Result<[u8; 32]> {
     let kek: [u8; 32] = derive(password, salt, iterations).try_into().map_err(|_| anyhow!("Dérivation"))?;
     let plain = vault::open(&kek, &B64.decode(wrapped)?, WRAP_AAD)?;
-    plain.try_into().map_err(|_| anyhow!("Clé de données invalide"))
+    plain.try_into().map_err(|_| anyhow!(t!("Invalid data key", "Clé de données invalide")))
 }
 
 pub struct Lock {
@@ -109,7 +109,7 @@ impl Lock {
 
     fn save(&self) -> Result<()> {
         match &self.config {
-            Some(config) => fs::write(&self.path, serde_json::to_string_pretty(config)?).context("Écriture impossible"),
+            Some(config) => fs::write(&self.path, serde_json::to_string_pretty(config)?).context(t!("Cannot write", "Écriture impossible")),
             None => {
                 let _ = fs::remove_file(&self.path);
                 Ok(())
@@ -124,7 +124,7 @@ impl Lock {
     /// Erreur si l'application est verrouillée (point de contrôle des actions sensibles).
     pub fn ensure_unlocked(&self) -> Result<()> {
         if self.is_locked() {
-            bail!("Portunia est verrouillé");
+            bail!(t!("Portunia is locked", "Portunia est verrouillé"));
         }
         Ok(())
     }
@@ -145,13 +145,13 @@ impl Lock {
     /// Définit ou change le mot de passe maître (l'ancien est demandé s'il existe).
     pub fn set_password(&mut self, current: &str, new: &str) -> Result<DataChange> {
         if self.config.is_some() {
-            self.check_throttled(current).map_err(|e| anyhow!("Mot de passe actuel incorrect : {e}"))?;
+            self.check_throttled(current).map_err(|e| anyhow!("{}", t!(format!("Wrong current password: {e}"), format!("Mot de passe actuel incorrect : {e}"))))?;
         }
         if new.chars().count() < 8 {
-            bail!("Le mot de passe maître doit contenir au moins 8 caractères");
+            bail!(t!("The master password must have at least 8 characters", "Le mot de passe maître doit contenir au moins 8 caractères"));
         }
         let mut salt = [0u8; 16];
-        SystemRandom::new().fill(&mut salt).map_err(|_| anyhow!("Générateur aléatoire indisponible"))?;
+        SystemRandom::new().fill(&mut salt).map_err(|_| anyhow!(t!("Random generator unavailable", "Générateur aléatoire indisponible")))?;
         let previous = self.config.clone();
         // Clé de données : celle en mémoire (déverrouillé), sinon une nouvelle (premier mot de passe).
         let (key, change) = match (vault::key(), previous.as_ref().and_then(|c| c.data_key.as_ref())) {
@@ -189,7 +189,7 @@ impl Lock {
     }
 
     pub fn set_options(&mut self, hello: bool, timeout_minutes: u32) -> Result<()> {
-        let config = self.config.as_mut().ok_or_else(|| anyhow!("Définissez d'abord un mot de passe maître"))?;
+        let config = self.config.as_mut().ok_or_else(|| anyhow!(t!("First set a master password", "Définissez d'abord un mot de passe maître")))?;
         config.hello = hello;
         config.timeout_minutes = timeout_minutes.min(24 * 60);
         // Windows Hello doit pouvoir rendre la clé de données : copie protégée par le compte Windows.
@@ -203,7 +203,7 @@ impl Lock {
 
     pub fn lock(&self) -> Result<()> {
         if self.config.is_none() {
-            bail!("Définissez d'abord un mot de passe maître (Paramètres › Sécurité)");
+            bail!(t!("First set a master password (Settings › Security)", "Définissez d'abord un mot de passe maître (Paramètres › Sécurité)"));
         }
         self.locked.store(true, Ordering::SeqCst);
         Ok(())
@@ -220,7 +220,7 @@ impl Lock {
         if let Some(until) = t.1 {
             let now = std::time::Instant::now();
             if until > now {
-                bail!("Trop d'essais : réessayez dans {} s", (until - now).as_secs() + 1);
+                bail!("{}", t!(format!("Too many attempts: try again in {} s", (until - now).as_secs() + 1), format!("Trop d'essais : réessayez dans {} s", (until - now).as_secs() + 1)));
             }
         }
         if verify() {
@@ -231,15 +231,15 @@ impl Lock {
         if t.0 >= 5 {
             let wait = (5u64 << (t.0 - 5).min(6)).min(300);
             t.1 = Some(std::time::Instant::now() + std::time::Duration::from_secs(wait));
-            bail!("Mot de passe incorrect. Trop d'essais : attendez {wait} s");
+            bail!("{}", t!(format!("Wrong password. Too many attempts: wait {wait} s"), format!("Mot de passe incorrect. Trop d'essais : attendez {wait} s")));
         }
-        bail!("Mot de passe incorrect")
+        bail!(t!("Wrong password", "Mot de passe incorrect"))
     }
 
     /// Déverrouille et rend la clé de données. Une configuration d'avant le chiffrement
     /// est migrée : clé créée, fichiers à chiffrer (DataChange::Encrypt).
     pub fn unlock_with_password(&mut self, password: &str) -> Result<DataChange> {
-        let config = self.config.clone().ok_or_else(|| anyhow!("Aucun mot de passe maître"))?;
+        let config = self.config.clone().ok_or_else(|| anyhow!(t!("No master password", "Aucun mot de passe maître")))?;
         let change = match &config.data_key {
             Some(wrapped) => {
                 // Ouvrir la clé de données vérifie le mot de passe (AES-GCM) : un seul calcul
@@ -284,15 +284,15 @@ impl Lock {
     /// Appelé après une vérification Windows Hello réussie.
     pub fn unlock_with_hello(&self) -> Result<()> {
         if !self.hello_enabled() {
-            bail!("Windows Hello n'est pas activé pour Portunia");
+            bail!(t!("Windows Hello is not enabled for Portunia", "Windows Hello n'est pas activé pour Portunia"));
         }
         let config = self.config.as_ref().unwrap();
         match (&config.hello_key, &config.data_key) {
             (Some(protected), _) => {
                 let key = vault::dpapi::unprotect(&B64.decode(protected)?)?;
-                vault::set_key(Some(key.try_into().map_err(|_| anyhow!("Clé Windows Hello invalide"))?));
+                vault::set_key(Some(key.try_into().map_err(|_| anyhow!(t!("Invalid Windows Hello key", "Clé Windows Hello invalide")))?));
             }
-            (None, Some(_)) => bail!("Déverrouillez une fois avec le mot de passe maître : Windows Hello sera ensuite prêt pour les données chiffrées."),
+            (None, Some(_)) => bail!(t!("Unlock once with the master password: Windows Hello will then be ready for encrypted data.", "Déverrouillez une fois avec le mot de passe maître : Windows Hello sera ensuite prêt pour les données chiffrées.")),
             (None, None) => {}
         }
         self.locked.store(false, Ordering::SeqCst);
@@ -461,11 +461,11 @@ mod tests {
         lock.set_password("", "un bon mot de passe").unwrap();
         lock.lock().unwrap();
         for _ in 0..4 {
-            assert_eq!(lock.unlock_with_password("faux").unwrap_err().to_string(), "Mot de passe incorrect");
+            assert_eq!(lock.unlock_with_password("faux").unwrap_err().to_string(), t!("Wrong password", "Mot de passe incorrect"));
         }
-        assert!(lock.unlock_with_password("faux").unwrap_err().to_string().contains("attendez 5 s"));
+        assert!(lock.unlock_with_password("faux").unwrap_err().to_string().contains(t!("wait 5 s", "attendez 5 s")));
         // Même le bon mot de passe est refusé pendant l'attente.
-        assert!(lock.unlock_with_password("un bon mot de passe").unwrap_err().to_string().contains("réessayez"));
+        assert!(lock.unlock_with_password("un bon mot de passe").unwrap_err().to_string().contains(t!("try again", "réessayez")));
         assert!(lock.is_locked());
         // Attente écoulée : le bon mot de passe passe et remet le compteur à zéro.
         lock.throttle.lock().unwrap().1 = None;

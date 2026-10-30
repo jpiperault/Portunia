@@ -4,6 +4,7 @@ import { api, errorText, TermEvent } from './api';
 import { h } from './dom';
 import type { FilePanel } from './files';
 import type { Opener, TermState } from './terminal';
+import { t } from './i18n';
 
 export class FilesView {
   private connectionId: string | null = null;
@@ -31,7 +32,7 @@ export class FilesView {
     this.opener = opener;
     this.label = label;
     this.connecting = true;
-    this.setStatus(`Connexion à ${label}…`);
+    this.setStatus(t(`Connecting to ${label}…`, `Connexion à ${label}…`));
     this.onState('connecting');
     try {
       const res = await opener(80, 24, (e) => this.onEvent(e));
@@ -45,7 +46,7 @@ export class FilesView {
       this.onState('connected');
     } catch (e) {
       const reason = errorText(e);
-      this.setStatus(`${reason}\nCliquez ici pour réessayer.`, true);
+      this.setStatus(t(`${reason}\nClick here to try again.`, `${reason}\nCliquez ici pour réessayer.`), true);
       this.onState('closed', reason);
     } finally {
       this.connecting = false;
@@ -57,7 +58,7 @@ export class FilesView {
     this.connectionId = null;
     this.panel.detach();
     if (this.disposed) return;
-    this.setStatus(e.data ? `Connexion perdue : ${e.data}\nCliquez ici pour vous reconnecter.` : 'Connexion fermée. Cliquez ici pour vous reconnecter.', !!e.data);
+    this.setStatus(e.data ? t(`Connection lost: ${e.data}\nClick here to reconnect.`, `Connexion perdue : ${e.data}\nCliquez ici pour vous reconnecter.`) : t('Connection closed. Click here to reconnect.', 'Connexion fermée. Cliquez ici pour vous reconnecter.'), !!e.data);
     this.onState('closed', e.data ?? undefined);
   }
 

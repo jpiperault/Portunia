@@ -24,34 +24,34 @@ impl Connector for RdpConnector {
     fn manifest(&self) -> Manifest {
         Manifest {
             id: "rdp".into(),
-            name: "Bureau à distance (RDP)".into(),
+            name: t!("Remote Desktop (RDP)", "Bureau à distance (RDP)").into(),
             version: "0.2.0".into(),
-            description: "Bureau Windows dans un onglet (IronRDP), ou dans le client Bureau à distance de Windows.".into(),
+            description: t!("Windows desktop in a tab (IronRDP), or in the Windows Remote Desktop client.", "Bureau Windows dans un onglet (IronRDP), ou dans le client Bureau à distance de Windows.").into(),
             view: ViewKind::Screen,
             builtin: true,
             file_browser: false,
             port_forwarding: false,
             fields: vec![
-                Field::new("host", "Hôte", FieldKind::Text).required(),
+                Field::new("host", t!("Host", "Hôte"), FieldKind::Text).required(),
                 Field::new("port", "Port", FieldKind::Number).default(3389),
-                Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
-                    .placeholder("Vide = identifiants propres à cette session"),
-                Field::new("username", "Utilisateur", FieldKind::Text)
-                    .placeholder("DOMAINE\\utilisateur")
+                Field::new("credential", t!("Shared credentials", "Identifiants partagés"), FieldKind::Suggest { source: "credentials".into() })
+                    .placeholder(t!("Empty = this session's own credentials", "Vide = identifiants propres à cette session")),
+                Field::new("username", t!("User", "Utilisateur"), FieldKind::Text)
+                    .placeholder(t!("DOMAIN\\user", "DOMAINE\\utilisateur"))
                     .hidden_by("credential"),
                 Field::new(
                     "client",
-                    "Affichage",
-                    choice(&[("tab", "Dans un onglet"), ("mstsc", "Client Windows (mstsc)")]),
+                    t!("Display", "Affichage"),
+                    choice(&[("tab", t!("In a tab", "Dans un onglet")), ("mstsc", t!("Windows client (mstsc)", "Client Windows (mstsc)"))]),
                 )
                 .default("tab"),
-                Field::new("password", "Mot de passe", FieldKind::Secret).show_if("client", "tab").hidden_by("credential"),
-                Field::new("fullscreen", "Plein écran", FieldKind::Bool).default(false).show_if("client", "mstsc"),
-                Field::new("multimon", "Utiliser tous les écrans", FieldKind::Bool)
+                Field::new("password", t!("Password", "Mot de passe"), FieldKind::Secret).show_if("client", "tab").hidden_by("credential"),
+                Field::new("fullscreen", t!("Full screen", "Plein écran"), FieldKind::Bool).default(false).show_if("client", "mstsc"),
+                Field::new("multimon", t!("Use all screens", "Utiliser tous les écrans"), FieldKind::Bool)
                     .default(false)
                     .show_if("client", "mstsc"),
-                Field::new("mac", "Adresse MAC (Wake-on-LAN)", FieldKind::Text)
-                    .placeholder("Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine"),
+                Field::new("mac", t!("MAC address (Wake-on-LAN)", "Adresse MAC (Wake-on-LAN)"), FieldKind::Text)
+                    .placeholder(t!("Optional: AA:BB:CC:DD:EE:FF, to wake the machine up", "Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine")),
             ],
         }
     }
@@ -85,7 +85,7 @@ fn split_user(raw: &str) -> (String, String) {
 }
 
 fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
-    let host = ctx.require("host", "Hôte")?;
+    let host = ctx.require("host", t!("Host", "Hôte"))?;
     let port = ctx.port(3389)?;
     // Serveur derrière un bastion Heimdia (rebond) : le moteur passe par un tunnel SSH local,
     // l'authentification Windows reste de bout en bout.
@@ -96,7 +96,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     let (domain, username) = split_user(&ctx.str("username").unwrap_or_default());
     let password = ctx.raw("password").unwrap_or_default();
     let helper = helper_path().ok_or_else(|| {
-        anyhow!("Moteur RDP introuvable (portunia-rdp.exe). Réinstallez Portunia, ou choisissez l'affichage « Client Windows ».")
+        anyhow!(t!("RDP engine not found (portunia-rdp.exe). Reinstall Portunia, or choose the « Windows client » display.", "Moteur RDP introuvable (portunia-rdp.exe). Réinstallez Portunia, ou choisissez l'affichage « Client Windows »."))
     })?;
 
     let mut command = Command::new(&helper);
@@ -107,9 +107,9 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let mut child = command.spawn().context("Impossible de lancer le moteur RDP")?;
-    let mut stdin = child.stdin.take().context("Moteur RDP : entrée indisponible")?;
-    let stdout = child.stdout.take().context("Moteur RDP : sortie indisponible")?;
+    let mut child = command.spawn().context(t!("Cannot start the RDP engine", "Impossible de lancer le moteur RDP"))?;
+    let mut stdin = child.stdin.take().context(t!("RDP engine: input unavailable", "Moteur RDP : entrée indisponible"))?;
+    let stdout = child.stdout.take().context(t!("RDP engine: output unavailable", "Moteur RDP : sortie indisponible"))?;
 
     // Pour une vue écran, l'interface transmet la taille de l'onglet en pixels.
     let mut settings = json!({
@@ -141,7 +141,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
                     let reason = message["reason"].as_str().map(String::from);
                     match ready.take() {
                         Some(tx) => {
-                            let _ = tx.send(Err(reason.unwrap_or_else(|| "Le serveur a fermé la connexion".into())));
+                            let _ = tx.send(Err(reason.unwrap_or_else(|| t!("The server closed the connection", "Le serveur a fermé la connexion").into())));
                         }
                         None => sink.closed(reason),
                     }
@@ -156,7 +156,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
             }
         }
         if !ended {
-            let reason = "Le moteur RDP s'est arrêté".to_string();
+            let reason = t!("The RDP engine stopped", "Le moteur RDP s'est arrêté").to_string();
             match ready.take() {
                 Some(tx) => {
                     let _ = tx.send(Err(reason));
@@ -174,7 +174,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
         }
         Err(_) => {
             let _ = child.kill();
-            bail!("Pas de réponse du serveur RDP {host}:{port}");
+            bail!("{}", t!(format!("No answer from RDP server {host}:{port}"), format!("Pas de réponse du serveur RDP {host}:{port}")));
         }
     }
 
@@ -192,8 +192,8 @@ struct RdpSession {
 impl RdpSession {
     fn send(&self, message: Value) -> Result<()> {
         let mut stdin = self.stdin.lock().unwrap();
-        writeln!(stdin, "{message}").map_err(|_| anyhow!("Session fermée"))?;
-        stdin.flush().map_err(|_| anyhow!("Session fermée"))
+        writeln!(stdin, "{message}").map_err(|_| anyhow!(t!("Session closed", "Session fermée")))?;
+        stdin.flush().map_err(|_| anyhow!(t!("Session closed", "Session fermée")))
     }
 }
 
@@ -248,10 +248,10 @@ impl Drop for RdpSession {
 // ---------- Client Windows (mstsc) ----------
 
 fn connect_mstsc(ctx: &ConnectContext) -> Result<Outcome> {
-    let host = ctx.require("host", "Hôte")?;
+    let host = ctx.require("host", t!("Host", "Hôte"))?;
     let port = ctx.port(3389)?;
     let username = ctx.str("username").unwrap_or_default();
-    single_line(&host, "L'hôte")?;
+    single_line(&host, t!("The host", "L'hôte"))?;
     single_line(&username, "L'utilisateur")?;
 
     let mut lines = vec![
@@ -283,6 +283,6 @@ fn connect_mstsc(ctx: &ConnectContext) -> Result<Outcome> {
     Command::new("mstsc.exe")
         .arg(&path)
         .spawn()
-        .context("Impossible de lancer le client Bureau à distance (mstsc.exe)")?;
+        .context(t!("Cannot start the Remote Desktop client (mstsc.exe)", "Impossible de lancer le client Bureau à distance (mstsc.exe)"))?;
     Ok(Outcome::Detached(format!("Bureau à distance ouvert vers {host}")))
 }

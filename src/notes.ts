@@ -3,18 +3,26 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { errorText, notes } from './api';
 import { h, icon } from './dom';
 import { renderMarkdown, toggleTask } from './markdown';
+import { t } from './i18n';
 
-const PLACEHOLDER = `# Notes sur ce serveur
+const PLACEHOLDER = t(`# Notes on this server
+
+- Role, contacts, procedures…
+- [ ] Checkbox
+
+\`\`\`
+command to send to the terminal (click the block)
+\`\`\``, `# Notes sur ce serveur
 
 - Rôle, contacts, procédures…
 - [ ] Case à cocher
 
 \`\`\`
 commande à envoyer au terminal (clic sur le bloc)
-\`\`\``;
+\`\`\``);
 
 export class NotesPanel {
-  readonly el = h('section', { class: 'notes-panel', 'aria-label': 'Notes de la session' });
+  readonly el = h('section', { class: 'notes-panel', 'aria-label': t('Session notes', 'Notes de la session') });
   private text = '';
   private editing = false;
   private loaded = false;
@@ -46,11 +54,11 @@ export class NotesPanel {
 
   private save() {
     window.clearTimeout(this.saveTimer);
-    this.status.textContent = 'Enregistrement…';
+    this.status.textContent = t('Saving…', 'Enregistrement…');
     this.saveTimer = window.setTimeout(async () => {
       try {
         await notes.set(this.sessionId, this.text);
-        this.status.textContent = 'Enregistré';
+        this.status.textContent = t('Saved', 'Enregistré');
         this.onChange(!!this.text.trim());
       } catch (e) {
         this.status.textContent = '';
@@ -68,12 +76,12 @@ export class NotesPanel {
 
   private render() {
     const toggle = h('button', {
-      type: 'button', class: 'btn sm', title: this.editing ? 'Afficher le rendu' : 'Modifier la note (Markdown)',
+      type: 'button', class: 'btn sm', title: this.editing ? t('Show the rendering', 'Afficher le rendu') : t('Edit the note (Markdown)', 'Modifier la note (Markdown)'),
       onclick: () => { this.editing = !this.editing; this.render(); },
-    }, icon(this.editing ? 'check' : 'edit', 14), this.editing ? 'Terminé' : 'Modifier');
+    }, icon(this.editing ? 'check' : 'edit', 14), this.editing ? t('Done', 'Terminé') : t('Edit', 'Modifier'));
 
     if (this.editing) {
-      const area = h('textarea', { class: 'notes-editor', spellcheck: 'true', placeholder: PLACEHOLDER, 'aria-label': 'Texte de la note (Markdown)' });
+      const area = h('textarea', { class: 'notes-editor', spellcheck: 'true', placeholder: PLACEHOLDER, 'aria-label': t('Note text (Markdown)', 'Texte de la note (Markdown)') });
       area.value = this.text;
       area.addEventListener('input', () => { this.text = area.value; this.save(); });
       area.addEventListener('keydown', (e) => {
@@ -92,7 +100,7 @@ export class NotesPanel {
     } else {
       const view = h('div', { class: 'notes-view md' });
       view.innerHTML = this.text.trim() ? renderMarkdown(this.text) : '';
-      if (!this.text.trim()) view.append(h('p', { class: 'muted' }, 'Pas encore de note. « Modifier » pour en écrire une.'));
+      if (!this.text.trim()) view.append(h('p', { class: 'muted' }, t('No note yet. « Edit » to write one.', 'Pas encore de note. « Modifier » pour en écrire une.')));
       view.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         const link = target.closest('a');
@@ -106,11 +114,11 @@ export class NotesPanel {
         if (code && this.send) {
           const text = code.textContent ?? '';
           this.send(text.endsWith('\n') ? text : `${text}\n`);
-          this.toast('Commande envoyée au terminal');
+          this.toast(t('Command sent to the terminal', 'Commande envoyée au terminal'));
         }
       });
       for (const pre of view.querySelectorAll('pre.md-code')) {
-        (pre as HTMLElement).title = this.send ? 'Cliquer pour envoyer au terminal' : '';
+        (pre as HTMLElement).title = this.send ? t('Click to send to the terminal', 'Cliquer pour envoyer au terminal') : '';
         if (this.send) pre.classList.add('sendable');
       }
       view.addEventListener('dblclick', (e) => {
@@ -122,6 +130,6 @@ export class NotesPanel {
       h('header', { class: 'notes-head' }, icon('edit', 14), h('strong', { class: 'grow ellipsis' }, `Notes · ${this.title}`), toggle),
       this.body,
       h('footer', { class: 'notes-foot' }, this.status,
-        h('span', { class: 'muted small' }, this.editing ? 'Markdown · Échap pour l\'aperçu' : 'Double-clic pour modifier')));
+        h('span', { class: 'muted small' }, this.editing ? t('Markdown · Esc for the preview', 'Markdown · Échap pour l\'aperçu') : t('Double-click to edit', 'Double-clic pour modifier'))));
   }
 }

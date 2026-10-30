@@ -2,6 +2,7 @@
 import { api, errorText, Field, Manifest, Session } from './api';
 import { h, icon, viewIcon } from './dom';
 import { tunnelEditor } from './tunnels';
+import { t } from './i18n';
 
 export interface DialogResult {
   session: Session;
@@ -28,7 +29,7 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
     const folderInput = h('input', { type: 'text', list: 'folders-list', value: existing?.folder ?? defaultFolder ?? '', placeholder: 'Production' });
     const tagsInput = h('input', { type: 'text', value: existing?.tags.join(', ') ?? '', placeholder: 'linux, nginx' });
     const datalist = h('datalist', { id: 'folders-list' }, ...folders.map((f) => h('option', { value: f })));
-    const picker = h('div', { class: 'proto-grid', role: 'radiogroup', 'aria-label': 'Protocole' });
+    const picker = h('div', { class: 'proto-grid', role: 'radiogroup', 'aria-label': t('Protocol', 'Protocole') });
     const fieldsBox = h('section', { class: 'ext-fields' });
     const error = h('p', { class: 'form-error', role: 'alert' });
 
@@ -79,7 +80,7 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
           return h('label', { class: 'fld' }, f.label,
             h('input', {
               type: 'password', autocomplete: 'new-password', value: secrets[f.key] ?? '',
-              placeholder: saved ? '•••••••• enregistré — laisser vide pour conserver' : '',
+              placeholder: saved ? t('•••••••• saved — leave empty to keep', '•••••••• enregistré — laisser vide pour conserver') : '',
               oninput: (e: Event) => { secrets[f.key] = (e.target as HTMLInputElement).value; },
             }));
         }
@@ -110,7 +111,7 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
 
     function renderFields() {
       fieldsBox.replaceChildren(
-        h('div', { class: 'ext-head' }, h('h3', {}, 'Connexion'),
+        h('div', { class: 'ext-head' }, h('h3', {}, t('Connection', 'Connexion')),
           h('span', { class: 'muted' }, `Champs fournis par l'extension ${protocol.name} ${protocol.version}`)),
         h('div', { class: 'ext-grid' }, ...protocol.fields.filter(visible).map(renderInput)),
       );
@@ -118,7 +119,7 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
 
     function collect(): Session | null {
       const name = nameInput.value.trim();
-      if (!name) { error.textContent = 'Donnez un nom à la session.'; nameInput.focus(); return null; }
+      if (!name) { error.textContent = t('Give the session a name.', 'Donnez un nom à la session.'); nameInput.focus(); return null; }
       const out: Record<string, unknown> = {};
       for (const f of protocol.fields) {
         if (f.kind.type === 'secret' || !visible(f)) continue;
@@ -149,20 +150,20 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
     const dialog = h('dialog', { class: 'dialog', 'aria-labelledby': 'dlg-title' },
       h('form', { method: 'dialog', onsubmit: (e: Event) => { e.preventDefault(); submit(true); } },
         h('header', { class: 'dlg-head' },
-          h('h2', { id: 'dlg-title' }, title ?? (existing ? 'Modifier la session' : 'Nouvelle session')),
-          h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: () => close(null) }, icon('close'))),
+          h('h2', { id: 'dlg-title' }, title ?? (existing ? t('Edit session', 'Modifier la session') : t('New session', 'Nouvelle session'))),
+          h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Close', 'Fermer'), onclick: () => close(null) }, icon('close'))),
         h('div', { class: 'dlg-body' },
-          h('fieldset', { class: 'fld' }, h('legend', {}, 'Protocole'), picker),
+          h('fieldset', { class: 'fld' }, h('legend', {}, t('Protocol', 'Protocole')), picker),
           h('div', { class: 'row2' },
-            h('label', { class: 'fld' }, 'Nom *', nameInput),
-            h('label', { class: 'fld' }, 'Dossier', folderInput, datalist)),
+            h('label', { class: 'fld' }, t('Name *', 'Nom *'), nameInput),
+            h('label', { class: 'fld' }, t('Folder', 'Dossier'), folderInput, datalist)),
           fieldsBox,
-          h('label', { class: 'fld' }, 'Étiquettes (séparées par des virgules)', tagsInput),
+          h('label', { class: 'fld' }, t('Tags (comma-separated)', 'Étiquettes (séparées par des virgules)'), tagsInput),
           error),
         h('footer', { class: 'dlg-foot' },
-          h('button', { type: 'button', class: 'btn', onclick: () => close(null) }, 'Annuler'),
-          h('button', { type: 'button', class: 'btn', onclick: () => submit(false) }, 'Enregistrer'),
-          h('button', { type: 'submit', class: 'btn primary' }, 'Enregistrer et se connecter'))));
+          h('button', { type: 'button', class: 'btn', onclick: () => close(null) }, t('Cancel', 'Annuler')),
+          h('button', { type: 'button', class: 'btn', onclick: () => submit(false) }, t('Save', 'Enregistrer')),
+          h('button', { type: 'submit', class: 'btn primary' }, t('Save and connect', 'Enregistrer et se connecter')))));
 
     function close(result: DialogResult | null) {
       dialog.close();

@@ -82,13 +82,13 @@ impl Credentials {
     pub fn save(&mut self, mut credential: Credential, secrets_in: &HashMap<String, String>) -> Result<Credential> {
         credential.name = credential.name.trim().to_string();
         if credential.name.is_empty() {
-            bail!("Donnez un nom à l'identifiant");
+            bail!(t!("Give the credential a name", "Donnez un nom à l'identifiant"));
         }
         if self.list.iter().any(|c| c.id != credential.id && c.name.eq_ignore_ascii_case(&credential.name)) {
-            bail!("Un identifiant « {} » existe déjà", credential.name);
+            bail!("{}", t!(format!("A credential « {} » already exists", credential.name), format!("Un identifiant « {} » existe déjà", credential.name)));
         }
         if !["password", "key", "agent"].contains(&credential.auth.as_str()) {
-            bail!("Type d'authentification inconnu : {}", credential.auth);
+            bail!("{}", t!(format!("Unknown authentication type: {}", credential.auth), format!("Type d'authentification inconnu : {}", credential.auth)));
         }
         if credential.id.is_empty() {
             credential.id = uuid::Uuid::new_v4().to_string();
@@ -135,7 +135,7 @@ impl Credentials {
             return Ok(());
         };
         let Some(c) = self.find(key) else {
-            bail!("Identifiant « {key} » introuvable (supprimé ?)");
+            bail!("{}", t!(format!("Credential « {key} » not found (deleted?)"), format!("Identifiant « {key} » introuvable (supprimé ?)")));
         };
         let user = if c.domain.trim().is_empty() || c.username.contains('\\') {
             c.username.clone()
@@ -166,7 +166,7 @@ impl Credentials {
 
     fn persist(&self) -> Result<()> {
         if self.locked {
-            bail!("Portunia est verrouillé : les identifiants ne sont pas chargés");
+            bail!(t!("Portunia is locked: credentials are not loaded", "Portunia est verrouillé : les identifiants ne sont pas chargés"));
         }
         crate::vault::write(&self.path, &serde_json::to_string_pretty(&self.list)?)
     }

@@ -229,7 +229,7 @@ pub trait TerminalConnection: Send + Sync {
     }
     /// Clavier / souris pour un écran distant (vue `Screen`).
     fn input(&self, _event: InputEvent) -> Result<()> {
-        Err(anyhow!("Cette session n'accepte pas ce type de saisie"))
+        Err(anyhow!(t!("This session does not accept this kind of input", "Cette session n'accepte pas ce type de saisie")))
     }
 }
 
@@ -362,13 +362,13 @@ impl ConnectContext {
 
     pub fn require(&self, key: &str, label: &str) -> Result<String> {
         self.str(key)
-            .ok_or_else(|| anyhow!("Champ requis manquant : {label}"))
+            .ok_or_else(|| anyhow!("{}", t!(format!("Required field missing: {label}"), format!("Champ requis manquant : {label}"))))
     }
 
     pub fn port(&self, default: u16) -> Result<u16> {
         match self.str("port") {
             None => Ok(default),
-            Some(s) => s.parse().map_err(|_| anyhow!("Port invalide : {s}")),
+            Some(s) => s.parse().map_err(|_| anyhow!("{}", t!(format!("Invalid port: {s}"), format!("Port invalide : {s}")))),
         }
     }
 
@@ -414,13 +414,13 @@ impl TerminalConnection for WorkerConnection {
     fn write(&self, data: &[u8]) -> Result<()> {
         self.tx
             .send(Cmd::Write(data.to_vec()))
-            .map_err(|_| anyhow!("Session fermée"))
+            .map_err(|_| anyhow!(t!("Session closed", "Session fermée")))
     }
 
     fn resize(&self, cols: u16, rows: u16) -> Result<()> {
         self.tx
             .send(Cmd::Resize(cols, rows))
-            .map_err(|_| anyhow!("Session fermée"))
+            .map_err(|_| anyhow!(t!("Session closed", "Session fermée")))
     }
 
     fn close(&self) {

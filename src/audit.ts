@@ -4,6 +4,7 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { Bastion, bastions, errorText } from './api';
 import { h } from './dom';
+import { LOCALE, t } from './i18n';
 
 export interface AuditHost {
   toast(message: string, kind?: 'info' | 'error'): void;
@@ -21,14 +22,14 @@ export interface AuditRow {
 
 type Section = 'sessions' | 'journal';
 
-const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '');
+const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' }) : '');
 const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const duration = (s: AuditRow) => {
   if (!s.fin) return null;
   const sec = Math.round((Date.parse(s.fin) - Date.parse(s.debut)) / 1000);
   return sec >= 3600 ? `${Math.floor(sec / 3600)} h ${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}` : sec >= 60 ? `${Math.floor(sec / 60)} min ${String(sec % 60).padStart(2, '0')}` : `${sec} s`;
 };
-const MODE_LABEL: Record<string, string> = { coffre: 'coffre', enregistre: 'enregistré', rebond: 'rebond' };
+const MODE_LABEL: Record<string, string> = { coffre: t('vault', 'coffre'), enregistre: t('recorded', 'enregistré'), rebond: t('jump', 'rebond') };
 
 function table(head: string[], rows: HTMLElement[]) {
   return h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, ...head.map((x) => h('th', {}, x)))), h('tbody', {}, ...rows)));
@@ -43,15 +44,15 @@ function dayBefore(days: number) {
 
 export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
   const full = b.role === 'admin' || b.role === 'auditor';
-  const sections: { id: Section; label: string }[] = full ? [{ id: 'sessions', label: 'Sessions' }, { id: 'journal', label: 'Journal' }] : [{ id: 'sessions', label: 'Mes sessions' }];
+  const sections: { id: Section; label: string }[] = full ? [{ id: 'sessions', label: 'Sessions' }, { id: 'journal', label: t('Log', 'Journal') }] : [{ id: 'sessions', label: t('My sessions', 'Mes sessions') }];
   const nav = h('div', { class: 'seg admin-nav', role: 'tablist' });
   const content = h('div', { class: 'admin-content' });
   const call = <T = any>(path: string) => bastions.admin<T>(b.id, 'GET', path);
-  const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? 'Session du bastion expirée : reconnectez-vous (barre latérale).' : errorText(e), 'error');
+  const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Bastion session expired: sign in again (sidebar).', 'Session du bastion expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
 
   const show = async (id: Section) => {
     nav.replaceChildren(...sections.map((s) => h('button', { type: 'button', role: 'tab', class: `seg-opt${s.id === id ? ' on' : ''}`, 'aria-selected': String(s.id === id), onclick: () => show(s.id) }, s.label)));
-    content.replaceChildren(h('p', { class: 'muted' }, 'Chargement…'));
+    content.replaceChildren(h('p', { class: 'muted' }, t('Loading…', 'Chargement…')));
     try {
       content.replaceChildren(await (id === 'sessions' ? sessions() : journal()));
     } catch (e) {
@@ -62,12 +63,12 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
 
   // --- Sessions ---
   const sessions = async () => {
-    const text = h('input', { id: 'au-text', type: 'search', class: 'input grow', placeholder: 'Rechercher dans la frappe et l\'écran (rm -rf, nom de fichier…)' }) as HTMLInputElement;
-    const who = h('input', { id: 'au-who', class: 'input', placeholder: 'Compte', list: 'au-who-list', hidden: !full }) as HTMLInputElement;
-    const srv = h('input', { id: 'au-srv', class: 'input', placeholder: 'Serveur', list: 'au-srv-list' }) as HTMLInputElement;
-    const when = h('select', { id: 'au-when', class: 'input', 'aria-label': 'Période' },
-      h('option', { value: '0' }, 'Aujourd\'hui'), h('option', { value: '7', selected: true }, '7 derniers jours'),
-      h('option', { value: '30' }, '30 derniers jours'), h('option', { value: '365' }, '12 derniers mois'), h('option', { value: '' }, 'Tout')) as HTMLSelectElement;
+    const text = h('input', { id: 'au-text', type: 'search', class: 'input grow', placeholder: t('Search keystrokes and screen (rm -rf, file name…)', 'Rechercher dans la frappe et l\'écran (rm -rf, nom de fichier…)') }) as HTMLInputElement;
+    const who = h('input', { id: 'au-who', class: 'input', placeholder: t('Account', 'Compte'), list: 'au-who-list', hidden: !full }) as HTMLInputElement;
+    const srv = h('input', { id: 'au-srv', class: 'input', placeholder: t('Server', 'Serveur'), list: 'au-srv-list' }) as HTMLInputElement;
+    const when = h('select', { id: 'au-when', class: 'input', 'aria-label': t('Period', 'Période') },
+      h('option', { value: '0' }, t('Today', 'Aujourd\'hui')), h('option', { value: '7', selected: true }, t('Last 7 days', '7 derniers jours')),
+      h('option', { value: '30' }, t('Last 30 days', '30 derniers jours')), h('option', { value: '365' }, t('Last 12 months', '12 derniers mois')), h('option', { value: '' }, t('All', 'Tout'))) as HTMLSelectElement;
     const keys = h('input', { id: 'au-keys', type: 'checkbox' }) as HTMLInputElement;
     const whoList = h('datalist', { id: 'au-who-list' });
     const srvList = h('datalist', { id: 'au-srv-list' });
@@ -94,22 +95,22 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
         const live = !s.fin;
         return h('tr', { class: live ? 'live' : '' },
           h('td', {}, fmtDate(s.debut)),
-          h('td', {}, live ? h('span', { class: 'chip ok' }, 'en cours') : duration(s)),
+          h('td', {}, live ? h('span', { class: 'chip ok' }, t('ongoing', 'en cours')) : duration(s)),
           full ? h('td', {}, s.compte) : null,
           h('td', {}, h('strong', {}, s.serveur), s.type !== 'shell' ? h('span', { class: 'muted small' }, ` · ${s.type}${s.detail && s.type === 'exec' ? ` ${s.detail}` : ''}`) : null),
-          h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null, s.frappe ? h('span', { class: 'chip keys', title: 'Frappe enregistrée' }, 'frappe') : null),
-          searching ? h('td', { class: 'hit' }, s.trouve ? h('button', { class: 'hit-btn', title: 'Relire à ce moment', onclick: () => replay(s.trouve!.t) }, h('span', { class: 'num' }, clock(s.trouve.t)), ' ', h('code', {}, s.trouve.extrait)) : h('span', { class: 'muted' }, '—')) : null,
+          h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null, s.frappe ? h('span', { class: 'chip keys', title: t('Keystrokes recorded', 'Frappe enregistrée') }, t('keystrokes', 'frappe')) : null),
+          searching ? h('td', { class: 'hit' }, s.trouve ? h('button', { class: 'hit-btn', title: t('Replay from this moment', 'Relire à ce moment'), onclick: () => replay(s.trouve!.t) }, h('span', { class: 'num' }, clock(s.trouve.t)), ' ', h('code', {}, s.trouve.extrait)) : h('span', { class: 'muted' }, '—')) : null,
           h('td', { class: 'acts' }, s.enregistree && s.relisible !== false
-            ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, '▶ Relire')
+            ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, t('▶ Replay', '▶ Relire'))
             : s.enregistree
-              ? h('span', { class: 'muted small', title: 'Enregistrée et signée par le bastion' }, 'Bureau à distance : relecture bientôt')
-              : h('span', { class: 'muted small' }, s.mode === 'rebond' ? 'rebond, non enregistrée' : 'non enregistrée')));
+              ? h('span', { class: 'muted small', title: t('Recorded and signed by the bastion', 'Enregistrée et signée par le bastion') }, t('Remote Desktop: replay coming soon', 'Bureau à distance : relecture bientôt'))
+              : h('span', { class: 'muted small' }, s.mode === 'rebond' ? t('jump, not recorded', 'rebond, non enregistrée') : t('not recorded', 'non enregistrée'))));
       });
-      const head = ['Début', 'Durée', ...(full ? ['Compte'] : []), 'Serveur', 'Mode', ...(searching ? ['Trouvé'] : []), ''];
-      list.replaceChildren(rows.length ? table(head, rows) : h('p', { class: 'muted' }, searching ? 'Aucune session ne contient ce texte sur cette période.' : 'Aucune session sur cette période.'));
+      const head = [t('Start', 'Début'), t('Duration', 'Durée'), ...(full ? [t('Account', 'Compte')] : []), t('Server', 'Serveur'), 'Mode', ...(searching ? [t('Found', 'Trouvé')] : []), ''];
+      list.replaceChildren(rows.length ? table(head, rows) : h('p', { class: 'muted' }, searching ? t('No session contains this text in this period.', 'Aucune session ne contient ce texte sur cette période.') : t('No session in this period.', 'Aucune session sur cette période.')));
       note.textContent = searching
-        ? 'La recherche porte sur la frappe et le texte affiché (saisies masquées exclues). « Trouvé » ouvre la relecture à ce moment.'
-        : `${sessions.length} session(s). Chaque relecture est inscrite au journal du bastion.`;
+        ? t('The search covers keystrokes and displayed text (masked input excluded). « Found » opens the replay at that moment.', 'La recherche porte sur la frappe et le texte affiché (saisies masquées exclues). « Trouvé » ouvre la relecture à ce moment.')
+        : t(`${sessions.length} session(s). Each replay is written to the bastion's log.`, `${sessions.length} session(s). Chaque relecture est inscrite au journal du bastion.`);
     };
     let timer = 0;
     const later = () => { clearTimeout(timer); timer = window.setTimeout(() => load().catch(fail), 350); };
@@ -117,41 +118,41 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
     for (const x of [when, keys]) x.addEventListener('change', () => load().catch(fail));
     await load();
     return h('div', { class: 'admin-section' },
-      full ? null : h('div', { class: 'banner info' }, 'Le bastion vous permet de relire vos propres sessions.'),
-      h('div', { class: 'audit-filters' }, text, who, srv, when, h('label', { class: 'check-row' }, keys, h('span', {}, 'Avec frappe')), whoList, srvList),
+      full ? null : h('div', { class: 'banner info' }, t('The bastion lets you replay your own sessions.', 'Le bastion vous permet de relire vos propres sessions.')),
+      h('div', { class: 'audit-filters' }, text, who, srv, when, h('label', { class: 'check-row' }, keys, h('span', {}, t('With keystrokes', 'Avec frappe'))), whoList, srvList),
       list, note);
   };
 
   // --- Journal ---
   const journal = async () => {
-    const search = h('input', { id: 'j-search', type: 'search', placeholder: 'Compte, serveur, événement…' }) as HTMLInputElement;
+    const search = h('input', { id: 'j-search', type: 'search', placeholder: t('Account, server, event…', 'Compte, serveur, événement…') }) as HTMLInputElement;
     const list = h('div');
-    const seal = h('div', { class: 'seal' }, 'Vérification du journal…');
+    const seal = h('div', { class: 'seal' }, t('Checking the log…', 'Vérification du journal…'));
     const load = async () => {
       const { evenements } = await call<{ evenements: any[] }>(`/admin/journal?limite=300${search.value ? `&q=${encodeURIComponent(search.value)}` : ''}`);
-      list.replaceChildren(table(['N°', 'Date', 'Qui', 'Événement', 'Détail'], evenements.reverse().map((e) => h('tr', { class: /echec|refuse|differente|revele/.test(e.evenement) ? 'warn' : '' },
+      list.replaceChildren(table(['N°', 'Date', t('Who', 'Qui'), t('Event', 'Événement'), t('Detail', 'Détail')], evenements.reverse().map((e) => h('tr', { class: /echec|refuse|differente|revele/.test(e.evenement) ? 'warn' : '' },
         h('td', { class: 'num' }, String(e.seq)), h('td', {}, fmtDate(e.date)), h('td', {}, e.qui), h('td', {}, e.evenement),
         h('td', { class: 'detail' }, Object.entries(e.detail ?? {}).map(([k, v]) => `${k} : ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(' · '))))));
     };
     call<{ intact: boolean; evenements?: number; probleme?: string }>('/admin/journal/verification').then((v) => {
       seal.className = `seal${v.intact ? '' : ' bad'}`;
-      seal.textContent = v.intact ? `✓ Journal intact : ${v.evenements} événements chaînés, vérifiés à l'instant.` : `✗ JOURNAL ALTÉRÉ : ${v.probleme}`;
+      seal.textContent = v.intact ? t(`✓ Log intact: ${v.evenements} chained events, checked just now.`, `✓ Journal intact : ${v.evenements} événements chaînés, vérifiés à l'instant.`) : t(`✗ LOG TAMPERED WITH: ${v.probleme}`, `✗ JOURNAL ALTÉRÉ : ${v.probleme}`);
     }).catch(fail);
-    let t = 0;
-    search.addEventListener('input', () => { clearTimeout(t); t = window.setTimeout(() => load().catch(fail), 300); });
+    let searchTimer = 0;
+    search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = window.setTimeout(() => load().catch(fail), 300); });
     await load();
     const exportCsv = async () => {
       const dest = await save({ defaultPath: `journal-${b.name}-${new Date().toISOString().slice(0, 10)}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] });
       if (!dest) return;
-      try { await bastions.journalCsv(b.id, search.value, dest); host.toast(`Journal exporté : ${dest}`); } catch (e) { fail(e); }
+      try { await bastions.journalCsv(b.id, search.value, dest); host.toast(t(`Log exported: ${dest}`, `Journal exporté : ${dest}`)); } catch (e) { fail(e); }
     };
-    return h('div', { class: 'admin-section' }, h('div', { class: 'admin-bar' }, search, h('button', { class: 'btn', onclick: exportCsv }, 'Exporter en CSV')), seal, list);
+    return h('div', { class: 'admin-section' }, h('div', { class: 'admin-bar' }, search, h('button', { class: 'btn', onclick: exportCsv }, t('Export to CSV', 'Exporter en CSV'))), seal, list);
   };
 
   show('sessions');
   return h('div', { class: 'ext-page bastion-admin' },
     h('header', {}, h('h2', {}, `Audit · ${b.name}`), h('p', { class: 'muted' }, full
-      ? `${b.host} · ${b.login} (${b.role === 'admin' ? 'administrateur' : 'auditeur'}) · relecture des sessions et journal`
-      : `${b.host} · vos sessions sur ce bastion`)),
+      ? t(`${b.host} · ${b.login} (${b.role === 'admin' ? 'administrator' : 'auditor'}) · session replay and log`, `${b.host} · ${b.login} (${b.role === 'admin' ? 'administrateur' : 'auditeur'}) · relecture des sessions et journal`)
+      : t(`${b.host} · your sessions on this bastion`, `${b.host} · vos sessions sur ce bastion`))),
     nav, content);
 }

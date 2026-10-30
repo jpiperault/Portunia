@@ -5,6 +5,7 @@ import type { IDisposable, IMarker, Terminal } from '@xterm/xterm';
 import { h, icon } from './dom';
 import { onSettingsChange, settings, updateSettings } from './settings';
 import { DEFAULT_RULES, HighlightRule } from './highlight-rules';
+import { t } from './i18n';
 
 export type { HighlightRule };
 
@@ -163,32 +164,32 @@ export function highlightSettings(): HTMLElement {
 
   const render = () => {
     const cfg = settings().highlight;
-    const preview = (rule: HighlightRule) => h('span', { class: 'hl-preview', style: rule.background ? `background: ${rule.color}; color: #000` : `color: ${rule.color}` }, 'Exemple');
+    const preview = (rule: HighlightRule) => h('span', { class: 'hl-preview', style: rule.background ? `background: ${rule.color}; color: #000` : `color: ${rule.color}` }, t('Example', 'Exemple'));
     box.replaceChildren(
       h('label', { class: 'check setting' },
         h('input', { type: 'checkbox', checked: cfg.enabled, onchange: (e: Event) => { set({ enabled: (e.target as HTMLInputElement).checked }); render(); } }),
-        h('span', {}, 'Colorer les mots-clés dans les terminaux', h('span', { class: 'muted small block' }, 'Erreurs en rouge, avertissements en orange, adresses IP… Les programmes en plein écran (vim, htop) ne sont pas touchés.'))),
+        h('span', {}, t('Colour keywords in terminals', 'Colorer les mots-clés dans les terminaux'), h('span', { class: 'muted small block' }, t('Errors in red, warnings in orange, IP addresses… Full-screen programs (vim, htop) are left alone.', 'Erreurs en rouge, avertissements en orange, adresses IP… Les programmes en plein écran (vim, htop) ne sont pas touchés.')))),
       ...cfg.rules.map((r) => {
         const invalid = !compile(r);
         return h('div', { class: `hl-row${r.enabled ? '' : ' off'}` },
-          h('input', { type: 'checkbox', checked: r.enabled, 'aria-label': 'Règle active', onchange: (e: Event) => { setRule(r.id, { enabled: (e.target as HTMLInputElement).checked }); render(); } }),
-          h('input', { type: 'color', value: r.color, 'aria-label': 'Couleur', onchange: (e: Event) => { setRule(r.id, { color: (e.target as HTMLInputElement).value }); render(); } }),
+          h('input', { type: 'checkbox', checked: r.enabled, 'aria-label': t('Rule enabled', 'Règle active'), onchange: (e: Event) => { setRule(r.id, { enabled: (e.target as HTMLInputElement).checked }); render(); } }),
+          h('input', { type: 'color', value: r.color, 'aria-label': t('Colour', 'Couleur'), onchange: (e: Event) => { setRule(r.id, { color: (e.target as HTMLInputElement).value }); render(); } }),
           h('input', {
-            type: 'text', class: `grow mono${invalid ? ' invalid' : ''}`, value: r.pattern, spellcheck: 'false', 'aria-label': 'Mot ou expression',
-            title: invalid ? 'Expression invalide' : '',
+            type: 'text', class: `grow mono${invalid ? ' invalid' : ''}`, value: r.pattern, spellcheck: 'false', 'aria-label': t('Word or phrase', 'Mot ou expression'),
+            title: invalid ? t('Invalid expression', 'Expression invalide') : '',
             onchange: (e: Event) => { setRule(r.id, { pattern: (e.target as HTMLInputElement).value }); render(); },
           }),
-          h('label', { class: 'check small', title: 'Expression régulière (ex. : error|fail)' },
+          h('label', { class: 'check small', title: t('Regular expression (e.g. error|fail)', 'Expression régulière (ex. : error|fail)') },
             h('input', { type: 'checkbox', checked: r.regex, onchange: (e: Event) => { setRule(r.id, { regex: (e.target as HTMLInputElement).checked }); render(); } }), '.*'),
-          h('label', { class: 'check small', title: 'Mot entier' },
-            h('input', { type: 'checkbox', checked: r.wholeWord, onchange: (e: Event) => { setRule(r.id, { wholeWord: (e.target as HTMLInputElement).checked }); render(); } }), 'Mot'),
-          h('label', { class: 'check small', title: 'Respecter les majuscules' },
+          h('label', { class: 'check small', title: t('Whole word', 'Mot entier') },
+            h('input', { type: 'checkbox', checked: r.wholeWord, onchange: (e: Event) => { setRule(r.id, { wholeWord: (e.target as HTMLInputElement).checked }); render(); } }), t('Word', 'Mot')),
+          h('label', { class: 'check small', title: t('Match case', 'Respecter les majuscules') },
             h('input', { type: 'checkbox', checked: r.caseSensitive, onchange: (e: Event) => { setRule(r.id, { caseSensitive: (e.target as HTMLInputElement).checked }); render(); } }), 'Aa'),
-          h('label', { class: 'check small', title: 'Fond coloré' },
-            h('input', { type: 'checkbox', checked: r.background, onchange: (e: Event) => { setRule(r.id, { background: (e.target as HTMLInputElement).checked }); render(); } }), 'Fond'),
+          h('label', { class: 'check small', title: t('Coloured background', 'Fond coloré') },
+            h('input', { type: 'checkbox', checked: r.background, onchange: (e: Event) => { setRule(r.id, { background: (e.target as HTMLInputElement).checked }); render(); } }), t('Background', 'Fond')),
           preview(r),
           h('button', {
-            type: 'button', class: 'icon-btn sm', 'aria-label': 'Supprimer la règle', title: 'Supprimer',
+            type: 'button', class: 'icon-btn sm', 'aria-label': t('Delete rule', 'Supprimer la règle'), title: t('Delete', 'Supprimer'),
             onclick: () => { set({ rules: settings().highlight.rules.filter((x) => x.id !== r.id) }); render(); },
           }, icon('trash', 14)));
       }),
@@ -200,8 +201,8 @@ export function highlightSettings(): HTMLElement {
             render();
             box.querySelector<HTMLInputElement>('.hl-row:last-of-type input[type=text]')?.focus();
           },
-        }, icon('plus', 14), 'Ajouter une règle'),
-        h('button', { type: 'button', class: 'btn sm', onclick: () => { if (confirm('Revenir aux règles proposées par défaut ?')) { set({ rules: DEFAULT_RULES }); render(); } } }, 'Règles par défaut')));
+        }, icon('plus', 14), t('Add a rule', 'Ajouter une règle')),
+        h('button', { type: 'button', class: 'btn sm', onclick: () => { if (confirm(t('Go back to the default rules?', 'Revenir aux règles proposées par défaut ?'))) { set({ rules: DEFAULT_RULES }); render(); } } }, t('Default rules', 'Règles par défaut'))));
   };
   render();
   return box;

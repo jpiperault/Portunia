@@ -10,6 +10,7 @@ import { h, icon } from './dom';
 import { showMenu } from './menu';
 import { fontStack, onSettingsChange, settings, updateSettings } from './settings';
 import { terminalTheme } from './theme';
+import { t } from './i18n';
 
 export type TermState = 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
@@ -42,7 +43,7 @@ export class TerminalView {
   private opener: Opener | null = null;
   /** Reconnexion automatique après une coupure (pas pour un shell local qui se termine). */
   autoReconnect = true;
-  private verb = 'Connexion à';
+  private verb = t('Connecting to', 'Connexion à');
   /** Saisie reçue avant que la connexion soit prête. */
   private pending: string[] = [];
 
@@ -189,11 +190,11 @@ export class TerminalView {
         return;
       }
       showMenu(e.clientX, e.clientY, [
-        { label: 'Copier', icon: 'copy', action: () => copy(this.term.getSelection()) },
-        { label: 'Coller', action: () => this.pasteClipboard() },
-        { label: 'Rechercher…', action: () => this.openSearch() },
+        { label: t('Copy', 'Copier'), icon: 'copy', action: () => copy(this.term.getSelection()) },
+        { label: t('Paste', 'Coller'), action: () => this.pasteClipboard() },
+        { label: t('Search…', 'Rechercher…'), action: () => this.openSearch() },
         'separator',
-        { label: 'Effacer l\'écran', action: () => this.term.clear() },
+        { label: t('Clear screen', 'Effacer l\'écran'), action: () => this.term.clear() },
       ]);
     });
 
@@ -258,7 +259,7 @@ export class TerminalView {
   }
 
   /** N'importe quelle source de terminal (session, shell local…). */
-  async connectWith(opener: Opener, label: string, verb = 'Connexion à') {
+  async connectWith(opener: Opener, label: string, verb = t('Connecting to', 'Connexion à')) {
     this.opener = opener;
     this.label = label;
     this.verb = verb;
@@ -289,7 +290,7 @@ export class TerminalView {
         this.scheduleReconnect();
       } else {
         this.retry = 0;
-        this.term.write('\x1b[90mAppuyez sur Entrée pour réessayer.\x1b[0m\r\n');
+        this.term.write(t('\x1b[90mPress Enter to try again.\x1b[0m\r\n', '\x1b[90mAppuyez sur Entrée pour réessayer.\x1b[0m\r\n'));
         this.onState('closed', reason);
       }
     }
@@ -325,7 +326,7 @@ export class TerminalView {
     this.onState('reconnecting');
     let left = delay;
     const tick = () => {
-      this.term.write(`\r\x1b[2K\x1b[33mNouvelle tentative (${this.retry}/${MAX_RETRIES}) dans ${left} s — Entrée : maintenant, Échap : annuler\x1b[0m`);
+      this.term.write(t(`\r\x1b[2K\x1b[33mRetrying (${this.retry}/${MAX_RETRIES}) in ${left} s — Enter: now, Esc: cancel\x1b[0m`, `\r\x1b[2K\x1b[33mNouvelle tentative (${this.retry}/${MAX_RETRIES}) dans ${left} s — Entrée : maintenant, Échap : annuler\x1b[0m`));
       if (left-- <= 0) {
         this.clearTimer();
         this.term.write('\r\n');
@@ -355,7 +356,7 @@ export class TerminalView {
   cancelReconnect() {
     this.clearTimer();
     this.retry = 0;
-    this.term.write('\r\n\x1b[90mReconnexion annulée. Appuyez sur Entrée pour réessayer.\x1b[0m\r\n');
+    this.term.write(t('\r\n\x1b[90mReconnection cancelled. Press Enter to try again.\x1b[0m\r\n', '\r\n\x1b[90mReconnexion annulée. Appuyez sur Entrée pour réessayer.\x1b[0m\r\n'));
     this.onState('closed');
   }
 
@@ -384,7 +385,7 @@ export class TerminalView {
       return;
     }
     const count = h('span', { class: 'muted small search-count' });
-    const input = h('input', { type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher dans le terminal', spellcheck: 'false' });
+    const input = h('input', { type: 'search', placeholder: t('Search…', 'Rechercher…'), 'aria-label': t('Search in the terminal', 'Rechercher dans le terminal'), spellcheck: 'false' });
     const find = (backwards = false) => {
       const opts = { decorations: SEARCH_DECORATIONS };
       if (!input.value) { this.search.clearDecorations(); count.textContent = ''; return; }
@@ -392,7 +393,7 @@ export class TerminalView {
       else this.search.findNext(input.value, { ...opts, incremental: true });
     };
     const results = this.search.onDidChangeResults(({ resultIndex, resultCount }) => {
-      count.textContent = resultCount ? `${resultIndex + 1} / ${resultCount}` : 'aucun résultat';
+      count.textContent = resultCount ? `${resultIndex + 1} / ${resultCount}` : t('no result', 'aucun résultat');
     });
     const close = () => {
       results.dispose();
@@ -408,9 +409,9 @@ export class TerminalView {
     });
     this.searchBar = h('div', { class: 'term-search' },
       input, count,
-      h('button', { class: 'icon-btn sm', 'aria-label': 'Résultat précédent', title: 'Précédent (Maj+Entrée)', onclick: () => find(true) }, icon('up', 14)),
-      h('button', { class: 'icon-btn sm', 'aria-label': 'Résultat suivant', title: 'Suivant (Entrée)', onclick: () => find() }, icon('chevronDown', 14)),
-      h('button', { class: 'icon-btn sm', 'aria-label': 'Fermer la recherche', title: 'Fermer (Échap)', onclick: close }, icon('close', 14)));
+      h('button', { class: 'icon-btn sm', 'aria-label': t('Previous result', 'Résultat précédent'), title: t('Previous (Shift+Enter)', 'Précédent (Maj+Entrée)'), onclick: () => find(true) }, icon('up', 14)),
+      h('button', { class: 'icon-btn sm', 'aria-label': t('Next result', 'Résultat suivant'), title: t('Next (Enter)', 'Suivant (Entrée)'), onclick: () => find() }, icon('chevronDown', 14)),
+      h('button', { class: 'icon-btn sm', 'aria-label': t('Close the search', 'Fermer la recherche'), title: t('Close (Esc)', 'Fermer (Échap)'), onclick: close }, icon('close', 14)));
     this.container.append(this.searchBar);
     if (this.term.hasSelection()) input.value = this.term.getSelection();
     input.focus();
@@ -435,8 +436,8 @@ export class TerminalView {
   }
 }
 
-const END_SESSION = '\r\n\x1b[90mSession terminée. Appuyez sur Entrée pour vous reconnecter.\x1b[0m\r\n';
-const END_SHELL = '\r\n\x1b[90mShell terminé. Appuyez sur Entrée pour le relancer.\x1b[0m\r\n';
+const END_SESSION = t('\r\n\x1b[90mSession ended. Press Enter to reconnect.\x1b[0m\r\n', '\r\n\x1b[90mSession terminée. Appuyez sur Entrée pour vous reconnecter.\x1b[0m\r\n');
+const END_SHELL = t('\r\n\x1b[90mShell ended. Press Enter to restart it.\x1b[0m\r\n', '\r\n\x1b[90mShell terminé. Appuyez sur Entrée pour le relancer.\x1b[0m\r\n');
 
 let gpuChecked: boolean | null = null;
 
@@ -463,15 +464,15 @@ function confirmPaste(lines: string[]): Promise<boolean> {
   return new Promise((resolve) => {
     let ok = false;
     const preview = lines.slice(0, 12).map((l) => (l.length > 160 ? `${l.slice(0, 160)}…` : l)).join('\n')
-      + (lines.length > 12 ? `\n… et ${lines.length - 12} ligne(s) de plus` : '');
+      + (lines.length > 12 ? t(`\n… and ${lines.length - 12} more line(s)`, `\n… et ${lines.length - 12} ligne(s) de plus`) : '');
     const dialog = h('dialog', { class: 'dialog', 'aria-labelledby': 'paste-title', style: 'width: min(640px, calc(100vw - 32px))' },
-      h('header', { class: 'dlg-head' }, h('h2', { id: 'paste-title' }, `Coller ${lines.length} lignes ?`)),
+      h('header', { class: 'dlg-head' }, h('h2', { id: 'paste-title' }, t(`Paste ${lines.length} lines?`, `Coller ${lines.length} lignes ?`))),
       h('div', { class: 'dlg-body' },
-        h('p', { style: 'margin: 0' }, 'Chaque ligne sera envoyée comme une commande, aussitôt. Vérifiez qu’il n’y a rien d’inattendu (un texte copié depuis une page web peut contenir des lignes invisibles).'),
+        h('p', { style: 'margin: 0' }, t('Each line will be sent as a command, right away. Check there is nothing unexpected (text copied from a web page can contain invisible lines).', 'Chaque ligne sera envoyée comme une commande, aussitôt. Vérifiez qu’il n’y a rien d’inattendu (un texte copié depuis une page web peut contenir des lignes invisibles).')),
         h('pre', { class: 'confirm-detail', style: 'white-space: pre-wrap; max-height: 260px; overflow: auto; margin: 0' }, preview)),
       h('footer', { class: 'dlg-foot' },
-        h('button', { type: 'button', class: 'btn', autofocus: true, onclick: () => dialog.close() }, 'Annuler'),
-        h('button', { type: 'button', class: 'btn primary', onclick: () => { ok = true; dialog.close(); } }, 'Coller')));
+        h('button', { type: 'button', class: 'btn', autofocus: true, onclick: () => dialog.close() }, t('Cancel', 'Annuler')),
+        h('button', { type: 'button', class: 'btn primary', onclick: () => { ok = true; dialog.close(); } }, t('Paste', 'Coller'))));
     dialog.addEventListener('close', () => { dialog.remove(); resolve(ok); });
     document.body.append(dialog);
     dialog.showModal();

@@ -1,3 +1,5 @@
+#[macro_use]
+mod lang;
 mod bastion;
 mod commands;
 mod connector;
@@ -94,6 +96,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            lang::set_language,
             commands::list_protocols,
             commands::list_sessions,
             commands::save_session,

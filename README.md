@@ -75,6 +75,7 @@ Other features:
 - automatic reconnection after a network cut or sleep (can be turned off in Settings);
 - server file browser (SFTP) to the right of SSH sessions: browsing, upload and download of files or whole folders (drag and drop included), editing a remote file in your editor with automatic upload on every save, create, rename, delete, transfer tracking;
 - import from ~/.ssh/config, PuTTY and mRemoteNG (with preview and duplicate detection), Portunia backup and restore;
+- language: English or French, following Windows (Settings › Appearance to choose);
 - appearance: dark, light or Windows theme, 9 terminal palettes (Dracula, Nord, Solarized…), colour per folder (band on sessions, tabs and toolbar, "PRODUCTION" label);
 - server dashboard (Pro, SSH sessions to Linux): CPU and memory with charts, swap, load, disks, busiest processes, failed systemd services ("View" shows their log), refreshed every 5 s while the panel is visible;
 - command on several servers (Pro): choice of SSH sessions or a whole folder (right click), command or saved command, 8 servers at a time, results side by side (exit code, duration, output, failure filter, copy), stronger confirmation for red folders;
@@ -143,8 +144,9 @@ src/                 interface (TypeScript, no framework)
   bastion.ts         Heimdia extension: sidebar, sign-in, administration
   audit.ts           Heimdia audit: sessions and log
   auditplayer.ts     session player (subtitles, markers, skipped idle time)
+  i18n.ts            interface language: t("English", "Français") next to each other
 rdp-helper/          RDP engine (IronRDP), separate program started for each RDP session
-scripts/             RDP engine build
+scripts/             RDP engine build, check of t(…) calls (check-i18n.cjs)
 tools/license-tool/  publisher tool: signing key and licence generation (do not distribute)
 screenshot.html      demo with fake data for screenshots
                      (npx vite, then /screenshot.html?scene=main or ?scene=split&theme=light)

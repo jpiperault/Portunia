@@ -76,16 +76,16 @@ impl Feature {
 
     pub fn label(self) -> &'static str {
         match self {
-            Feature::SessionRecording => "Enregistrement des sessions",
-            Feature::MonitoringAlerts => "Alertes de supervision",
-            Feature::Sync => "Synchronisation chiffrée entre PC",
-            Feature::Vaults => "Coffres de mots de passe (Bitwarden, KeePass…)",
-            Feature::TeamSpaces => "Espaces partagés d'équipe",
-            Feature::ServerDashboard => "Tableau de bord des serveurs",
-            Feature::MultiExec => "Commande sur plusieurs serveurs",
-            Feature::Containers => "Conteneurs Docker et Kubernetes",
-            Feature::CloudStorage => "Stockage S3",
-            Feature::BastionAdmin => "Administration des bastions Heimdia",
+            Feature::SessionRecording => t!("Session recording", "Enregistrement des sessions"),
+            Feature::MonitoringAlerts => t!("Monitoring alerts", "Alertes de supervision"),
+            Feature::Sync => t!("Encrypted sync between PCs", "Synchronisation chiffrée entre PC"),
+            Feature::Vaults => t!("Password vaults (Bitwarden, KeePass…)", "Coffres de mots de passe (Bitwarden, KeePass…)"),
+            Feature::TeamSpaces => t!("Shared team spaces", "Espaces partagés d'équipe"),
+            Feature::ServerDashboard => t!("Server dashboard", "Tableau de bord des serveurs"),
+            Feature::MultiExec => t!("Command on several servers", "Commande sur plusieurs serveurs"),
+            Feature::Containers => t!("Docker and Kubernetes containers", "Conteneurs Docker et Kubernetes"),
+            Feature::CloudStorage => t!("S3 storage", "Stockage S3"),
+            Feature::BastionAdmin => t!("Heimdia bastion administration", "Administration des bastions Heimdia"),
         }
     }
 }
@@ -164,13 +164,13 @@ fn today() -> String {
 
 /// Vérifie la signature d'une licence et renvoie ses données.
 pub fn verify(text: &str, public_key_b64: &str) -> Result<LicenseData> {
-    let signed: SignedLicense = serde_json::from_str(text.trim()).context("Ce texte n'est pas une licence Portunia")?;
-    let key = B64.decode(public_key_b64).map_err(|_| anyhow!("Clé publique de licence invalide"))?;
-    let signature = B64.decode(&signed.signature).map_err(|_| anyhow!("Signature de licence illisible"))?;
+    let signed: SignedLicense = serde_json::from_str(text.trim()).context(t!("This text is not a Portunia licence", "Ce texte n'est pas une licence Portunia"))?;
+    let key = B64.decode(public_key_b64).map_err(|_| anyhow!(t!("Invalid licence public key", "Clé publique de licence invalide")))?;
+    let signature = B64.decode(&signed.signature).map_err(|_| anyhow!(t!("Unreadable licence signature", "Signature de licence illisible")))?;
     let message = serde_json::to_vec(&signed.data)?;
     UnparsedPublicKey::new(&ED25519, key)
         .verify(&message, &signature)
-        .map_err(|_| anyhow!("Licence invalide : signature incorrecte"))?;
+        .map_err(|_| anyhow!(t!("Invalid licence: wrong signature", "Licence invalide : signature incorrecte")))?;
     Ok(signed.data)
 }
 
@@ -207,10 +207,13 @@ impl License {
         if self.allows(feature) {
             Ok(())
         } else {
-            bail!("« {} » est réservé à l'édition {}", feature.label(), match feature.edition() {
-                Edition::Team => "Équipes",
+            bail!("{}", t!(format!("« {} » is reserved for the {} edition", feature.label(), match feature.edition() {
+                Edition::Team => t!("Teams", "Équipes"),
                 _ => "Pro",
-            })
+            }), format!("« {} » est réservé à l'édition {}", feature.label(), match feature.edition() {
+                Edition::Team => t!("Teams", "Équipes"),
+                _ => "Pro",
+            })))
         }
     }
 
@@ -229,7 +232,7 @@ impl License {
 
     pub fn activate(&mut self, text: &str) -> Result<()> {
         let data = verify(text, PUBLIC_KEY)?;
-        fs::write(&self.path, text.trim()).context("Impossible d'enregistrer la licence")?;
+        fs::write(&self.path, text.trim()).context(t!("Cannot save the licence", "Impossible d'enregistrer la licence"))?;
         self.current = Some(data);
         Ok(())
     }

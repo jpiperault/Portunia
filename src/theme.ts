@@ -2,6 +2,7 @@
 import type { ITheme } from '@xterm/xterm';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { onSettingsChange, settings } from './settings';
+import { t } from './i18n';
 
 // ---------- Thème de l'interface ----------
 
@@ -66,19 +67,19 @@ export const TERMINAL_THEMES: Record<string, ITheme & { label: string }> = {
     brightBlack: '#928374', brightRed: '#FB4934', brightGreen: '#B8BB26', brightYellow: '#FABD2F', brightBlue: '#83A598', brightMagenta: '#D3869B', brightCyan: '#8EC07C', brightWhite: '#EBDBB2',
   },
   solarizedDark: {
-    label: 'Solarized sombre',
+    label: t('Solarized dark', 'Solarized sombre'),
     background: '#002B36', foreground: '#839496', cursor: '#93A1A1', selectionBackground: '#073642',
     black: '#073642', red: '#DC322F', green: '#859900', yellow: '#B58900', blue: '#268BD2', magenta: '#D33682', cyan: '#2AA198', white: '#EEE8D5',
     brightBlack: '#586E75', brightRed: '#CB4B16', brightGreen: '#586E75', brightYellow: '#657B83', brightBlue: '#839496', brightMagenta: '#6C71C4', brightCyan: '#93A1A1', brightWhite: '#FDF6E3',
   },
   solarizedLight: {
-    label: 'Solarized clair',
+    label: t('Solarized light', 'Solarized clair'),
     background: '#FDF6E3', foreground: '#586E75', cursor: '#586E75', selectionBackground: '#EEE8D5',
     black: '#073642', red: '#DC322F', green: '#859900', yellow: '#B58900', blue: '#268BD2', magenta: '#D33682', cyan: '#2AA198', white: '#EEE8D5',
     brightBlack: '#002B36', brightRed: '#CB4B16', brightGreen: '#586E75', brightYellow: '#657B83', brightBlue: '#839496', brightMagenta: '#6C71C4', brightCyan: '#93A1A1', brightWhite: '#FDF6E3',
   },
   light: {
-    label: 'Clair',
+    label: t('Light', 'Clair'),
     background: '#FFFFFF', foreground: '#1F2328', cursor: '#2563D6', selectionBackground: '#CFE0FB',
     black: '#24292F', red: '#CF222E', green: '#116329', yellow: '#7D4E00', blue: '#0969DA', magenta: '#8250DF', cyan: '#1B7C83', white: '#6E7781',
     brightBlack: '#57606A', brightRed: '#A40E26', brightGreen: '#1A7F37', brightYellow: '#633C01', brightBlue: '#218BFF', brightMagenta: '#A475F9', brightCyan: '#3192AA', brightWhite: '#8C959F',
@@ -95,12 +96,12 @@ export function terminalTheme(): ITheme {
 // ---------- Couleurs de dossier ----------
 
 export const FOLDER_COLORS: Record<string, { label: string; value: string }> = {
-  red: { label: 'Rouge', value: '#E5484D' },
-  orange: { label: 'Orange', value: '#F08C2E' },
-  yellow: { label: 'Jaune', value: '#D9B230' },
-  green: { label: 'Vert', value: '#3FB37F' },
-  blue: { label: 'Bleu', value: '#4C8DFF' },
-  purple: { label: 'Violet', value: '#9B6DFF' },
+  red: { label: t('Red', 'Rouge'), value: '#E5484D' },
+  orange: { label: t('Orange', 'Orange'), value: '#F08C2E' },
+  yellow: { label: t('Yellow', 'Jaune'), value: '#D9B230' },
+  green: { label: t('Green', 'Vert'), value: '#3FB37F' },
+  blue: { label: t('Blue', 'Bleu'), value: '#4C8DFF' },
+  purple: { label: t('Purple', 'Violet'), value: '#9B6DFF' },
 };
 
 /** Couleur d'un dossier : la sienne, sinon celle du plus proche parent coloré. */

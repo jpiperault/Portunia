@@ -5,6 +5,7 @@ import { Terminal } from '@xterm/xterm';
 import { h, icon } from './dom';
 import { fontStack, settings } from './settings';
 import { terminalTheme } from './theme';
+import { LOCALE, t } from './i18n';
 
 /** Réponse de GET /audit/sessions/{id}/enregistrement. */
 export interface AuditRecording {
@@ -33,7 +34,7 @@ interface Ev { t: number; k: string; d: string }
 /** Une ligne tapée (ou repérée à l'écran) : de la première touche à Entrée. */
 interface Line { t: number; end: number; keys: Ev[]; text: string; secret: boolean; level: '' | 'w' | 'x'; screen: boolean }
 
-const KEYS: Record<string, string> = { '\r': 'Entrée', '\n': 'Entrée', '\t': 'Tab', '\x03': 'Ctrl+C', '\x04': 'Ctrl+D', '\x7f': '⌫', '\b': '⌫', '\x1b[A': '↑', '\x1b[B': '↓', '\x1b[C': '→', '\x1b[D': '←', '\x1bOA': '↑', '\x1bOB': '↓', '\x1bOC': '→', '\x1bOD': '←', '\x1b': 'Échap' };
+const KEYS: Record<string, string> = { '\r': t('Enter', 'Entrée'), '\n': t('Enter', 'Entrée'), '\t': 'Tab', '\x03': 'Ctrl+C', '\x04': 'Ctrl+D', '\x7f': '⌫', '\b': '⌫', '\x1b[A': '↑', '\x1b[B': '↓', '\x1b[C': '→', '\x1b[D': '←', '\x1bOA': '↑', '\x1bOB': '↓', '\x1bOC': '→', '\x1bOD': '←', '\x1b': t('Esc', 'Échap') };
 const IDLE = 5;
 const ERROR = /\b(error|erreur|failed|échec|denied|refusé|not found|introuvable|no such file|permission denied|segmentation fault)\b/i;
 
@@ -151,13 +152,13 @@ export class AuditPlayer {
   private readonly screen = h('div', { class: 'ap-screen' });
   private readonly subs = h('div', { class: 'ap-subs', hidden: true });
   private readonly skipNote = h('div', { class: 'ap-skip', hidden: true });
-  private readonly track = h('div', { class: 'ap-track', role: 'slider', tabindex: '0', 'aria-label': 'Position dans la session', 'aria-valuemin': '0' });
+  private readonly track = h('div', { class: 'ap-track', role: 'slider', tabindex: '0', 'aria-label': t('Position in the session', 'Position dans la session'), 'aria-valuemin': '0' });
   private readonly done = h('div', { class: 'ap-done' });
   private readonly knob = h('div', { class: 'ap-knob' });
   private readonly clock = h('span', { class: 'ap-time' });
-  private readonly playBtn = h('button', { class: 'ap-btn', 'aria-label': 'Lire' });
+  private readonly playBtn = h('button', { class: 'ap-btn', 'aria-label': t('Play', 'Lire') });
   private readonly list = h('div', { class: 'ap-lines' });
-  private readonly search = h('input', { type: 'search', class: 'input', placeholder: 'Rechercher dans la frappe', 'aria-label': 'Rechercher dans la frappe' }) as HTMLInputElement;
+  private readonly search = h('input', { type: 'search', class: 'input', placeholder: t('Search keystrokes', 'Rechercher dans la frappe'), 'aria-label': t('Search keystrokes', 'Rechercher dans la frappe') }) as HTMLInputElement;
 
   constructor(readonly el: HTMLElement, private readonly rec: AuditRecording, private readonly opts: AuditPlayerOptions) {
     const parsed = parse(rec.cast);
@@ -196,28 +197,28 @@ export class AuditPlayer {
   private build() {
     const r = this.rec;
     const s = r.session;
-    const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' }) : '');
+    const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : '');
     const seal = r.signature === 'verifiee'
-      ? h('span', { class: 'ap-seal ok', title: `SHA-256 ${r.empreinte}` }, '✓ Signature vérifiée')
+      ? h('span', { class: 'ap-seal ok', title: `SHA-256 ${r.empreinte}` }, t('✓ Signature checked', '✓ Signature vérifiée'))
       : r.signature === 'alteree'
-        ? h('span', { class: 'ap-seal bad', title: `SHA-256 ${r.empreinte}` }, '✗ Fichier modifié depuis la session')
-        : h('span', { class: 'ap-seal', title: 'La signature est posée à la fin de la session' }, 'Pas encore signé');
+        ? h('span', { class: 'ap-seal bad', title: `SHA-256 ${r.empreinte}` }, t('✗ File modified since the session', '✗ Fichier modifié depuis la session'))
+        : h('span', { class: 'ap-seal', title: t('The signature is added at the end of the session', 'La signature est posée à la fin de la session') }, t('Not signed yet', 'Pas encore signé'));
     const actions = h('div', { class: 'ap-actions' },
       this.opts.canReveal && r.saisies_masquees && !r.revele
-        ? h('button', { class: 'btn sm', title: 'Affiche en clair les saisies sans écho (mots de passe). Inscrit au journal.', onclick: () => this.opts.reveal() }, `Révéler ${r.saisies_masquees} saisie(s) masquée(s)`)
+        ? h('button', { class: 'btn sm', title: t('Shows input typed without echo (passwords) in clear. Written to the log.', 'Affiche en clair les saisies sans écho (mots de passe). Inscrit au journal.'), onclick: () => this.opts.reveal() }, t(`Reveal ${r.saisies_masquees} masked input(s)`, `Révéler ${r.saisies_masquees} saisie(s) masquée(s)`))
         : null,
-      h('button', { class: 'btn sm', title: r.revele ? 'Fichier d\'origine, signé par le bastion' : 'Copie masquée (sans les saisies sans écho), non signée', onclick: () => this.opts.exportCast() }, icon('download', 14), 'Enregistrement .cast'),
-      h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), 'Transcription'));
+      h('button', { class: 'btn sm', title: r.revele ? t('Original file, signed by the bastion', 'Fichier d\'origine, signé par le bastion') : t('Masked copy (without input typed without echo), not signed', 'Copie masquée (sans les saisies sans écho), non signée'), onclick: () => this.opts.exportCast() }, icon('download', 14), t('.cast recording', 'Enregistrement .cast')),
+      h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')));
     const head = h('div', { class: 'ap-head' },
-      h('h2', {}, s.serveur, ' ', s.mode ? h('span', { class: `badge mode-${s.mode}` }, s.mode === 'enregistre' ? 'enregistré' : s.mode) : null),
+      h('h2', {}, s.serveur, ' ', s.mode ? h('span', { class: `badge mode-${s.mode}` }, s.mode === 'enregistre' ? t('recorded', 'enregistré') : s.mode) : null),
       h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} · ${fmt(this.duration)}${s.fin ? '' : ' · en cours'}`),
       seal, actions);
-    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, 'Saisies masquées révélées : cette relecture est inscrite au journal du bastion.'));
+    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Masked input revealed: this replay is written to the bastion\'s log.', 'Saisies masquées révélées : cette relecture est inscrite au journal du bastion.')));
 
     // Écran : terminal, filigrane, sous-titres.
     this.screen.append(
       h('div', { class: 'ap-term' }),
-      h('div', { class: 'ap-wm' }, `Consulté par ${this.opts.viewer}`, h('br'), new Date().toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })),
+      h('div', { class: 'ap-wm' }, t(`Viewed by ${this.opts.viewer}`, `Consulté par ${this.opts.viewer}`), h('br'), new Date().toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' })),
       this.skipNote, this.subs);
     this.screen.addEventListener('click', () => this.toggle());
 
@@ -228,9 +229,9 @@ export class AuditPlayer {
     }
     this.track.append(this.done);
     for (const l of this.lines) {
-      this.track.append(h('div', { class: `ap-mk ${l.level}`, style: `left:${(100 * l.t) / this.duration}%`, title: `${fmt(l.t)}  ${l.secret ? '(saisie masquée)' : l.text}` }));
+      this.track.append(h('div', { class: `ap-mk ${l.level}`, style: `left:${(100 * l.t) / this.duration}%`, title: t(`${fmt(l.t)}  ${l.secret ? '(masked input)' : l.text}`, `${fmt(l.t)}  ${l.secret ? '(saisie masquée)' : l.text}`) }));
     }
-    for (const t of this.errors) this.track.append(h('div', { class: 'ap-mk err', style: `left:${(100 * t) / this.duration}%`, title: `${fmt(t)}  erreur affichée` }));
+    for (const at of this.errors) this.track.append(h('div', { class: 'ap-mk err', style: `left:${(100 * at) / this.duration}%`, title: t(`${fmt(at)}  error displayed`, `${fmt(at)}  erreur affichée`) }));
     this.track.append(this.knob);
     this.track.setAttribute('aria-valuemax', String(Math.round(this.duration)));
     const fromPointer = (e: PointerEvent) => {
@@ -240,17 +241,17 @@ export class AuditPlayer {
     this.track.addEventListener('pointerdown', (e) => { this.track.setPointerCapture(e.pointerId); fromPointer(e); });
     this.track.addEventListener('pointermove', (e) => { if (this.track.hasPointerCapture(e.pointerId)) fromPointer(e); });
 
-    const speed = h('select', { class: 'ap-speed', 'aria-label': 'Vitesse', onchange: (e: Event) => { this.speed = Number((e.target as HTMLSelectElement).value); } },
+    const speed = h('select', { class: 'ap-speed', 'aria-label': t('Speed', 'Vitesse'), onchange: (e: Event) => { this.speed = Number((e.target as HTMLSelectElement).value); } },
       ...[1, 2, 4, 8, 16].map((v) => h('option', { value: String(v), selected: v === this.speed }, `${v}×`)));
     const toggleBtn = (label: (Node | string)[], title: string, on: boolean, change: (on: boolean) => void, disabled = false) => {
       const b = h('button', { class: 'ap-btn', 'aria-pressed': String(on), title, disabled }, ...label);
       b.addEventListener('click', () => { const v = b.getAttribute('aria-pressed') !== 'true'; b.setAttribute('aria-pressed', String(v)); change(v); });
       return b;
     };
-    const cc = toggleBtn([h('span', { class: 'ap-cc' }, 'CC'), ' Frappe'], this.withInput ? 'Sous-titres : la frappe' : 'Frappe non enregistrée pour cette session',
+    const cc = toggleBtn([h('span', { class: 'ap-cc' }, 'CC'), ' Frappe'], this.withInput ? t('Subtitles: the keystrokes', 'Sous-titres : la frappe') : t('Keystrokes not recorded for this session', 'Frappe non enregistrée pour cette session'),
       this.withInput, (v) => { this.subtitles = v; this.render(); }, !this.withInput);
     this.subtitles = this.withInput;
-    const full = h('button', { class: 'ap-btn', 'aria-label': 'Plein écran', title: 'Plein écran', onclick: () => {
+    const full = h('button', { class: 'ap-btn', 'aria-label': t('Full screen', 'Plein écran'), title: t('Full screen', 'Plein écran'), onclick: () => {
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       else this.el.querySelector('.ap-main')?.requestFullscreen().catch(() => {});
     } }, '⛶');
@@ -258,17 +259,17 @@ export class AuditPlayer {
     const controls = h('div', { class: 'ap-controls' }, this.track,
       h('div', { class: 'ap-bar' },
         this.playBtn,
-        h('button', { class: 'ap-btn', 'aria-label': 'Reculer de 10 secondes', onclick: () => this.seek(this.position - 10) }, '−10 s'),
-        h('button', { class: 'ap-btn', 'aria-label': 'Avancer de 10 secondes', onclick: () => this.seek(this.position + 10) }, '+10 s'),
+        h('button', { class: 'ap-btn', 'aria-label': t('Back 10 seconds', 'Reculer de 10 secondes'), onclick: () => this.seek(this.position - 10) }, '−10 s'),
+        h('button', { class: 'ap-btn', 'aria-label': t('Forward 10 seconds', 'Avancer de 10 secondes'), onclick: () => this.seek(this.position + 10) }, '+10 s'),
         this.clock, h('span', { class: 'grow' }),
-        toggleBtn(['Sauter les pauses'], `Passe les moments sans activité (plus de ${IDLE} s)`, true, (v) => { this.skip = v; }),
+        toggleBtn([t('Skip pauses', 'Sauter les pauses')], t(`Skips moments without activity (more than ${IDLE} s)`, `Passe les moments sans activité (plus de ${IDLE} s)`), true, (v) => { this.skip = v; }),
         speed, cc, full));
 
     // Panneau : frappe ou commandes, informations.
     const tabs = h('div', { class: 'ap-tabs', role: 'tablist' });
     const linesPane = h('div', { class: 'ap-pane' },
       this.search,
-      this.withInput ? null : h('p', { class: 'ap-note' }, 'Frappe non enregistrée par la règle. Commandes repérées à l\'écran :'),
+      this.withInput ? null : h('p', { class: 'ap-note' }, t('Keystrokes not recorded by the rule. Commands spotted on screen:', 'Frappe non enregistrée par la règle. Commandes repérées à l\'écran :')),
       this.list);
     const infoPane = h('div', { class: 'ap-pane', hidden: true }, this.info());
     const tab = (label: string, pane: HTMLElement, on: boolean) => {
@@ -280,7 +281,7 @@ export class AuditPlayer {
       });
       return b;
     };
-    tabs.append(tab(this.withInput ? 'Frappe' : 'Commandes', linesPane, true), tab('Informations', infoPane, false));
+    tabs.append(tab(this.withInput ? t('Keystrokes', 'Frappe') : t('Commands', 'Commandes'), linesPane, true), tab(t('Information', 'Informations'), infoPane, false));
     this.search.addEventListener('input', () => this.renderList());
     this.renderList();
 
@@ -300,26 +301,26 @@ export class AuditPlayer {
   private info(): HTMLElement {
     const r = this.rec;
     const s = r.session;
-    const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' }) : 'en cours');
+    const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : t('ongoing', 'en cours'));
     const row = (k: string, v: Node | string) => [h('dt', {}, k), h('dd', {}, v)];
-    const sig = { verifiee: 'vérifiée avec la clé du bastion', alteree: 'NE CORRESPOND PAS : fichier modifié', absente: 'pas encore posée (session en cours ou interrompue)' }[r.signature];
+    const sig = { verifiee: t('checked with the bastion\'s key', 'vérifiée avec la clé du bastion'), alteree: t('DOES NOT MATCH: file modified', 'NE CORRESPOND PAS : fichier modifié'), absente: t('not added yet (session ongoing or interrupted)', 'pas encore posée (session en cours ou interrompue)') }[r.signature];
     return h('div', {},
       h('dl', { class: 'ap-kv' },
-        ...row('Compte', s.compte),
-        ...row('Serveur', s.serveur),
+        ...row(t('Account', 'Compte'), s.compte),
+        ...row(t('Server', 'Serveur'), s.serveur),
         ...row('Mode', s.mode || '—'),
         ...row('Type', s.detail ? `${s.type} · ${s.detail}` : s.type),
-        ...row('Depuis', s.adresse || '—'),
-        ...row('Début', date(s.debut)),
-        ...row('Fin', date(s.fin)),
-        ...row('Frappe', s.frappe ? 'enregistrée' : 'non enregistrée'),
-        ...row('Saisies masquées', r.revele ? `${r.saisies_masquees} (révélées)` : String(r.saisies_masquees)),
-        ...row('Taille', `${Math.max(1, Math.round(s.octets / 1024))} Ko`),
-        ...row('Empreinte', h('code', {}, `SHA-256 ${r.empreinte}`)),
+        ...row(t('From', 'Depuis'), s.adresse || '—'),
+        ...row(t('Start', 'Début'), date(s.debut)),
+        ...row(t('End', 'Fin'), date(s.fin)),
+        ...row(t('Keystrokes', 'Frappe'), s.frappe ? t('recorded', 'enregistrée') : t('not recorded', 'non enregistrée')),
+        ...row(t('Masked input', 'Saisies masquées'), r.revele ? t(`${r.saisies_masquees} (revealed)`, `${r.saisies_masquees} (révélées)`) : String(r.saisies_masquees)),
+        ...row(t('Size', 'Taille'), `${Math.max(1, Math.round(s.octets / 1024))} Ko`),
+        ...row(t('Fingerprint', 'Empreinte'), h('code', {}, `SHA-256 ${r.empreinte}`)),
         ...row('Signature', h('span', { class: r.signature === 'alteree' ? 'ap-bad' : r.signature === 'verifiee' ? 'ap-ok' : '' }, sig))),
       h('p', { class: 'ap-note' }, r.consultations.length
-        ? `Relectures : ${r.consultations.map((c) => `${c.qui} (${new Date(c.date).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}${c.evenement.endsWith('revele') ? ', révélée' : ''})`).join(', ')}.`
-        : 'Première relecture.'));
+        ? `Relectures : ${r.consultations.map((c) => `${c.qui} (${new Date(c.date).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' })}${c.evenement.endsWith('revele') ? t(', revealed', ', révélée') : ''})`).join(', ')}.`
+        : t('First replay.', 'Première relecture.')));
   }
 
   private keyChip(cls: string, text: string) {
@@ -334,7 +335,7 @@ export class AuditPlayer {
     let dots = 0;
     const flush = () => {
       if (typed) { out.push(h('span', { class: 'ap-typed' }, typed)); typed = ''; }
-      if (dots) { out.push(h('span', { class: 'ap-typed' }, '•'.repeat(dots)), this.keyChip(maskClass, 'saisie sans écho, masquée')); dots = 0; }
+      if (dots) { out.push(h('span', { class: 'ap-typed' }, '•'.repeat(dots)), this.keyChip(maskClass, t('input without echo, masked', 'saisie sans écho, masquée'))); dots = 0; }
     };
     for (const k of l.keys) {
       if (k.t > until) break;
@@ -359,7 +360,7 @@ export class AuditPlayer {
       b.addEventListener('click', () => this.seek(Math.max(0, l.t - 0.4)));
       this.list.append(b);
     });
-    if (!this.list.childElementCount) this.list.append(h('p', { class: 'ap-note' }, q ? 'Rien trouvé.' : 'Aucune ligne tapée.'));
+    if (!this.list.childElementCount) this.list.append(h('p', { class: 'ap-note' }, q ? t('Nothing found.', 'Rien trouvé.') : t('No typed line.', 'Aucune ligne tapée.')));
     this.current = -1;
     this.markCurrent();
   }
@@ -386,7 +387,7 @@ export class AuditPlayer {
     this.clock.textContent = `${fmt(this.position)} / ${fmt(this.duration)}`;
     this.track.setAttribute('aria-valuenow', String(Math.round(this.position)));
     this.playBtn.replaceChildren(icon(this.playing ? 'pause' : 'play', 14));
-    this.playBtn.setAttribute('aria-label', this.playing ? 'Pause' : 'Lire');
+    this.playBtn.setAttribute('aria-label', this.playing ? 'Pause' : t('Play', 'Lire'));
     this.renderSubs();
     this.markCurrent();
   }
@@ -448,20 +449,20 @@ export class AuditPlayer {
   private tick() {
     if (!this.playing) return;
     const now = performance.now();
-    let t = this.position + ((now - this.lastTick) / 1000) * this.speed;
+    let pos = this.position + ((now - this.lastTick) / 1000) * this.speed;
     this.lastTick = now;
     if (this.skip) {
       for (const [a, b] of this.idle) {
-        if (t > a && t < b) {
-          t = b;
-          this.skipNote.textContent = `⏭ Pause de ${fmt(b - a)} sautée`;
+        if (pos > a && pos < b) {
+          pos = b;
+          this.skipNote.textContent = t(`⏭ ${fmt(b - a)} pause skipped`, `⏭ Pause de ${fmt(b - a)} sautée`);
           this.skipNote.hidden = false;
           clearTimeout(this.skipTimer);
           this.skipTimer = window.setTimeout(() => { this.skipNote.hidden = true; }, 1800);
         }
       }
     }
-    this.position = Math.min(this.duration, t);
+    this.position = Math.min(this.duration, pos);
     this.flush();
     if (this.position >= this.duration) this.playing = false;
     this.render();
@@ -472,11 +473,12 @@ export class AuditPlayer {
   transcript(): string {
     const s = this.rec.session;
     const head = [
-      `Session ${s.id}`,
-      `Compte ${s.compte} · serveur ${s.serveur} · mode ${s.mode || '—'}`,
-      `Début ${new Date(s.debut).toLocaleString('fr-FR')} · fin ${s.fin ? new Date(s.fin).toLocaleString('fr-FR') : 'en cours'}`,
+      t(`Session ${s.id}`, `Session ${s.id}`),
+      t(`Account ${s.compte} · server ${s.serveur} · mode ${s.mode || '—'}`, `Compte ${s.compte} · serveur ${s.serveur} · mode ${s.mode || '—'}`),
+      t(`Start ${new Date(s.debut).toLocaleString(LOCALE)} · end ${s.fin ? new Date(s.fin).toLocaleString(LOCALE) : 'ongoing'}`,
+        `Début ${new Date(s.debut).toLocaleString(LOCALE)} · fin ${s.fin ? new Date(s.fin).toLocaleString(LOCALE) : 'en cours'}`),
       `Signature ${this.rec.signature} · SHA-256 ${this.rec.empreinte}`,
-      this.withInput ? (this.rec.revele ? 'Frappe enregistrée, saisies masquées révélées' : 'Frappe enregistrée, saisies sans écho masquées') : 'Frappe non enregistrée : commandes repérées à l\'écran',
+      this.withInput ? (this.rec.revele ? t('Keystrokes recorded, masked input revealed', 'Frappe enregistrée, saisies masquées révélées') : t('Keystrokes recorded, input without echo masked', 'Frappe enregistrée, saisies sans écho masquées')) : t('Keystrokes not recorded: commands spotted on screen', 'Frappe non enregistrée : commandes repérées à l\'écran'),
       '',
     ];
     const body = this.lines.map((l) => {

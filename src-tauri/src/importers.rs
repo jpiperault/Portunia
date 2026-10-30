@@ -198,10 +198,10 @@ pub fn parse_ssh_config(text: &str, folder: &str) -> Vec<Candidate> {
                 values.push(("jump", json!(jump)));
             }
             if opts.contains_key("proxycommand") {
-                notes.push("ProxyCommand non repris (utilisez « Serveur de rebond »)");
+                notes.push(t!("ProxyCommand not imported (use « Jump server »)", "ProxyCommand non repris (utilisez « Serveur de rebond »)"));
             }
             if !opts.contains_key("user") {
-                notes.push("utilisateur à compléter");
+                notes.push(t!("user to fill in", "utilisateur à compléter"));
             }
             out.push(Candidate {
                 session: session(alias, folder, "ssh", values),
@@ -269,7 +269,7 @@ pub fn putty(folder: &str) -> Result<Vec<Candidate>> {
     use winreg::{enums::HKEY_CURRENT_USER, RegKey};
     let root = RegKey::predef(HKEY_CURRENT_USER)
         .open_subkey(r"Software\SimonTatham\PuTTY\Sessions")
-        .context("Aucune session PuTTY trouvée sur ce PC")?;
+        .context(t!("No PuTTY session found on this PC", "Aucune session PuTTY trouvée sur ce PC"))?;
     let mut out = Vec::new();
     for key_name in root.enum_keys().flatten() {
         let name = percent_decode(&key_name);
@@ -304,7 +304,7 @@ pub fn putty(folder: &str) -> Result<Vec<Candidate>> {
                 if !tunnels.is_empty() {
                     values.push(("tunnels", json!(tunnels)));
                 }
-                let note = user.is_empty().then(|| "utilisateur à compléter".to_string());
+                let note = user.is_empty().then(|| t!("user to fill in", "utilisateur à compléter").to_string());
                 out.push(Candidate { session: session(&name, folder, "ssh", values), note, duplicate: false });
             }
             "telnet" => out.push(Candidate {
@@ -322,7 +322,7 @@ pub fn putty(folder: &str) -> Result<Vec<Candidate>> {
 
 #[cfg(not(windows))]
 pub fn putty(_folder: &str) -> Result<Vec<Candidate>> {
-    bail!("L'import PuTTY n'est disponible que sous Windows")
+    bail!(t!("PuTTY import is only available on Windows", "L'import PuTTY n'est disponible que sous Windows"))
 }
 
 // ---------- mRemoteNG (confCons.xml) ----------
@@ -335,7 +335,7 @@ pub fn parse_mremoteng(xml: &str, base_folder: &str) -> Result<Vec<Candidate>> {
     let mut out = Vec::new();
 
     loop {
-        let (event, empty) = match reader.read_event().context("Fichier mRemoteNG illisible")? {
+        let (event, empty) = match reader.read_event().context(t!("Unreadable mRemoteNG file", "Fichier mRemoteNG illisible"))? {
             Event::Eof => break,
             Event::Start(e) => (e, false),
             Event::Empty(e) => (e, true),
@@ -354,7 +354,7 @@ pub fn parse_mremoteng(xml: &str, base_folder: &str) -> Result<Vec<Candidate>> {
         }
         let tag = event.name().as_ref().to_string();
         if tag.ends_with("Connections") && attrs.get("FullFileEncryption").is_some_and(|v| v == "true") {
-            bail!("Ce fichier mRemoteNG est entièrement chiffré. Dans mRemoteNG, désactivez « Chiffrement complet du fichier » puis réessayez.");
+            bail!(t!("This mRemoteNG file is fully encrypted. In mRemoteNG, disable « Full file encryption » then try again.", "Ce fichier mRemoteNG est entièrement chiffré. Dans mRemoteNG, désactivez « Chiffrement complet du fichier » puis réessayez."));
         }
         if tag != "Node" {
             continue;
@@ -385,7 +385,7 @@ pub fn parse_mremoteng(xml: &str, base_folder: &str) -> Result<Vec<Candidate>> {
                 }
                 Candidate {
                     session: session(&name, &folder, "ssh", values),
-                    note: Some("mot de passe à ressaisir".into()), duplicate: false,
+                    note: Some(t!("password to type again", "mot de passe à ressaisir").into()), duplicate: false,
                 }
             }
             "Telnet" => Candidate {
@@ -476,7 +476,7 @@ pub fn backup_text(backup: &Backup, passphrase: Option<&str>) -> Result<String> 
     let json = serde_json::to_string_pretty(backup)?;
     let Some(passphrase) = passphrase.filter(|p| !p.is_empty()) else { return Ok(json) };
     if passphrase.chars().count() < 8 {
-        bail!("La phrase de passe doit contenir au moins 8 caractères");
+        bail!(t!("The passphrase must have at least 8 characters", "La phrase de passe doit contenir au moins 8 caractères"));
     }
     use base64::{engine::general_purpose::STANDARD as B64, Engine};
     let salt = crate::vault::random_bytes::<16>()?;
@@ -494,20 +494,20 @@ pub fn read_backup(path: &PathBuf, passphrase: Option<&str>) -> Result<Backup> {
     let text = match serde_json::from_str::<EncryptedBackup>(&raw) {
         Ok(wrapper) if is_backup_app(&wrapper.app) => {
             let Some(passphrase) = passphrase.filter(|p| !p.is_empty()) else {
-                bail!("{PASSPHRASE_REQUIRED} : cette sauvegarde est protégée par une phrase de passe");
+                bail!("{}", t!(format!("{PASSPHRASE_REQUIRED}: this backup is protected by a passphrase"), format!("{PASSPHRASE_REQUIRED} : cette sauvegarde est protégée par une phrase de passe")));
             };
             use base64::{engine::general_purpose::STANDARD as B64, Engine};
             let c = wrapper.chiffre;
             let key = crate::vault::derive_key(passphrase, &B64.decode(&c.sel)?, c.iterations);
             let plain = crate::vault::open(&key, &B64.decode(&c.donnees)?, BACKUP_AAD)
-                .map_err(|_| anyhow::anyhow!("Phrase de passe incorrecte (ou fichier modifié)"))?;
-            String::from_utf8(plain).context("Sauvegarde illisible")?
+                .map_err(|_| anyhow::anyhow!(t!("Wrong passphrase (or modified file)", "Phrase de passe incorrecte (ou fichier modifié)")))?;
+            String::from_utf8(plain).context(t!("Unreadable backup", "Sauvegarde illisible"))?
         }
         _ => raw,
     };
-    let backup: Backup = serde_json::from_str(&text).context("Ce fichier n'est pas une sauvegarde Portunia")?;
+    let backup: Backup = serde_json::from_str(&text).context(t!("This file is not a Portunia backup", "Ce fichier n'est pas une sauvegarde Portunia"))?;
     if !is_backup_app(&backup.app) {
-        bail!("Ce fichier n'est pas une sauvegarde Portunia");
+        bail!(t!("This file is not a Portunia backup", "Ce fichier n'est pas une sauvegarde Portunia"));
     }
     Ok(backup)
 }
@@ -534,7 +534,7 @@ mod tests {
         fs::write(&path, backup_text(&backup, Some("une phrase de passe")).unwrap()).unwrap();
         assert!(!fs::read_to_string(&path).unwrap().contains("10.9.8.7"), "rien en clair");
         assert!(read_backup(&path, None).err().unwrap().to_string().starts_with(PASSPHRASE_REQUIRED));
-        assert!(read_backup(&path, Some("mauvaise phrase")).err().unwrap().to_string().contains("incorrecte"));
+        assert!(read_backup(&path, Some("mauvaise phrase")).err().unwrap().to_string().contains(t!("Wrong passphrase", "incorrecte")));
         let back = read_backup(&path, Some("une phrase de passe")).unwrap();
         assert_eq!(back.sessions[0].values["host"], json!("10.9.8.7"));
         assert!(backup_text(&backup, Some("court")).is_err());
@@ -649,7 +649,7 @@ mod labo {
                 "s3" => S3Connector.manifest(),
                 "vnc" => VncConnector.manifest(),
                 "telnet" => TelnetConnector.manifest(),
-                other => panic!("protocole inconnu : {other}"),
+                other => panic!("{}", t!(format!("unknown protocol: {other}"), format!("protocole inconnu : {other}"))),
             };
             for key in s.values.keys() {
                 assert!(manifest.fields.iter().any(|f| f.key == *key), "{} : champ inconnu « {key} » (serait retiré à l'import)", s.name);

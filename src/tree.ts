@@ -3,6 +3,7 @@ import { Session } from './api';
 import { badge, h, icon } from './dom';
 import { MenuItem, showColorPicker, showMenu } from './menu';
 import { FOLDER_COLORS, paint } from './theme';
+import { t } from './i18n';
 
 export interface TreeActions {
   isConnected(sessionId: string): boolean;
@@ -69,8 +70,8 @@ export class SessionTree {
       if (e.target !== root) return;
       e.preventDefault();
       showMenu(e.clientX, e.clientY, [
-        { label: 'Nouvelle session', icon: 'plus', action: () => actions.newSession('') },
-        { label: 'Nouveau dossier', icon: 'folderPlus', action: () => actions.newFolder('') },
+        { label: t('New session', 'Nouvelle session'), icon: 'plus', action: () => actions.newSession('') },
+        { label: t('New folder', 'Nouveau dossier'), icon: 'folderPlus', action: () => actions.newFolder('') },
       ]);
     });
   }
@@ -79,13 +80,13 @@ export class SessionTree {
     const q = filter.trim().toLowerCase();
     if (!sessions.length && !folders.length) {
       this.root.replaceChildren(h('div', { class: 'empty-tree' },
-        h('p', {}, 'Aucune session enregistrée.'),
-        h('button', { class: 'btn primary', onclick: () => this.actions.newSession('') }, 'Créer une session')));
+        h('p', {}, t('No saved session.', 'Aucune session enregistrée.')),
+        h('button', { class: 'btn primary', onclick: () => this.actions.newSession('') }, t('Create a session', 'Créer une session'))));
       return;
     }
     const tree = build(folders, sessions.filter((s) => matches(s, q)), q);
     const rows = this.renderChildren(tree, 0, q !== '');
-    this.root.replaceChildren(...(rows.length ? rows : [h('p', { class: 'empty-tree muted' }, 'Aucun résultat.')]));
+    this.root.replaceChildren(...(rows.length ? rows : [h('p', { class: 'empty-tree muted' }, t('No result.', 'Aucun résultat.'))]));
   }
 
   private renderChildren(node: FolderNode, depth: number, searching: boolean): HTMLElement[] {
@@ -99,14 +100,14 @@ export class SessionTree {
     const open = searching || !this.collapsed.has(folder.path);
     const a = this.actions;
     const menu = (x = 0, y = 0): (MenuItem | 'separator')[] => [
-      { label: 'Nouvelle session ici', icon: 'plus', action: () => a.newSession(folder.path) },
-      { label: 'Nouveau sous-dossier', icon: 'folderPlus', action: () => a.newFolder(folder.path) },
-      ...(folder.total ? [{ label: `Ouvrir les ${folder.total} session(s)`, icon: 'play', action: () => a.openAll(folder.path) }] : []),
-      ...(folder.total ? [{ label: 'Lancer une commande sur ce dossier…', icon: 'commands', action: () => a.multiExec(folder.path) }] : []),
+      { label: t('New session here', 'Nouvelle session ici'), icon: 'plus', action: () => a.newSession(folder.path) },
+      { label: t('New subfolder', 'Nouveau sous-dossier'), icon: 'folderPlus', action: () => a.newFolder(folder.path) },
+      ...(folder.total ? [{ label: t(`Open the ${folder.total} session(s)`, `Ouvrir les ${folder.total} session(s)`), icon: 'play', action: () => a.openAll(folder.path) }] : []),
+      ...(folder.total ? [{ label: t('Run a command on this folder…', 'Lancer une commande sur ce dossier…'), icon: 'commands', action: () => a.multiExec(folder.path) }] : []),
       'separator',
-      { label: 'Renommer', icon: 'edit', action: () => a.renameFolder(folder.path) },
-      { label: 'Couleur…', icon: 'palette', action: () => showColorPicker(x, y, a.colorKey(folder.path), FOLDER_COLORS, (c) => a.setFolderColor(folder.path, c)) },
-      { label: 'Supprimer le dossier', icon: 'trash', danger: true, action: () => a.deleteFolder(folder.path) },
+      { label: t('Rename', 'Renommer'), icon: 'edit', action: () => a.renameFolder(folder.path) },
+      { label: t('Colour…', 'Couleur…'), icon: 'palette', action: () => showColorPicker(x, y, a.colorKey(folder.path), FOLDER_COLORS, (c) => a.setFolderColor(folder.path, c)) },
+      { label: t('Delete the folder', 'Supprimer le dossier'), icon: 'trash', danger: true, action: () => a.deleteFolder(folder.path) },
     ];
     const row = h('div', { class: 'tree-row folder-row', 'data-drop': folder.path },
       h('button', {
@@ -125,8 +126,8 @@ export class SessionTree {
         h('span', { class: 'grow ellipsis' }, folder.name),
         h('span', { class: 'count' }, String(folder.total))),
       h('div', { class: 'row-actions' },
-        h('button', { class: 'icon-btn sm', 'aria-label': `Nouvelle session dans ${folder.name}`, title: 'Nouvelle session ici', onclick: () => a.newSession(folder.path) }, icon('plus', 14)),
-        h('button', { class: 'icon-btn sm', 'aria-label': `Actions du dossier ${folder.name}`, title: 'Plus d\'actions', onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu(e.clientX, e.clientY)) }, icon('more', 14))));
+        h('button', { class: 'icon-btn sm', 'aria-label': t(`New session in ${folder.name}`, `Nouvelle session dans ${folder.name}`), title: t('New session here', 'Nouvelle session ici'), onclick: () => a.newSession(folder.path) }, icon('plus', 14)),
+        h('button', { class: 'icon-btn sm', 'aria-label': t(`Actions for folder ${folder.name}`, `Actions du dossier ${folder.name}`), title: t('More actions', 'Plus d\'actions'), onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu(e.clientX, e.clientY)) }, icon('more', 14))));
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu(e.clientX, e.clientY)); });
     paint(row, a.folderColor(folder.path));
     this.enableDrag(row, { kind: 'folder', path: folder.path, label: folder.name });
@@ -137,22 +138,22 @@ export class SessionTree {
     const a = this.actions;
     const enabled = a.protocolEnabled(s.protocol);
     const menu = (): (MenuItem | 'separator')[] => [
-      ...(enabled ? [] : [{ label: 'Activer l’extension', icon: 'puzzle', action: () => a.enableProtocol(s.protocol) }, 'separator' as const]),
-      { label: 'Ouvrir', icon: 'play', action: () => a.openSession(s) },
-      { label: 'Modifier', icon: 'edit', action: () => a.editSession(s) },
-      { label: 'Dupliquer', icon: 'copy', action: () => a.duplicateSession(s) },
-      { label: 'Ping, traceroute, ports…', icon: 'broadcast', action: () => a.netTools(s) },
-      ...(typeof s.values.mac === 'string' && s.values.mac.trim() ? [{ label: 'Réveiller (Wake-on-LAN)', icon: 'power', action: () => a.wake(s) }] : []),
-      { label: a.health(s.id).cls === 'off' ? 'Surveiller ce serveur' : 'Ne pas surveiller ce serveur', icon: 'broadcast', action: () => a.toggleMonitor(s) },
-      ...(s.folder ? [{ label: 'Sortir du dossier', icon: 'up', action: () => a.moveSessions([s.id], '') }] : []),
+      ...(enabled ? [] : [{ label: t('Enable the extension', 'Activer l’extension'), icon: 'puzzle', action: () => a.enableProtocol(s.protocol) }, 'separator' as const]),
+      { label: t('Open', 'Ouvrir'), icon: 'play', action: () => a.openSession(s) },
+      { label: t('Edit', 'Modifier'), icon: 'edit', action: () => a.editSession(s) },
+      { label: t('Duplicate', 'Dupliquer'), icon: 'copy', action: () => a.duplicateSession(s) },
+      { label: t('Ping, traceroute, ports…', 'Ping, traceroute, ports…'), icon: 'broadcast', action: () => a.netTools(s) },
+      ...(typeof s.values.mac === 'string' && s.values.mac.trim() ? [{ label: t('Wake up (Wake-on-LAN)', 'Réveiller (Wake-on-LAN)'), icon: 'power', action: () => a.wake(s) }] : []),
+      { label: a.health(s.id).cls === 'off' ? t('Monitor this server', 'Surveiller ce serveur') : t('Do not monitor this server', 'Ne pas surveiller ce serveur'), icon: 'broadcast', action: () => a.toggleMonitor(s) },
+      ...(s.folder ? [{ label: t('Move out of the folder', 'Sortir du dossier'), icon: 'up', action: () => a.moveSessions([s.id], '') }] : []),
       'separator',
-      { label: 'Supprimer', icon: 'trash', danger: true, action: () => a.removeSession(s) },
+      { label: t('Delete', 'Supprimer'), icon: 'trash', danger: true, action: () => a.removeSession(s) },
     ];
     const active = a.activeSessionId() === s.id;
     // Déposer sur une session = déposer dans son dossier.
     const row = h('div', { class: `tree-row${active ? ' active' : ''}${enabled ? '' : ' disabled'}`, 'data-drop': s.folder },
       h('button', {
-        class: 'tree-item session', title: enabled ? 'Ouvrir' : 'Extension désactivée (clic droit › Activer l’extension)', style: `padding-left: ${28 + depth * INDENT}px`,
+        class: 'tree-item session', title: enabled ? t('Open', 'Ouvrir') : t('Extension disabled (right-click › Enable the extension)', 'Extension désactivée (clic droit › Activer l’extension)'), style: `padding-left: ${28 + depth * INDENT}px`,
         onclick: () => { if (!this.justDragged) a.openSession(s); },
         onkeydown: (e: KeyboardEvent) => {
           if (e.key === 'F2') a.editSession(s);
@@ -161,11 +162,11 @@ export class SessionTree {
       },
         h('span', { class: `dot${a.isConnected(s.id) ? ' on' : ''} ${a.health(s.id).cls}`, title: a.health(s.id).title }),
         h('span', { class: 'grow ellipsis' }, s.name),
-        a.hasNote(s.id) && h('span', { class: 'note-mark', title: 'Cette session a une note' }, icon('edit', 12)),
+        a.hasNote(s.id) && h('span', { class: 'note-mark', title: t('This session has a note', 'Cette session a une note') }, icon('edit', 12)),
         badge(s.protocol)),
       h('div', { class: 'row-actions' },
-        h('button', { class: 'icon-btn sm', 'aria-label': `Modifier ${s.name}`, title: 'Modifier', onclick: () => a.editSession(s) }, icon('edit', 14)),
-        h('button', { class: 'icon-btn sm', 'aria-label': `Actions de ${s.name}`, title: 'Plus d\'actions', onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu()) }, icon('more', 14))));
+        h('button', { class: 'icon-btn sm', 'aria-label': t(`Edit ${s.name}`, `Modifier ${s.name}`), title: t('Edit', 'Modifier'), onclick: () => a.editSession(s) }, icon('edit', 14)),
+        h('button', { class: 'icon-btn sm', 'aria-label': `Actions de ${s.name}`, title: t('More actions', 'Plus d\'actions'), onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu()) }, icon('more', 14))));
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu()); });
     paint(row, a.folderColor(s.folder));
     this.enableDrag(row, { kind: 'session', id: s.id, folder: s.folder, label: s.name });

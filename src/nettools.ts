@@ -1,11 +1,12 @@
 // Onglet « Outils réseau » : ping, traceroute, test de ports, DNS, Wake-on-LAN.
 import { errorText, net, NetEvent, Session } from './api';
 import { h, icon } from './dom';
+import { t } from './i18n';
 
 type Tool = 'ping' | 'trace' | 'ports' | 'dns' | 'wol';
 
 const TOOLS: [Tool, string][] = [
-  ['ping', 'Ping'], ['trace', 'Traceroute'], ['ports', 'Ports TCP'], ['dns', 'DNS'], ['wol', 'Wake-on-LAN'],
+  ['ping', 'Ping'], ['trace', 'Traceroute'], ['ports', t('TCP ports', 'Ports TCP')], ['dns', 'DNS'], ['wol', 'Wake-on-LAN'],
 ];
 
 const COMMON_PORTS = '21,22,23,25,53,80,110,143,443,445,3306,3389,5432,5900,8080,8443';
@@ -22,12 +23,12 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
   let job: string | null = null;
   let running = false;
 
-  const host = h('input', { type: 'text', list: 'net-hosts', placeholder: 'Hôte ou adresse IP', spellcheck: 'false', 'aria-label': 'Hôte' });
+  const host = h('input', { type: 'text', list: 'net-hosts', placeholder: t('Host or IP address', 'Hôte ou adresse IP'), spellcheck: 'false', 'aria-label': t('Host', 'Hôte') });
   const hosts = h('datalist', { id: 'net-hosts' });
-  const count = h('input', { type: 'number', min: '0', max: '1000', value: '4', style: 'width: 80px', 'aria-label': 'Nombre de requêtes' });
+  const count = h('input', { type: 'number', min: '0', max: '1000', value: '4', style: 'width: 80px', 'aria-label': t('Number of requests', 'Nombre de requêtes') });
   const ports = h('input', { type: 'text', value: '22,80,443,3389', spellcheck: 'false', 'aria-label': 'Ports' });
-  const mac = h('input', { type: 'text', placeholder: 'AA:BB:CC:DD:EE:FF', spellcheck: 'false', 'aria-label': 'Adresse MAC' });
-  const broadcast = h('input', { type: 'text', placeholder: '255.255.255.255', spellcheck: 'false', 'aria-label': 'Adresse de diffusion' });
+  const mac = h('input', { type: 'text', placeholder: 'AA:BB:CC:DD:EE:FF', spellcheck: 'false', 'aria-label': t('MAC address', 'Adresse MAC') });
+  const broadcast = h('input', { type: 'text', placeholder: '255.255.255.255', spellcheck: 'false', 'aria-label': t('Broadcast address', 'Adresse de diffusion') });
   const runBtn = h('button', { type: 'submit', class: 'btn primary' });
   const tabs = h('div', { class: 'seg', role: 'tablist' });
   const options = h('div', { class: 'net-options' });
@@ -42,7 +43,7 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
 
   const setRunning = (on: boolean) => {
     running = on;
-    runBtn.replaceChildren(on ? icon('pause', 14) : icon('play', 14), on ? 'Arrêter' : tool === 'wol' ? 'Réveiller' : 'Lancer');
+    runBtn.replaceChildren(on ? icon('pause', 14) : icon('play', 14), on ? t('Stop', 'Arrêter') : tool === 'wol' ? t('Wake up', 'Réveiller') : t('Run', 'Lancer'));
     host.disabled = on;
   };
 
@@ -50,13 +51,13 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
     tabs.replaceChildren(...TOOLS.map(([id, label]) => h('label', { class: `seg-opt${tool === id ? ' on' : ''}` },
       h('input', { type: 'radio', name: 'net-tool', value: id, checked: tool === id, onchange: () => select(id) }), label)));
     options.replaceChildren(...(
-      tool === 'ping' ? [h('label', { class: 'fld inline' }, 'Requêtes (0 = continu)', count)]
+      tool === 'ping' ? [h('label', { class: 'fld inline' }, t('Requests (0 = continuous)', 'Requêtes (0 = continu)'), count)]
       : tool === 'ports' ? [
-          h('label', { class: 'fld grow' }, 'Ports (liste ou plages : 22,80,8000-8010)', ports),
-          h('button', { type: 'button', class: 'btn sm', onclick: () => { ports.value = COMMON_PORTS; } }, 'Ports courants')]
+          h('label', { class: 'fld grow' }, t('Ports (list or ranges: 22,80,8000-8010)', 'Ports (liste ou plages : 22,80,8000-8010)'), ports),
+          h('button', { type: 'button', class: 'btn sm', onclick: () => { ports.value = COMMON_PORTS; } }, t('Common ports', 'Ports courants'))]
       : tool === 'wol' ? [
-          h('label', { class: 'fld grow' }, 'Adresse MAC', mac),
-          h('label', { class: 'fld grow' }, 'Diffusion (facultatif)', broadcast)]
+          h('label', { class: 'fld grow' }, t('MAC address', 'Adresse MAC'), mac),
+          h('label', { class: 'fld grow' }, t('Broadcast (optional)', 'Diffusion (facultatif)'), broadcast)]
       : []));
     host.hidden = tool === 'wol';
     setRunning(running);
@@ -75,20 +76,20 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
         break;
       case 'ping': {
         const r = e.echo;
-        if (r.kind === 'reply') line('ok', h('span', { class: 'net-dot up' }), `#${e.seq}  réponse de ${r.from}  ${r.rtt} ms  TTL ${r.ttl}`);
-        else if (r.kind === 'timeout') line('bad', h('span', { class: 'net-dot down' }), `#${e.seq}  délai dépassé`);
+        if (r.kind === 'reply') line('ok', h('span', { class: 'net-dot up' }), t(`#${e.seq}  reply from ${r.from}  ${r.rtt} ms  TTL ${r.ttl}`, `#${e.seq}  réponse de ${r.from}  ${r.rtt} ms  TTL ${r.ttl}`));
+        else if (r.kind === 'timeout') line('bad', h('span', { class: 'net-dot down' }), t(`#${e.seq}  timed out`, `#${e.seq}  délai dépassé`));
         else if (r.kind === 'unreachable') line('bad', h('span', { class: 'net-dot down' }), `#${e.seq}  ${r.reason}${r.from ? ` (${r.from})` : ''}`);
         break;
       }
       case 'hop':
         line(e.from ? '' : 'muted', h('span', { class: 'net-hop' }, String(e.hop)),
-          h('span', { class: 'net-rtts' }, e.rtts.map(ms).join('  ')), e.from || 'pas de réponse');
+          h('span', { class: 'net-rtts' }, e.rtts.map(ms).join('  ')), e.from || t('no reply', 'pas de réponse'));
         break;
       case 'port':
         line(e.state === 'open' ? 'ok' : 'muted',
           h('span', { class: `net-dot ${e.state === 'open' ? 'up' : e.state === 'closed' ? 'down' : 'off'}` }),
           h('span', { class: 'net-port' }, String(e.port)),
-          h('span', { class: 'net-state' }, e.state === 'open' ? 'ouvert' : e.state === 'closed' ? 'fermé' : 'filtré'),
+          h('span', { class: 'net-state' }, e.state === 'open' ? 'ouvert' : e.state === 'closed' ? t('closed', 'fermé') : t('filtered', 'filtré')),
           e.service && h('span', { class: 'muted' }, e.service), e.ms !== null && e.state === 'open' && h('span', { class: 'muted' }, `${e.ms} ms`));
         break;
       case 'done':
@@ -105,7 +106,7 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
 
   const stop = () => {
     if (job) net.cancel(job).catch(() => {});
-    if (tool === 'ping' || tool === 'trace' || tool === 'ports') summary.textContent = 'Arrêt…';
+    if (tool === 'ping' || tool === 'trace' || tool === 'ports') summary.textContent = t('Stopping…', 'Arrêt…');
   };
 
   const run = async () => {
@@ -123,8 +124,8 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
       }
       if (tool === 'wol') {
         const to = await net.wake(mac.value, broadcast.value.trim() || null);
-        line('ok', h('span', { class: 'net-dot up' }), `Paquet magique envoyé à ${mac.value.trim()} (diffusion ${to}, UDP 9)`);
-        summary.textContent = 'La machine doit avoir le réveil par le réseau activé (BIOS/UEFI et carte réseau) et être sur le même réseau local.';
+        line('ok', h('span', { class: 'net-dot up' }), t(`Magic packet sent to ${mac.value.trim()} (broadcast ${to}, UDP 9)`, `Paquet magique envoyé à ${mac.value.trim()} (diffusion ${to}, UDP 9)`));
+        summary.textContent = t('The machine must have Wake-on-LAN enabled (BIOS/UEFI and network card) and be on the same local network.', 'La machine doit avoir le réveil par le réseau activé (BIOS/UEFI et carte réseau) et être sur le même réseau local.');
         return;
       }
       setRunning(true);
@@ -141,7 +142,7 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
     h('div', { class: 'net-row' }, host, hosts, runBtn), options);
 
   const el = h('div', { class: 'net-tools' },
-    h('header', { class: 'net-head' }, h('h2', {}, 'Outils réseau'), tabs),
+    h('header', { class: 'net-head' }, h('h2', {}, t('Network tools', 'Outils réseau')), tabs),
     form, output, summary);
 
   const refreshHosts = () => {
@@ -173,10 +174,10 @@ export function createNetTools(sessions: () => Session[]): NetToolsView {
 /** Réveille la machine d'une session (adresse MAC renseignée). */
 export async function wakeSession(s: Session, toast: (m: string, k?: 'info' | 'error') => void) {
   const mac = typeof s.values.mac === 'string' ? s.values.mac.trim() : '';
-  if (!mac) return toast(`Renseignez l'adresse MAC de « ${s.name} » (Modifier) pour pouvoir la réveiller`, 'error');
+  if (!mac) return toast(t(`Fill in the MAC address of « ${s.name} » (Edit) to be able to wake it up`, `Renseignez l'adresse MAC de « ${s.name} » (Modifier) pour pouvoir la réveiller`), 'error');
   try {
     await net.wake(mac, null);
-    toast(`Paquet de réveil envoyé à ${s.name} (${mac})`);
+    toast(t(`Wake-up packet sent to ${s.name} (${mac})`, `Paquet de réveil envoyé à ${s.name} (${mac})`));
   } catch (e) {
     toast(errorText(e), 'error');
   }

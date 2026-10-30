@@ -1,9 +1,10 @@
 // Supervision légère : pastilles dans l'arbre, vue d'ensemble, alertes (Pro).
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from './api';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 import { Session } from './api';
 import { h, icon } from './dom';
 import { settings, updateSettings } from './settings';
+import { t } from './i18n';
 
 export interface Probe {
   id: string;
@@ -110,19 +111,19 @@ export class Monitor {
     if (!(await isPermissionGranted()) && (await requestPermission()) !== 'granted') return;
     for (const c of changes.slice(0, 5)) {
       sendNotification({
-        title: c.up ? `${c.session.name} répond de nouveau` : `${c.session.name} ne répond plus`,
-        body: c.up ? 'Le serveur est de nouveau joignable.' : (c.error ?? 'Le serveur est injoignable.'),
+        title: c.up ? t(`${c.session.name} is answering again`, `${c.session.name} répond de nouveau`) : t(`${c.session.name} is not answering`, `${c.session.name} ne répond plus`),
+        body: c.up ? t('The server is reachable again.', 'Le serveur est de nouveau joignable.') : (c.error ?? t('The server is unreachable.', 'Le serveur est injoignable.')),
       });
     }
-    if (changes.length > 5) sendNotification({ title: 'Portunia', body: `${changes.length - 5} autre(s) changement(s) d'état.` });
+    if (changes.length > 5) sendNotification({ title: 'Portunia', body: t(`${changes.length - 5} other status change(s).`, `${changes.length - 5} autre(s) changement(s) d'état.`) });
   }
 
   /** Vue d'ensemble : tous les serveurs supervisés. */
   openOverview(open: (s: Session) => void) {
     const rows = h('div', { class: 'snip-list' });
-    const fmtAge = (t: number) => {
-      const min = Math.round((Date.now() - t) / 60000);
-      return min < 1 ? 'à l\'instant' : min < 60 ? `depuis ${min} min` : `depuis ${Math.round(min / 60)} h`;
+    const fmtAge = (at: number) => {
+      const min = Math.round((Date.now() - at) / 60000);
+      return min < 1 ? t('just now', 'à l\'instant') : min < 60 ? t(`${min} min ago`, `depuis ${min} min`) : t(`${Math.round(min / 60)} h ago`, `depuis ${Math.round(min / 60)} h`);
     };
     const render = () => {
       const list = this.sessions()
@@ -133,20 +134,20 @@ export class Monitor {
         h('span', { class: `health ${this.isExcluded(s.id) ? 'off' : hlt ? (hlt.up ? 'up' : 'down') : 'unknown'}` }),
         h('div', { class: 'grow', style: 'min-width: 0' },
           h('div', { class: 'ellipsis' }, h('strong', {}, s.name), ' ', h('span', { class: 'muted small' }, `${target!.host}:${target!.port}${s.folder ? ` · ${s.folder}` : ''}`)),
-          h('div', { class: 'muted small' }, this.isExcluded(s.id) ? 'Non surveillé'
-            : !hlt ? 'En attente de vérification'
+          h('div', { class: 'muted small' }, this.isExcluded(s.id) ? t('Not monitored', 'Non surveillé')
+            : !hlt ? t('Waiting for a check', 'En attente de vérification')
             : hlt.up ? `En ligne · ${hlt.latencyMs} ms · ${fmtAge(hlt.since)}`
             : `Injoignable ${fmtAge(hlt.since)} · ${hlt.error ?? ''}`)),
-        h('button', { class: 'btn', onclick: () => { dialog.close(); open(s); } }, 'Ouvrir'),
-        h('button', { class: 'btn', onclick: () => { this.toggleExcluded(s.id); render(); } }, this.isExcluded(s.id) ? 'Surveiller' : 'Ignorer'))));
+        h('button', { class: 'btn', onclick: () => { dialog.close(); open(s); } }, t('Open', 'Ouvrir')),
+        h('button', { class: 'btn', onclick: () => { this.toggleExcluded(s.id); render(); } }, this.isExcluded(s.id) ? t('Monitor', 'Surveiller') : t('Ignore', 'Ignorer')))));
     };
     const dialog = h('dialog', { class: 'dialog', 'aria-labelledby': 'mon-title' },
       h('div', { class: 'snip-dialog' },
         h('header', { class: 'dlg-head' },
-          h('h2', { id: 'mon-title' }, 'Supervision'),
+          h('h2', { id: 'mon-title' }, t('Monitoring', 'Supervision')),
           h('div', { style: 'display: flex; gap: 6px' },
-            h('button', { type: 'button', class: 'btn', onclick: async () => { await this.check(); render(); } }, icon('refresh', 14), 'Vérifier maintenant'),
-            h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Fermer', onclick: () => dialog.close() }, icon('close')))),
+            h('button', { type: 'button', class: 'btn', onclick: async () => { await this.check(); render(); } }, icon('refresh', 14), t('Check now', 'Vérifier maintenant')),
+            h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Close', 'Fermer'), onclick: () => dialog.close() }, icon('close')))),
         h('div', { class: 'dlg-body' }, rows)));
     const refresh = window.setInterval(render, 5000);
     dialog.addEventListener('close', () => { window.clearInterval(refresh); dialog.remove(); });

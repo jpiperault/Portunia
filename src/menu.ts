@@ -1,5 +1,6 @@
 // Menu contextuel minimal (clic droit ou bouton « … »).
 import { h, icon } from './dom';
+import { t } from './i18n';
 
 export interface MenuItem {
   label: string;
@@ -60,10 +61,10 @@ export function showColorPicker(x: number, y: number, selected: string | undefin
       title: label, 'aria-label': label, style: value ? `background: ${value}` : '',
       onclick: () => { closeMenu(); pick(key); },
     });
-  const menu = h('div', { class: 'menu', role: 'dialog', 'aria-label': 'Couleur du dossier' },
-    h('div', { class: 'muted small', style: 'padding: 6px 10px 2px' }, 'Couleur du dossier'),
+  const menu = h('div', { class: 'menu', role: 'dialog', 'aria-label': t('Folder colour', 'Couleur du dossier') },
+    h('div', { class: 'muted small', style: 'padding: 6px 10px 2px' }, t('Folder colour', 'Couleur du dossier')),
     h('div', { class: 'color-swatches' },
-      swatch(null, 'Aucune'),
+      swatch(null, t('None', 'Aucune')),
       ...Object.entries(colors).map(([key, c]) => swatch(key, c.label, c.value))));
   document.body.append(menu);
   const r = menu.getBoundingClientRect();

@@ -75,7 +75,7 @@ fn save(data_dir: &Path, list: &[Bastion]) -> Result<()> {
 }
 
 fn find(data_dir: &Path, id: &str) -> Result<Bastion> {
-    load(data_dir).into_iter().find(|b| b.id == id).ok_or_else(|| anyhow!("Bastion inconnu"))
+    load(data_dir).into_iter().find(|b| b.id == id).ok_or_else(|| anyhow!(t!("Unknown bastion", "Bastion inconnu")))
 }
 
 fn update(data_dir: &Path, bastion: &Bastion) -> Result<()> {
@@ -91,11 +91,11 @@ fn update(data_dir: &Path, bastion: &Bastion) -> Result<()> {
 fn split_address(address: &str) -> Result<(String, u16)> {
     let a = address.trim().trim_start_matches("https://").trim_end_matches('/');
     if a.is_empty() {
-        bail!("Indiquez l'adresse du bastion");
+        bail!(t!("Give the bastion's address", "Indiquez l'adresse du bastion"));
     }
     match a.rsplit_once(':') {
         Some((h, p)) if !h.contains(':') || h.starts_with('[') => {
-            Ok((h.trim_matches(['[', ']']).to_string(), p.parse().map_err(|_| anyhow!("Port invalide : {p}"))?))
+            Ok((h.trim_matches(['[', ']']).to_string(), p.parse().map_err(|_| anyhow!("{}", t!(format!("Invalid port: {p}"), format!("Port invalide : {p}"))))?))
         }
         _ => Ok((a.trim_matches(['[', ']']).to_string(), 8443)),
     }
@@ -150,6 +150,11 @@ fn client(expected: Option<&str>) -> Result<(reqwest::Client, Arc<Mutex<Option<S
         .tls_backend_preconfigured(config)
         .timeout(std::time::Duration::from_secs(20))
         .user_agent(concat!("Portunia/", env!("CARGO_PKG_VERSION")))
+        // Messages du bastion dans la langue de l'interface.
+        .default_headers(reqwest::header::HeaderMap::from_iter([(
+            reqwest::header::ACCEPT_LANGUAGE,
+            reqwest::header::HeaderValue::from_static(crate::lang::code()),
+        )]))
         .build()?;
     Ok((http, seen))
 }
@@ -164,12 +169,12 @@ async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u1
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(verifier))
         .with_no_client_auth();
-    let name = ServerName::try_from(host.to_string()).map_err(|_| anyhow!("Adresse du bastion invalide"))?;
-    let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| anyhow!("Bastion injoignable ({host}:{port}) : {e}"))?;
+    let name = ServerName::try_from(host.to_string()).map_err(|_| anyhow!(t!("Invalid bastion address", "Adresse du bastion invalide")))?;
+    let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| anyhow!("{}", t!(format!("Bastion unreachable ({host}:{port}): {e}"), format!("Bastion injoignable ({host}:{port}) : {e}"))))?;
     let mut tls = tokio_rustls::TlsConnector::from(Arc::new(config))
         .connect(name, tcp)
         .await
-        .map_err(|e| anyhow!("Bastion {host}:{port} : {e}"))?;
+        .map_err(|e| anyhow!("{}", t!(format!("Bastion {host}:{port}: {e}"), format!("Bastion {host}:{port} : {e}"))))?;
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
     let local = listener.local_addr()?.port();
     tauri::async_runtime::spawn(async move {
@@ -191,7 +196,7 @@ async fn call(host: &str, port: u16, fingerprint: &str, token: Option<&str>, met
     if let Some(b) = body {
         req = req.json(&b);
     }
-    let resp = req.send().await.map_err(|e| anyhow!("Bastion injoignable ({host}:{port}) : {}", root_cause(&e)))?;
+    let resp = req.send().await.map_err(|e| anyhow!("{}", t!(format!("Bastion unreachable ({host}:{port}): {}", root_cause(&e)), format!("Bastion injoignable ({host}:{port}) : {}", root_cause(&e)))))?;
     let status = resp.status();
     let value: Value = resp.json().await.unwrap_or(Value::Null);
     if status == reqwest::StatusCode::UNAUTHORIZED && token.is_some() {
@@ -261,9 +266,9 @@ pub async fn bastion_probe(address: String) -> CmdResult<Value> {
         .send()
         .await
         .map_err(|e| format!("Bastion injoignable ({host}:{port}) : {}", root_cause(&e)))?;
-    let info: Value = resp.json().await.map_err(|_| "Ce serveur ne répond pas comme un bastion Heimdia".to_string())?;
+    let info: Value = resp.json().await.map_err(|_| t!("This server does not answer like a Heimdia bastion", "Ce serveur ne répond pas comme un bastion Heimdia").to_string())?;
     if info.get("empreinte_ssh").is_none() {
-        return Err("Ce serveur ne répond pas comme un bastion Heimdia".into());
+        return Err(t!("This server does not answer like a Heimdia bastion", "Ce serveur ne répond pas comme un bastion Heimdia").into());
     }
     let fp = seen.lock().unwrap().clone().unwrap_or_default();
     Ok(json!({ "host": host, "apiPort": port, "fingerprint": fp, "info": info }))
@@ -379,7 +384,7 @@ pub async fn bastion_servers(state: State<'_, AppState>, id: String) -> CmdResul
 pub async fn bastion_admin(state: State<'_, AppState>, id: String, method: String, path: String, body: Option<Value>) -> CmdResult<Value> {
     state.unlocked()?;
     if !(path.starts_with("/admin/") || path.starts_with("/audit/")) || path.contains("..") {
-        return Err("Chemin d'administration invalide".into());
+        return Err(t!("Invalid administration path", "Chemin d'administration invalide").into());
     }
     state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
     let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(err)?;
@@ -444,7 +449,7 @@ pub async fn bastion_connect(
     let mut b = find(&data_dir, &id).map_err(full)?;
     let path = format!("/serveurs/{}/ticket", urlencode(&server));
     let t = authed(&data_dir, &mut b, reqwest::Method::POST, &path, None).await.map_err(full)?;
-    let ticket = t["ticket"].as_str().ok_or("Le bastion n'a pas donné de jeton")?.to_string();
+    let ticket = t["ticket"].as_str().ok_or(t!("The bastion gave no token", "Le bastion n'a pas donné de jeton"))?.to_string();
     let ssh_user = t["utilisateur_ssh"].as_str().unwrap_or_default().to_string();
     let bastion_values: serde_json::Map<String, Value> = [
         ("host".to_string(), json!(b.host)),

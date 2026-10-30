@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { h, icon } from './dom';
 import { fontStack, settings } from './settings';
 import { terminalTheme } from './theme';
+import { t } from './i18n';
 
 interface CastEvent { time: number; type: string; data: string }
 
@@ -37,7 +38,7 @@ export class Player {
   private playing = false;
   private timer = 0;
   private lastTick = 0;
-  private readonly bar = h('input', { type: 'range', min: '0', max: '1000', value: '0', 'aria-label': 'Position dans l\'enregistrement', class: 'player-bar' });
+  private readonly bar = h('input', { type: 'range', min: '0', max: '1000', value: '0', 'aria-label': t('Position in the recording', 'Position dans l\'enregistrement'), class: 'player-bar' });
   private readonly clock = h('span', { class: 'muted small player-clock' });
   private readonly playBtn = h('button', { class: 'btn', onclick: () => this.toggle() });
 
@@ -46,7 +47,7 @@ export class Player {
     this.events = parsed.events;
     this.duration = this.events[this.events.length - 1]?.time ?? 0;
     const screen = h('div', { class: 'player-screen' });
-    const speedSel = h('select', { 'aria-label': 'Vitesse', onchange: (e: Event) => { this.speed = Number((e.target as HTMLSelectElement).value); } },
+    const speedSel = h('select', { 'aria-label': t('Speed', 'Vitesse'), onchange: (e: Event) => { this.speed = Number((e.target as HTMLSelectElement).value); } },
       ...[1, 2, 4, 8].map((v) => h('option', { value: String(v) }, `× ${v}`)));
     this.bar.addEventListener('input', () => this.seek((Number(this.bar.value) / 1000) * this.duration));
     el.classList.add('player');
@@ -61,7 +62,7 @@ export class Player {
   }
 
   private renderControls() {
-    this.playBtn.replaceChildren(icon(this.playing ? 'pause' : 'play', 14), this.playing ? 'Pause' : 'Lire');
+    this.playBtn.replaceChildren(icon(this.playing ? 'pause' : 'play', 14), this.playing ? 'Pause' : t('Play', 'Lire'));
     const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
     this.clock.textContent = `${fmt(this.position)} / ${fmt(this.duration)}`;
     this.bar.value = String(this.duration ? Math.round((this.position / this.duration) * 1000) : 0);

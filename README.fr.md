@@ -75,6 +75,7 @@ Autres fonctions :
 - reconnexion automatique après une coupure réseau ou une mise en veille (désactivable dans les Paramètres) ;
 - explorateur de fichiers du serveur (SFTP) à droite des sessions SSH : navigation, envoi et téléchargement de fichiers ou de dossiers entiers (glisser-déposer compris), édition d'un fichier distant dans votre éditeur avec renvoi automatique à chaque enregistrement, création, renommage, suppression, suivi des transferts ;
 - import depuis ~/.ssh/config, PuTTY et mRemoteNG (avec aperçu et détection des doublons), sauvegarde et restauration Portunia ;
+- langue : anglais ou français, selon Windows (Paramètres › Apparence pour choisir) ;
 - apparence : thème sombre, clair ou comme Windows, 9 palettes de terminal (Dracula, Nord, Solarized…), couleur par dossier (bandeau sur les sessions, onglets et barre d'outils, étiquette « PRODUCTION ») ;
 - tableau de bord du serveur (Pro, sessions SSH vers Linux) : processeur et mémoire avec courbes, swap, charge, disques, processus les plus actifs, services systemd en échec (« Voir » affiche leur journal), relevé toutes les 5 s quand le panneau est visible ;
 - commande sur plusieurs serveurs (Pro) : choix des sessions SSH ou d'un dossier entier (clic droit), commande ou commande enregistrée, 8 serveurs à la fois, résultats côte à côte (code de sortie, durée, sortie, filtre des échecs, copie), confirmation renforcée pour les dossiers rouges ;
@@ -143,8 +144,9 @@ src/                 interface (TypeScript, sans framework)
   bastion.ts         extension Heimdia : barre latérale, connexion, administration
   audit.ts           audit Heimdia : sessions et journal
   auditplayer.ts     lecteur des sessions (sous-titres, repères, pauses sautées)
+  i18n.ts            langue de l'interface : t("English", "Français") côte à côte
 rdp-helper/          moteur RDP (IronRDP), programme séparé lancé pour chaque session RDP
-scripts/             compilation du moteur RDP
+scripts/             compilation du moteur RDP, vérification des appels t(…) (check-i18n.cjs)
 tools/license-tool/  outil de l'éditeur : clé de signature et génération des licences (ne pas distribuer)
 screenshot.html      démonstration avec données fictives pour les captures d'écran
                      (npx vite, puis /screenshot.html?scene=main ou ?scene=split&theme=light)

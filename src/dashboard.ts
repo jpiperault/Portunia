@@ -1,6 +1,7 @@
 // Tableau de bord d'un serveur Linux (Pro) : panneau de droite, relevé toutes les 5 s quand il est visible.
 import { errorText, ServerStats, serverStats } from './api';
 import { h, icon } from './dom';
+import { LOCALE, t } from './i18n';
 
 const REFRESH_MS = 5000;
 /** Points gardés pour les mini-courbes (≈ 5 min). */
@@ -48,7 +49,7 @@ function sparkline(values: number[]): SVGSVGElement {
 }
 
 export class ServerPanel {
-  readonly el = h('section', { class: 'dash-panel', 'aria-label': 'Tableau de bord du serveur' });
+  readonly el = h('section', { class: 'dash-panel', 'aria-label': t('Server dashboard', 'Tableau de bord du serveur') });
   private readonly body = h('div', { class: 'dash-body' });
   private readonly status = h('span', { class: 'muted small grow' });
   private timer = 0;
@@ -67,11 +68,11 @@ export class ServerPanel {
     private readonly send: (cmd: string) => void,
   ) {
     this.el.append(
-      h('header', { class: 'notes-head' }, icon('chart', 14), h('strong', { class: 'grow ellipsis' }, `Serveur · ${title}`),
-        h('button', { type: 'button', class: 'icon-btn sm', 'aria-label': 'Actualiser', title: 'Actualiser', onclick: () => this.refresh() }, icon('refresh', 14))),
+      h('header', { class: 'notes-head' }, icon('chart', 14), h('strong', { class: 'grow ellipsis' }, t(`Server · ${title}`, `Serveur · ${title}`)),
+        h('button', { type: 'button', class: 'icon-btn sm', 'aria-label': t('Refresh', 'Actualiser'), title: t('Refresh', 'Actualiser'), onclick: () => this.refresh() }, icon('refresh', 14))),
       this.body,
-      h('footer', { class: 'notes-foot' }, this.status, h('span', { class: 'muted small' }, 'Toutes les 5 s')));
-    this.body.append(h('p', { class: 'muted', style: 'padding: 12px' }, 'Lecture des mesures…'));
+      h('footer', { class: 'notes-foot' }, this.status, h('span', { class: 'muted small' }, t('Every 5 s', 'Toutes les 5 s'))));
+    this.body.append(h('p', { class: 'muted', style: 'padding: 12px' }, t('Reading the metrics…', 'Lecture des mesures…')));
   }
 
   /** Relevés seulement quand le panneau est à l'écran. */
@@ -91,7 +92,7 @@ export class ServerPanel {
       this.error = '';
       this.push(this.cpuHistory, this.stats.cpuPercent);
       this.push(this.memHistory, this.memPercent(this.stats));
-      this.status.textContent = `Mis à jour à ${new Date().toLocaleTimeString('fr-FR')}`;
+      this.status.textContent = t(`Updated at ${new Date().toLocaleTimeString(LOCALE)}`, `Mis à jour à ${new Date().toLocaleTimeString(LOCALE)}`);
     } catch (e) {
       this.error = errorText(e);
       this.status.textContent = '';
@@ -126,25 +127,25 @@ export class ServerPanel {
       h('div', { class: 'dash-id' },
         h('strong', {}, s.hostname || this.title),
         h('span', { class: 'muted small' }, s.os),
-        h('span', { class: 'muted small' }, `Noyau ${s.kernel} · démarré depuis ${duration(s.uptimeSecs)}`)),
-      gauge('Processeur', s.cpuPercent, `${s.cpus} cœur${s.cpus > 1 ? 's' : ''}`, this.cpuHistory),
-      gauge('Mémoire', this.memPercent(s), `${size(s.memTotalKb - s.memAvailableKb)} utilisés sur ${size(s.memTotalKb)}`, this.memHistory),
-      s.swapTotalKb > 0 ? gauge('Swap', (100 * swapUsed) / s.swapTotalKb, `${size(swapUsed)} sur ${size(s.swapTotalKb)}`) : '',
+        h('span', { class: 'muted small' }, t(`Kernel ${s.kernel} · up for ${duration(s.uptimeSecs)}`, `Noyau ${s.kernel} · démarré depuis ${duration(s.uptimeSecs)}`))),
+      gauge(t('CPU', 'Processeur'), s.cpuPercent, `${s.cpus} cœur${s.cpus > 1 ? 's' : ''}`, this.cpuHistory),
+      gauge(t('Memory', 'Mémoire'), this.memPercent(s), t(`${size(s.memTotalKb - s.memAvailableKb)} used of ${size(s.memTotalKb)}`, `${size(s.memTotalKb - s.memAvailableKb)} utilisés sur ${size(s.memTotalKb)}`), this.memHistory),
+      s.swapTotalKb > 0 ? gauge('Swap', (100 * swapUsed) / s.swapTotalKb, t(`${size(swapUsed)} of ${size(s.swapTotalKb)}`, `${size(swapUsed)} sur ${size(s.swapTotalKb)}`)) : '',
       h('div', { class: 'dash-gauge' },
-        h('div', { class: 'dash-gauge-head' }, h('span', {}, 'Charge (1 / 5 / 15 min)'),
+        h('div', { class: 'dash-gauge-head' }, h('span', {}, t('Load (1 / 5 / 15 min)', 'Charge (1 / 5 / 15 min)')),
           h('strong', { class: `lvl-${level(loadPct)}` }, s.load.map((l) => l.toFixed(2).replace('.', ',')).join(' · ')))),
-      h('h4', { class: 'dash-title' }, 'Disques'),
-      ...s.disks.map((d) => gauge(d.mount, (100 * d.usedKb) / d.totalKb, `${size(d.usedKb)} sur ${size(d.totalKb)} · ${d.fs}`)),
-      s.failedServices.length ? h('h4', { class: 'dash-title lvl-crit' }, `Services en échec (${s.failedServices.length})`) : '',
+      h('h4', { class: 'dash-title' }, t('Disks', 'Disques')),
+      ...s.disks.map((d) => gauge(d.mount, (100 * d.usedKb) / d.totalKb, t(`${size(d.usedKb)} of ${size(d.totalKb)} · ${d.fs}`, `${size(d.usedKb)} sur ${size(d.totalKb)} · ${d.fs}`))),
+      s.failedServices.length ? h('h4', { class: 'dash-title lvl-crit' }, t(`Failed services (${s.failedServices.length})`, `Services en échec (${s.failedServices.length})`)) : '',
       ...s.failedServices.map((svc) => h('div', { class: 'dash-row' },
         h('span', { class: 'net-dot down' }), h('span', { class: 'grow mono ellipsis' }, svc),
         h('button', {
-          type: 'button', class: 'btn sm', title: 'Afficher l\'état et le journal du service dans le terminal',
+          type: 'button', class: 'btn sm', title: t('Show the service\'s status and log in the terminal', 'Afficher l\'état et le journal du service dans le terminal'),
           onclick: () => this.send(`systemctl status ${svc.replace(/[^\w@.:-]/g, '')} --no-pager -l\n`),
-        }, 'Voir'))),
-      h('h4', { class: 'dash-title' }, 'Processus les plus actifs'),
+        }, t('View', 'Voir')))),
+      h('h4', { class: 'dash-title' }, t('Busiest processes', 'Processus les plus actifs')),
       h('table', { class: 'dash-procs' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'Processus'), h('th', {}, 'PID'), h('th', {}, 'CPU'), h('th', {}, 'Mém.'))),
+        h('thead', {}, h('tr', {}, h('th', {}, t('Processes', 'Processus')), h('th', {}, 'PID'), h('th', {}, 'CPU'), h('th', {}, t('Mem.', 'Mém.')))),
         h('tbody', {}, ...s.processes.map((p) => h('tr', {},
           h('td', { class: 'ellipsis' }, p.name), h('td', { class: 'muted' }, String(p.pid)),
           h('td', {}, `${p.cpu.toFixed(1).replace('.', ',')} %`), h('td', {}, `${p.mem.toFixed(1).replace('.', ',')} %`))))));

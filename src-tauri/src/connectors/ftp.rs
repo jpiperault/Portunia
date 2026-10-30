@@ -25,36 +25,36 @@ impl Connector for FtpConnector {
             id: "ftp".into(),
             name: "FTP / FTPS".into(),
             version: "0.1.0".into(),
-            description: "Fichiers d'un serveur FTP, chiffré (FTPS) ou non.".into(),
+            description: t!("Files on an FTP server, encrypted (FTPS) or not.", "Fichiers d'un serveur FTP, chiffré (FTPS) ou non.").into(),
             view: ViewKind::Files,
             builtin: true,
             file_browser: true,
             port_forwarding: false,
             fields: vec![
-                Field::new("host", "Hôte", FieldKind::Text).required().placeholder("ftp.exemple.fr"),
+                Field::new("host", t!("Host", "Hôte"), FieldKind::Text).required().placeholder(t!("ftp.example.com", "ftp.exemple.fr")),
                 Field::new("port", "Port", FieldKind::Number).default(21),
                 Field::new(
                     "security",
-                    "Chiffrement",
-                    choice(&[("explicit", "FTPS (TLS explicite)"), ("none", "Aucun (FTP)")]),
+                    t!("Encryption", "Chiffrement"),
+                    choice(&[("explicit", t!("FTPS (explicit TLS)", "FTPS (TLS explicite)")), ("none", t!("None (FTP)", "Aucun (FTP)"))]),
                 )
                 .default("explicit"),
-                Field::new("insecureTls", "Accepter un certificat non vérifié (auto-signé)", FieldKind::Bool)
+                Field::new("insecureTls", t!("Accept an unverified certificate (self-signed)", "Accepter un certificat non vérifié (auto-signé)"), FieldKind::Bool)
                     .default(false)
                     .show_if("security", "explicit"),
-                Field::new("credential", "Identifiants partagés", FieldKind::Suggest { source: "credentials".into() })
-                    .placeholder("Vide = identifiants propres à cette session"),
-                Field::new("username", "Utilisateur", FieldKind::Text)
-                    .placeholder("Vide = anonymous")
+                Field::new("credential", t!("Shared credentials", "Identifiants partagés"), FieldKind::Suggest { source: "credentials".into() })
+                    .placeholder(t!("Empty = this session's own credentials", "Vide = identifiants propres à cette session")),
+                Field::new("username", t!("User", "Utilisateur"), FieldKind::Text)
+                    .placeholder(t!("Empty = anonymous", "Vide = anonymous"))
                     .hidden_by("credential"),
-                Field::new("password", "Mot de passe", FieldKind::Secret).hidden_by("credential"),
+                Field::new("password", t!("Password", "Mot de passe"), FieldKind::Secret).hidden_by("credential"),
             ],
         }
     }
 
     fn connect(&self, ctx: ConnectContext) -> Result<Outcome> {
         let params = Params {
-            host: ctx.require("host", "Hôte")?,
+            host: ctx.require("host", t!("Host", "Hôte"))?,
             port: ctx.port(21)?,
             tls: ctx.str("security").as_deref() != Some("none"),
             insecure: ctx.bool("insecureTls"),
@@ -83,15 +83,15 @@ impl Params {
             .to_socket_addrs()
             .with_context(|| format!("Nom introuvable : {}", self.host))?
             .next()
-            .ok_or_else(|| anyhow!("Nom introuvable : {}", self.host))?;
+            .ok_or_else(|| anyhow!("{}", t!(format!("Name not found: {}", self.host), format!("Nom introuvable : {}", self.host))))?;
         let mut stream = RustlsFtpStream::connect_timeout(addr, Duration::from_secs(15))
-            .map_err(|e| anyhow!("Connexion impossible à {}:{} : {e}", self.host, self.port))?;
+            .map_err(|e| anyhow!("{}", t!(format!("Cannot connect to {}:{}: {e}", self.host, self.port), format!("Connexion impossible à {}:{} : {e}", self.host, self.port))))?;
         if self.tls {
             stream = stream.into_secure(RustlsConnector::from(tls_config(self.insecure)?), &self.host).map_err(|e| {
-                anyhow!("Le serveur refuse le chiffrement (FTPS) : {e}. Choisissez « Aucun » s'il ne le propose pas, ou acceptez son certificat s'il est auto-signé.")
+                anyhow!("{}", t!(format!("The server refuses encryption (FTPS): {e}. Choose « None » if it does not offer it, or accept its certificate if it is self-signed."), format!("Le serveur refuse le chiffrement (FTPS) : {e}. Choisissez « Aucun » s'il ne le propose pas, ou acceptez son certificat s'il est auto-signé.")))
             })?;
         }
-        stream.login(&self.user, &self.password).map_err(|e| anyhow!("Identifiants refusés par {} : {e}", self.host))?;
+        stream.login(&self.user, &self.password).map_err(|e| anyhow!("{}", t!(format!("Credentials refused by {}: {e}", self.host), format!("Identifiants refusés par {} : {e}", self.host))))?;
         stream.transfer_type(FileType::Binary)?;
         Ok(stream)
     }
@@ -272,7 +272,7 @@ struct FtpConnection {
 
 impl TerminalConnection for FtpConnection {
     fn write(&self, _data: &[u8]) -> Result<()> {
-        bail!("Cet onglet n'a pas de terminal")
+        bail!(t!("This tab has no terminal", "Cet onglet n'a pas de terminal"))
     }
 
     fn resize(&self, _cols: u16, _rows: u16) -> Result<()> {

@@ -43,7 +43,7 @@ impl<H: client::Handler> SftpFiles<H> {
         channel.request_subsystem(true, "sftp").await?;
         let session = SftpSession::new(channel.into_stream())
             .await
-            .map_err(|e| anyhow!("SFTP indisponible sur ce serveur : {e}"))?;
+            .map_err(|e| anyhow!("{}", t!(format!("SFTP unavailable on this server: {e}"), format!("SFTP indisponible sur ce serveur : {e}"))))?;
         let session = Arc::new(session);
         *guard = Some(session.clone());
         Ok(session)

@@ -76,7 +76,7 @@ impl<H: client::Handler + 'static> PortForwarder for SshForwarder<H> {
     fn start(&self, spec: TunnelSpec) -> BoxFuture<'_, ()> {
         Box::pin(async move {
             if spec.kind != TunnelKind::Dynamic && (spec.remote_host.trim().is_empty() || spec.remote_port == 0) {
-                bail!("Indiquez l'hôte et le port de destination");
+                bail!(t!("Give the destination host and port", "Indiquez l'hôte et le port de destination"));
             }
             if self.running.lock().unwrap().contains_key(&spec.id) {
                 return Ok(());
@@ -87,7 +87,7 @@ impl<H: client::Handler + 'static> PortForwarder for SshForwarder<H> {
                     .handle
                     .tcpip_forward("127.0.0.1", spec.bind_port as u32)
                     .await
-                    .map_err(|e| anyhow!("Le serveur refuse d'ouvrir le port {} : {e} (AllowTcpForwarding ?)", spec.bind_port))?;
+                    .map_err(|e| anyhow!("{}", t!(format!("The server refuses to open port {}: {e} (AllowTcpForwarding?)", spec.bind_port), format!("Le serveur refuse d'ouvrir le port {} : {e} (AllowTcpForwarding ?)", spec.bind_port))))?;
                 let port = if port == 0 { spec.bind_port as u32 } else { port };
                 let stats = Arc::new(Stats::default());
                 self.remote.lock().unwrap().insert(port, RemoteTarget { host: spec.remote_host.clone(), port: spec.remote_port, stats: stats.clone() });
@@ -168,7 +168,7 @@ async fn serve<H: client::Handler>(
                 // 0x05 : connexion refusée par la destination.
                 let _ = socket.write_all(&[5, 5, 0, 1, 0, 0, 0, 0, 0, 0]).await;
             }
-            return Err(anyhow!("{host}:{port} injoignable depuis le serveur : {e}"));
+            return Err(anyhow!("{}", t!(format!("{host}:{port} unreachable from the server: {e}"), format!("{host}:{port} injoignable depuis le serveur : {e}"))));
         }
     };
     if spec.kind == TunnelKind::Dynamic {
@@ -184,13 +184,13 @@ async fn socks5_handshake(socket: &mut TcpStream) -> Result<(String, u16)> {
     let mut head = [0u8; 2];
     socket.read_exact(&mut head).await?;
     if head[0] != 5 {
-        bail!("Le navigateur doit utiliser un proxy SOCKS5");
+        bail!(t!("The browser must use a SOCKS5 proxy", "Le navigateur doit utiliser un proxy SOCKS5"));
     }
     let mut methods = vec![0u8; head[1] as usize];
     socket.read_exact(&mut methods).await?;
     if !methods.contains(&0) {
         socket.write_all(&[5, 0xFF]).await?;
-        bail!("Le client SOCKS exige une authentification, non prise en charge");
+        bail!(t!("The SOCKS client requires authentication, not supported", "Le client SOCKS exige une authentification, non prise en charge"));
     }
     socket.write_all(&[5, 0]).await?;
 
@@ -198,7 +198,7 @@ async fn socks5_handshake(socket: &mut TcpStream) -> Result<(String, u16)> {
     socket.read_exact(&mut request).await?;
     if request[1] != 1 {
         socket.write_all(&[5, 7, 0, 1, 0, 0, 0, 0, 0, 0]).await?;
-        bail!("Commande SOCKS non prise en charge");
+        bail!(t!("SOCKS command not supported", "Commande SOCKS non prise en charge"));
     }
     let host = match request[3] {
         1 => {
@@ -210,14 +210,14 @@ async fn socks5_handshake(socket: &mut TcpStream) -> Result<(String, u16)> {
             let len = socket.read_u8().await? as usize;
             let mut name = vec![0u8; len];
             socket.read_exact(&mut name).await?;
-            String::from_utf8(name).context("Nom d'hôte SOCKS invalide")?
+            String::from_utf8(name).context(t!("Invalid SOCKS host name", "Nom d'hôte SOCKS invalide"))?
         }
         4 => {
             let mut ip = [0u8; 16];
             socket.read_exact(&mut ip).await?;
             Ipv6Addr::from(ip).to_string()
         }
-        _ => bail!("Type d'adresse SOCKS inconnu"),
+        _ => bail!(t!("Unknown SOCKS address type", "Type d'adresse SOCKS inconnu")),
     };
     let port = socket.read_u16().await?;
     Ok((host, port))
