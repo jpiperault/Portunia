@@ -262,7 +262,12 @@ pub async fn run(path: &str, mut lines: tokio::io::Lines<BufReader<tokio::io::St
             next += 1;
         }
         position = target;
-        let Some(image) = decoder.image() else { continue };
+        // Connexion pas encore rejouée, donc pas d'image : la position répond quand même, sinon
+        // le lecteur attend indéfiniment sur son « Chargement ».
+        let Some(image) = decoder.image() else {
+            emit(&Output::Position { t: position });
+            continue;
+        };
         let (w, h) = (image.width(), image.height());
         if (w, h) != (width, height) || previous.len() != image.data().len() {
             width = w;

@@ -600,9 +600,11 @@ pub async fn bastion_rdp_replay(state: State<'_, AppState>, id: String, session:
                 let Ok(line) = line else { break };
                 let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
                 if on_event.send(message).is_err() {
-                    break;
+                    return;
                 }
             }
+            // Moteur arrêté sans message (plantage) : le lecteur l'affiche au lieu d'attendre.
+            let _ = on_event.send(json!({ "type": "closed", "reason": t!("The RDP engine stopped", "Le moteur RDP s'est arrêté") }));
         })
         .map_err(err)?;
     replays().lock().unwrap().insert(replay_id.clone(), RdpReplay { stdin, child, file });
