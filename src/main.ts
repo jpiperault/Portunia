@@ -1,8 +1,9 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, Bastion, bastions, BastionServer, connectBastion, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, Bastion, bastions, BastionServer, connectAssist, connectBastion, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { save } from '@tauri-apps/plugin-dialog';
 import { BastionPanel, HEIMDIA_EXTENSION, renderBastionAdmin } from './bastion';
+import { ASSIST_EXTENSION, openAssistDialog } from './assist';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
@@ -252,6 +253,32 @@ async function openBastionDesktop(b: Bastion, s: BastionServer) {
     }
   };
   return openSession(session, undefined, { connect, typing: false });
+}
+
+/**
+ * Assistance à distance : écran de la personne aidée dans un onglet Bureau à distance, à travers
+ * le relais du bastion (chiffré de bout en bout par le code qu'elle a lu).
+ */
+function openAssist(b: Bastion, code: string) {
+  const session: Session = {
+    id: '', name: tr(`Assistance · ${code}`, `Assistance · ${code}`), folder: '', protocol: 'rdp', tags: [], secretKeys: [],
+    values: { host: b.host, port: b.apiPort, username: '', client: 'tab' },
+  };
+  const connect = async (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
+    try {
+      return await connectAssist(b.id, code, cols, rows, onEvent);
+    } catch (e) {
+      if (errorText(e) !== 'SESSION_EXPIREE') throw e;
+      if (await bastionPanel.reconnect(b.id)) return connectAssist(b.id, code, cols, rows, onEvent);
+      throw new Error(tr('Bastion session expired: sign in again (Bastions section).', 'Session du bastion expirée : reconnectez-vous (section Bastions).'));
+    }
+  };
+  return openSession(session, undefined, { connect, typing: false });
+}
+
+/** Le bouton « Assistance à distance » de la barre latérale suit les deux extensions. */
+function showAssist() {
+  $('open-assist').hidden = !(extensionEnabled('assistance') && extensionEnabled('heimdia'));
 }
 
 function openBastionAdmin(b: Bastion) {
@@ -1012,9 +1039,10 @@ function extensionsPage(): HTMLElement {
   const usage: Record<string, number> = {};
   for (const s of state.sessions) usage[s.protocol] = (usage[s.protocol] ?? 0) + 1;
   usage.heimdia = bastionPanel.list.length;
-  return renderExtensions([...state.protocols, HEIMDIA_EXTENSION], usage, extensionEnabled, (id, on) => {
+  const nameOf = (id: string) => protocolOf(id)?.name ?? (id === 'heimdia' ? HEIMDIA_EXTENSION.name : id === 'assistance' ? ASSIST_EXTENSION.name : id);
+  return renderExtensions([...state.protocols, HEIMDIA_EXTENSION, ASSIST_EXTENSION], usage, extensionEnabled, (id, on) => {
     setExtension(id, on);
-    toast(tr(`Extension « ${protocolOf(id)?.name ?? (id === 'heimdia' ? HEIMDIA_EXTENSION.name : id)} » ${on ? 'enabled' : 'disabled'}`, `Extension « ${protocolOf(id)?.name ?? (id === 'heimdia' ? HEIMDIA_EXTENSION.name : id)} » ${on ? 'activée' : 'désactivée'}`));
+    toast(tr(`Extension « ${nameOf(id)} » ${on ? 'enabled' : 'disabled'}`, `Extension « ${nameOf(id)} » ${on ? 'activée' : 'désactivée'}`));
   });
 }
 
@@ -1052,6 +1080,9 @@ $('open-nettools').addEventListener('click', () => openNetTools());
 $('open-credentials').append(icon('user'), h('span', { class: 'grow' }, tr('Shared credentials', 'Identifiants partagés')));
 $('open-credentials').addEventListener('click', () => openCredentialManager(toast, () => reload()));
 setPlayerHandler(openReplay);
+$('open-assist').append(icon('lifebuoy'), h('span', { class: 'grow' }, tr('Remote assistance', 'Assistance à distance')));
+$('open-assist').addEventListener('click', () => openAssistDialog({ open: openAssist, toast }));
+showAssist();
 $('open-import').append(icon('upload'), h('span', { class: 'grow' }, tr('Import / export', 'Importer / exporter')));
 $('open-import').addEventListener('click', () => openImportExport((msg) => { toast(msg); reload(); }, toast));
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });
@@ -1107,6 +1138,7 @@ onSettingsChange((s) => {
   if (key === extensionsKey) return;
   extensionsKey = key;
   bastionPanel.show(extensionEnabled('heimdia'));
+  showAssist();
   state.tabs.find((t) => t.kind === 'extensions')?.view.replaceChildren(extensionsPage());
   renderAll();
 });

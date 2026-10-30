@@ -37,6 +37,7 @@ jobs:
           workspaces: |
             src-tauri -> target
             rdp-helper -> target
+            aide -> target
 
       - run: npm ci
 
@@ -58,10 +59,31 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
 
+      # Portunia Assist (programme de la personne aidée) : les bastions Heimdia le téléchargent
+      # depuis « latest/download » du dépôt public, avec son empreinte SHA-256 pour le vérifier.
+      - name: Portunia Assist
+        shell: bash
+        run: |
+          cargo build --release --manifest-path aide/Cargo.toml
+          mkdir -p assist
+          cp aide/target/release/portunia-assist.exe assist/
+          (cd assist && sha256sum portunia-assist.exe | cut -d' ' -f1 > portunia-assist.exe.sha256)
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          repository: jpiperault/Portunia-releases
+          token: ${{ secrets.RELEASES_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          files: |
+            assist/portunia-assist.exe
+            assist/portunia-assist.exe.sha256
+
       # Copie dans ce dépôt privé, avec la liste des changements depuis la version précédente.
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Portunia ${{ github.ref_name }}
           generate_release_notes: true
-          files: src-tauri/target/release/bundle/nsis/*
+          files: |
+            src-tauri/target/release/bundle/nsis/*
+            assist/*

@@ -1,13 +1,17 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 //! Portunia Assist : le programme de la personne aidée.
 //!
-//!   portunia-assist --relais wss://acces.exemple.fr/assistance/relais   assistance par le relais d'un bastion
+//! Sans option : fenêtre, relais trouvé dans le nom du fichier téléchargé.
+//!   portunia-assist --relais wss://acces.exemple.fr/assistance/relais   relais donné
+//!   portunia-assist --console --relais URL [--accord-auto]              essai sans fenêtre
 //!   portunia-assist --ecoute 127.0.0.1:13390                            essai : serveur RDP local direct
 //! Options d'essai : --mire (mire au lieu de l'écran), --saisie-notee (souris et clavier notés,
-//! pas rejoués), --accord-auto (accepte sans demander).
+//! pas rejoués).
 
 mod display;
 mod input;
 mod relay;
+mod ui;
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -75,8 +79,40 @@ impl relay::Ui for Console {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+/// Texte dans la langue de Windows.
+pub fn t(en: &'static str, fr: &'static str) -> &'static str {
+    if ui::system_is_french() {
+        fr
+    } else {
+        en
+    }
+}
+
+/// Adresse du relais : donnée en option, sinon lue dans le nom du fichier téléchargé
+/// (« Portunia Assist (acces.exemple.fr).exe », posé par la page du bastion), sinon dans la
+/// note de téléchargement que Windows garde sur le fichier (adresse d'origine).
+fn relay_url(explicit: Option<String>) -> Option<String> {
+    if explicit.is_some() {
+        return explicit;
+    }
+    let exe = std::env::current_exe().ok()?;
+    let name = exe.file_stem()?.to_string_lossy().to_string();
+    let host = name
+        .split(['(', ')'])
+        .map(str::trim)
+        .find(|part| part.contains('.') && part.chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c)))
+        .map(String::from)
+        .or_else(|| {
+            // Flux NTFS « Zone.Identifier » : HostUrl=https://acces.exemple.fr/assistance/…
+            let note = std::fs::read_to_string(format!("{}:Zone.Identifier", exe.display())).ok()?;
+            let url = note.lines().find_map(|l| l.strip_prefix("HostUrl="))?;
+            let rest = url.strip_prefix("https://")?;
+            Some(rest.split('/').next()?.to_string())
+        })?;
+    Some(format!("wss://{host}/assistance/relais"))
+}
+
+fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let flag = |f: &str| args.iter().any(|a| a == f);
     let value = |f: &str| args.iter().position(|a| a == f).and_then(|i| args.get(i + 1)).cloned();
@@ -84,14 +120,49 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).with_writer(std::io::stderr).init();
     let _ = rustls::crypto::ring::default_provider().install_default();
     let opts = Options { source: if flag("--mire") { display::Source::Pattern } else { display::Source::Screen }, noted: flag("--saisie-notee") };
+    let any: SocketAddr = ([127, 0, 0, 1], 0).into();
+    let runtime = || tokio::runtime::Builder::new_current_thread().enable_all().build();
 
-    if let Some(url) = value("--relais") {
-        let mut ui = Console { auto: flag("--accord-auto") };
-        let any: SocketAddr = ([127, 0, 0, 1], 0).into();
-        let local = tokio::task::LocalSet::new();
-        return local.run_until(relay::run(&url, None, &mut ui, |control| server(&opts, any, control).expect("serveur RDP"))).await;
+    // Essai : serveur RDP local direct.
+    if let Some(addr) = value("--ecoute") {
+        let addr: SocketAddr = addr.parse().context("adresse d'écoute")?;
+        eprintln!("Portunia Assist : serveur RDP d'essai sur {addr}");
+        return runtime()?.block_on(async { server(&opts, addr, true)?.run().await });
     }
-    let addr: SocketAddr = value("--ecoute").unwrap_or_else(|| "127.0.0.1:13390".into()).parse().context("adresse d'écoute")?;
-    eprintln!("Portunia Assist : serveur RDP d'essai sur {addr}");
-    server(&opts, addr, true)?.run().await
+    // Essai en ligne de commande, sans fenêtre.
+    if flag("--console") {
+        let url = value("--relais").context("--relais attendu")?;
+        let mut ui = Console { auto: flag("--accord-auto") };
+        let (_stop_tx, stop) = tokio::sync::watch::channel(false);
+        let local = tokio::task::LocalSet::new();
+        return runtime()?.block_on(local.run_until(relay::run(&url, None, &mut ui, |control| server(&opts, any, control).expect("serveur RDP"), stop)));
+    }
+    // Démonstration : les écrans à la suite, chacun photographié (fenêtre seule) dans le dossier donné.
+    if let Some(dir) = value("--demo") {
+        let (stop_tx, _stop) = tokio::sync::watch::channel(false);
+        std::thread::spawn(move || ui::demo(&dir));
+        ui::run(stop_tx);
+        return Ok(());
+    }
+    // Fenêtre : la session tourne sur un fil à part, la fenêtre sur le fil principal.
+    let (stop_tx, stop) = tokio::sync::watch::channel(false);
+    let url = relay_url(value("--relais"));
+    std::thread::spawn(move || {
+        let Some(url) = url else {
+            ui::error(t(
+                "Portunia Assist does not know which server to use. Download it again from the page given by the person helping you.",
+                "Portunia Assist ne sait pas quel serveur utiliser. Téléchargez-le de nouveau depuis la page donnée par la personne qui vous aide.",
+            ));
+            return;
+        };
+        let result = runtime().map_err(anyhow::Error::from).and_then(|rt| {
+            let local = tokio::task::LocalSet::new();
+            rt.block_on(local.run_until(relay::run(&url, None, &mut ui::WindowUi, |control| server(&opts, any, control).expect("serveur RDP"), stop)))
+        });
+        if let Err(e) = result {
+            ui::error(&format!("{e:#}"));
+        }
+    });
+    ui::run(stop_tx);
+    Ok(())
 }

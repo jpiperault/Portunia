@@ -24,13 +24,14 @@ pub trait Ui: Send {
 const TRIES: u32 = 3;
 
 /// Une assistance : se met en attente sur le relais, puis sert l'écran au dépanneur.
-pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl Fn(bool) -> crate::Server) -> Result<()> {
+pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl Fn(bool) -> crate::Server, mut stop: tokio::sync::watch::Receiver<bool>) -> Result<()> {
     let mut failures = 0;
     loop {
-        let (mut ws, _) = tokio_tungstenite::connect_async(url).await.map_err(|e| anyhow!("relais injoignable : {e}"))?;
+        let (mut ws, _) = tokio_tungstenite::connect_async(url).await.map_err(|e| anyhow!("{} {e}", crate::t("Assistance server unreachable:", "Serveur d'assistance injoignable :")))?;
         // Place donnée par le relais.
         let place = loop {
-            match ws.next().await {
+            let m = tokio::select! { m = ws.next() => m, _ = stop.changed() => return Ok(()) };
+            match m {
                 Some(Ok(Message::Text(t))) => {
                     let v: Value = serde_json::from_str(&t)?;
                     match v["type"].as_str() {
@@ -40,7 +41,7 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
                     }
                 }
                 Some(Ok(_)) => {}
-                _ => bail!("relais fermé"),
+                _ => bail!(crate::t("The assistance server closed the connection", "Le serveur d'assistance a fermé la connexion")),
             }
         };
         let code = match &preset {
@@ -50,7 +51,8 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
         ui.code(&code.display());
         // Attente du dépanneur.
         let who = loop {
-            match ws.next().await {
+            let m = tokio::select! { m = ws.next() => m, _ = stop.changed() => return Ok(()) };
+            match m {
                 Some(Ok(Message::Text(t))) => {
                     let v: Value = serde_json::from_str(&t)?;
                     if v["type"] == "relie" {
@@ -58,7 +60,7 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
                     }
                 }
                 Some(Ok(_)) => {}
-                _ => bail!("relais fermé avant l'arrivée du dépanneur"),
+                _ => bail!(crate::t("The assistance server closed the connection", "Le serveur d'assistance a fermé la connexion")),
             }
         };
         // Échange de clés : le dépanneur doit avoir le même code.
@@ -74,7 +76,7 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
                 failures += 1;
                 let _ = ws.close(None).await;
                 if failures >= TRIES {
-                    bail!("code faux trois fois : relancez Portunia Assist pour un nouveau code");
+                    bail!(crate::t("Wrong code three times: open Portunia Assist again for a new code", "Code faux trois fois : rouvrez Portunia Assist pour un nouveau code"));
                 }
                 // Mauvais code : nouvelle place, nouveau code.
                 continue;
@@ -85,7 +87,7 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
             let msg = sealer.seal(Kind::Control, json!({ "type": "refus" }).to_string().as_bytes());
             ws.send(Message::Binary(msg.into())).await?;
             let _ = ws.close(None).await;
-            ui.ended("refusé");
+            ui.ended(crate::t("You declined.", "Vous avez refusé."));
             return Ok(());
         };
         let msg = sealer.seal(Kind::Control, json!({ "type": "accord", "controle": control }).to_string().as_bytes());
@@ -103,24 +105,29 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
         let reason = loop {
             tokio::select! {
                 n = rd.read(&mut buf) => match n {
-                    Ok(0) | Err(_) => break "fin de la session",
+                    Ok(0) | Err(_) => break crate::t("End of the session.", "Fin de la session."),
                     Ok(n) => {
                         let frame = sealer.seal(Kind::Data, &buf[..n]);
-                        if tx.send(Message::Binary(frame.into())).await.is_err() { break "liaison coupée"; }
+                        if tx.send(Message::Binary(frame.into())).await.is_err() { break crate::t("Connection lost.", "Connexion perdue."); }
                     }
                 },
                 m = rx.next() => match m {
                     Some(Ok(Message::Binary(b))) => match opener.open(&b) {
-                        Ok((Kind::Data, data)) => { if wr.write_all(&data).await.is_err() { break "fin de la session"; } }
+                        Ok((Kind::Data, data)) => { if wr.write_all(&data).await.is_err() { break crate::t("End of the session.", "Fin de la session."); } }
                         Ok((Kind::Control, c)) => {
                             let v: Value = serde_json::from_slice(&c).unwrap_or(Value::Null);
-                            if v["type"] == "fin" { break "terminé par le dépanneur"; }
+                            if v["type"] == "fin" { break crate::t("Ended by the person helping you.", "Terminée par la personne qui vous aide."); }
                         }
-                        Err(_) => break "message altéré : liaison coupée",
+                        Err(_) => break crate::t("Altered message: connection cut for safety.", "Message altéré : connexion coupée par sécurité."),
                     },
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break "liaison coupée",
+                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break crate::t("Connection lost.", "Connexion perdue."),
                     _ => {}
                 },
+                _ = stop.changed() => {
+                    let fin = sealer.seal(Kind::Control, json!({ "type": "fin" }).to_string().as_bytes());
+                    let _ = tx.send(Message::Binary(fin.into())).await;
+                    break crate::t("You stopped it.", "Vous l'avez arrêtée.");
+                }
             }
         };
         rdp.abort();
@@ -138,7 +145,7 @@ where
         match ws.next().await {
             Some(Ok(Message::Binary(b))) => return Ok(b.to_vec()),
             Some(Ok(Message::Text(_))) | Some(Ok(Message::Ping(_))) | Some(Ok(Message::Pong(_))) => {}
-            _ => bail!("liaison coupée pendant l'échange de clés"),
+            _ => bail!(crate::t("Connection lost while checking the code", "Connexion perdue pendant la vérification du code")),
         }
     }
 }

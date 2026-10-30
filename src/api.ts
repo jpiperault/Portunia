@@ -360,6 +360,8 @@ export type BastionLoginAnswer =
 
 export const bastions = {
   list: () => invoke<Bastion[]>('bastion_list'),
+  /** Relais d'assistance du bastion : actif, autorisé pour moi, adresse à donner. */
+  assistStatus: (id: string) => invoke<import('./assist').AssistStatus>('bastion_assist_status', { id }),
   probe: (address: string) => invoke<{ host: string; apiPort: number; fingerprint: string; info: { nom: string; version: string; memo_mot_de_passe: boolean } }>('bastion_probe', { address }),
   login: (request: BastionLogin) => invoke<BastionLoginAnswer>('bastion_login', { request }),
   logout: (id: string) => invoke<void>('bastion_logout', { id }),
@@ -381,6 +383,13 @@ export const bastions = {
   },
   qr: (text: string) => invoke<string>('qr_svg', { text }),
 };
+
+/** Assistance à distance : rejoint la personne aidée avec son code (onglet Bureau à distance). */
+export function connectAssist(id: string, code: string, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+  const channel = new Channel<TermEvent>();
+  channel.onmessage = onEvent;
+  return invoke<ConnectResponse>('bastion_assist', { id, code, cols, rows, onEvent: channel });
+}
 
 export function connectBastion(id: string, server: string, extra: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
   const channel = new Channel<TermEvent>();

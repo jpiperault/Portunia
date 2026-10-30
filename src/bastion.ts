@@ -387,13 +387,14 @@ function openBypass(host: BastionHost, b: Bastion, list: { session: Session; ser
 
 // ---------- Administration ----------
 
-type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'reglages';
+type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'assistance' | 'reglages';
 const SECTIONS: { id: Section; label: string; admin: boolean }[] = [
   { id: 'cibles', label: t('Servers and vault', 'Serveurs et coffre'), admin: true },
   { id: 'comptes', label: t('Accounts', 'Comptes'), admin: true },
   { id: 'groupes', label: t('Groups', 'Groupes'), admin: true },
   { id: 'regles', label: t('Rules', 'Règles'), admin: true },
   { id: 'portail', label: t('Web portal', 'Portail web'), admin: true },
+  { id: 'assistance', label: t('Assistance', 'Assistance'), admin: true },
   { id: 'reglages', label: t('Settings', 'Réglages'), admin: true },
 ];
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -752,6 +753,47 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
         h('p', { class: 'muted small' }, t('Always required on the portal: password and code. First sign-in and lost code are handled in Portunia. Servers in jump mode: only with Portunia for now.', 'Toujours exigés sur le portail : mot de passe et code. Première connexion et code perdu se font dans Portunia. Serveurs en mode rebond et Bureau à distance : seulement avec Portunia pour l\'instant.')),
         h('h3', {}, t('Anti-bot (Cloudflare Turnstile)', 'Anti-robots (Cloudflare Turnstile)')),
         h('div', { class: 'row2' }, field(t('Site key', 'Clé du site'), site), field(t('Secret key', 'Clé secrète'), secret, t('kept encrypted by the bastion', 'gardée chiffrée par le bastion'))),
+        h('div', {}, save));
+    },
+
+    assistance: async () => {
+      let a: any;
+      try {
+        a = await call<any>('GET', '/admin/assistance');
+      } catch (e) {
+        // Bastion antérieur à la 0.11 : pas de relais d'assistance.
+        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('Remote assistance needs Heimdia 0.11 or later: update the bastion (sudo bash installer.sh update).', 'L\'assistance à distance demande Heimdia 0.11 ou plus récent : mettez le bastion à jour (sudo bash installer.sh mise-a-jour).')));
+        throw e;
+      }
+      const sw = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(a.actif), 'aria-label': t('Assistance relay', 'Relais d\'assistance') });
+      const stateText = h('strong', { class: a.actif ? 'ok-text' : 'muted' }, a.actif ? t('enabled', 'activé') : t('disabled', 'désactivé'));
+      sw.addEventListener('click', async () => {
+        const on = sw.getAttribute('aria-checked') !== 'true';
+        if (!on && !confirm(t('Disabling the relay ends the assistance sessions in progress. Continue?', 'Couper le relais met fin aux assistances en cours. Continuer ?'))) return;
+        try { await call('PUT', '/admin/assistance', { actif: on }); host.toast(on ? t('Assistance relay enabled', 'Relais d\'assistance activé') : t('Assistance relay disabled', 'Relais d\'assistance coupé')); reload(); } catch (e) { fail(e); }
+      });
+      const stat = (value: string | number, label: string) => h('div', { class: 'portal-stat' }, h('b', {}, String(value)), h('span', {}, label));
+      const groupe = select('a-groupe', [...new Set([a.groupe, ...a.groupes])].filter(Boolean).map((g: string) => [g, g] as [string, string]), a.groupe);
+      const duree = select('a-duree', [['1', t('1 hour', '1 heure')], ['4', t('4 hours', '4 heures')], ['8', t('8 hours', '8 heures')]].concat([1, 4, 8].includes(a.duree_h) ? [] : [[String(a.duree_h), `${a.duree_h} h`]]) as [string, string][], String(a.duree_h));
+      const groupMissing = !a.groupes.includes(a.groupe);
+      const save = h('button', { class: 'btn primary', onclick: async () => {
+        try { await call('PUT', '/admin/assistance', { groupe: groupe.value, duree_h: Number(duree.value) }); host.toast(t('Assistance saved', 'Assistance enregistrée')); reload(); } catch (e) { fail(e); }
+      } }, t('Save', 'Enregistrer'));
+      return h('div', { class: 'admin-section form-narrow' },
+        h('div', { class: 'portal-head' }, sw, h('div', {},
+          h('div', {}, h('b', {}, t('Assistance relay', 'Relais d\'assistance')), ' · ', stateText),
+          h('p', { class: 'muted small' }, t('Lets helpers take control of a PC with Portunia Assist: the person downloads it from the page below and reads a code. The relay only passes on encrypted data.', 'Permet aux dépanneurs de prendre la main sur un PC avec Portunia Assist : la personne le télécharge sur la page ci-dessous et lit un code. Le relais ne fait que transmettre des données chiffrées.')))),
+        h('div', { class: 'portal-stats' },
+          stat(a.en_attente, t('people waiting', 'personnes en attente')), stat(a.aujourd_hui, t('assistance today', 'assistances aujourd\'hui')), stat(a.total, t('in total', 'en tout')),
+          h('div', { class: 'portal-stat' }, h('b', { class: `chip ${a.programme ? 'ok' : 'warn'}` }, a.programme ? t('ready', 'prêt') : t('missing', 'absent')), h('span', {}, 'Portunia Assist'))),
+        h('h3', {}, t('Page for the person helped', 'Page de la personne aidée')),
+        a.adresse
+          ? h('div', { class: 'assist-url' }, h('code', {}, a.adresse), small(t('Copy', 'Copier'), () => { navigator.clipboard.writeText(a.adresse).then(() => host.toast(t('Copied', 'Copié'))).catch(() => {}); }))
+          : h('p', { class: 'muted small' }, t('Set the public address in Web portal first: the page and the relay use it (Cloudflare Tunnel).', 'Réglez d\'abord l\'adresse publique dans Portail web : la page et le relais l\'utilisent (Cloudflare Tunnel).')),
+        a.programme ? null : h('p', { class: 'muted small' }, t('The bastion downloads Portunia Assist from the Portunia releases when the relay is enabled (Internet access needed).', 'Le bastion télécharge Portunia Assist depuis les versions de Portunia à l\'activation du relais (accès Internet nécessaire).')),
+        h('h3', {}, t('Who and for how long', 'Qui et combien de temps')),
+        field(t('Group of helpers', 'Groupe des dépanneurs'), groupe, groupMissing ? t(`the group « ${a.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${a.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can start an assistance from Portunia', 'seuls ses membres peuvent lancer une assistance depuis Portunia')),
+        field(t('Maximum duration of an assistance', 'Durée maximale d\'une assistance'), duree),
         h('div', {}, save));
     },
 

@@ -792,3 +792,10 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .ap-kv code { font-size: 11.5px; }
 .ap-ok { color: var(--ok); }
 .ap-bad { color: var(--danger); font-weight: 600; }
+
+/* Assistance à distance (Portunia Assist) */
+.assist-url { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.assist-url code { padding: 6px 9px; border-radius: 6px; background: var(--hover); overflow-wrap: anywhere; }
+.assist-form { display: flex; flex-direction: column; gap: 14px; }
+.assist-say { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--hover); font-size: 13px; }
+.assist-code { font: 600 24px/1.2 var(--mono, 'Cascadia Mono', Consolas, monospace); letter-spacing: .12em; padding: 8px 12px; }
