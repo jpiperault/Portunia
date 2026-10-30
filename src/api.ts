@@ -369,6 +369,16 @@ export const bastions = {
   journalCsv: (id: string, query: string, dest: string) => invoke<void>('bastion_journal_csv', { id, query, dest }),
   /** Écrit un export de l'audit (enregistrement, transcription) dans le fichier choisi. */
   exportFile: (dest: string, content: string) => invoke<void>('bastion_export', { dest, content }),
+  /** Relecture d'une session Bureau à distance : le moteur RDP décode l'image enregistrée. */
+  rdpReplay: async (id: string, session: string, onMessage: (m: any) => void) => {
+    const channel = new Channel<any>();
+    channel.onmessage = onMessage;
+    const replay = await invoke<string>('bastion_rdp_replay', { id, session, onEvent: channel });
+    return {
+      seek: (t: number) => { invoke('bastion_rdp_replay_seek', { replay, t }).catch(() => {}); },
+      close: () => { invoke('bastion_rdp_replay_close', { replay }).catch(() => {}); },
+    };
+  },
   qr: (text: string) => invoke<string>('qr_svg', { text }),
 };
 

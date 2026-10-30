@@ -750,6 +750,17 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .ap-mk.w { background: var(--warn); }
 .ap-mk.x { background: var(--danger); top: 1px; height: 10px; }
 .ap-mk.err { top: auto; bottom: 2px; height: 6px; background: var(--danger); opacity: .7; }
+/* Lecteur Bureau à distance : image décodée par le moteur RDP, souris et clics par-dessus. */
+.rp-screen { padding: 0; align-items: center; justify-content: center; background: #000; }
+.rp-stage { position: relative; flex: none; }
+.rp-canvas { display: block; width: 100%; height: 100%; }
+.rp-cursor { position: absolute; width: 0; height: 0; border-left: 8px solid #fff; border-bottom: 12px solid transparent; transform: rotate(-12deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .7)); pointer-events: none; }
+.rp-click { position: absolute; width: 26px; height: 26px; border: 2px solid #ffd54a; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.rp-loading { position: absolute; inset: 0; display: grid; place-items: center; color: #d6d8dd; background: rgb(0 0 0 / .55); font-size: 13px; z-index: 3; }
+.rp-loading.err { color: #ff9b9b; }
+.ap-mk.rp-clic { top: auto; bottom: 2px; height: 5px; width: 2px; background: var(--ok); opacity: .8; }
+.ap-mk.rp-clip { background: var(--accent); }
+.ap-line.clip code { color: var(--accent); }
 .ap-knob { position: absolute; top: 7px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transform: translateX(-7px); box-shadow: 0 1px 4px var(--shadow); pointer-events: none; }
 .ap-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ap-bar .grow { flex: 1; }

@@ -31,6 +31,7 @@ import { allows, currentEdition, EDITION_LABEL, initLock, isLocked, loadLicense,
 import { openRecordings, setPlayerHandler, stamp } from './recordings';
 import type { Player } from './player';
 import type { AuditPlayer, AuditRecording } from './auditplayer';
+import type { RdpPlayer, RdpRecording } from './rdpplayer';
 import type { AuditRow } from './audit';
 import { folderColors, recordings, shells, ShellSpec } from './api';
 import { defaultShell, hideShell, loadShells, setDefaultShell, shellIcon, shellsLoaded, visibleShells } from './localshells';
@@ -64,7 +65,7 @@ interface Tab {
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
   /** Relecture d'une session de bastion (onglet « replay »). */
-  auditPlayer?: AuditPlayer;
+  auditPlayer?: AuditPlayer | RdpPlayer;
   /** Outils réseau (onglet « tools »). */
   netTools?: NetToolsView;
   /** Commande sur plusieurs serveurs (onglet « multi »). */
@@ -290,7 +291,6 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
   } catch (e) {
     return toast(errorText(e) === 'SESSION_EXPIREE' ? tr('Bastion session expired: sign in again (sidebar).', 'Session du bastion expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
   }
-  const { AuditPlayer } = await import('./auditplayer');
   const view = h('div', { class: 'pane audit-pane' });
   const stamp = new Date(s.debut).toISOString().slice(0, 16).replace(/[T:]/g, '-');
   const exportFile = async (name: string, ext: string, content: string, done: string) => {
@@ -298,11 +298,27 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
     if (!dest) return;
     try { await bastions.exportFile(dest, content); toast(`${done} : ${dest}`); } catch (e) { toast(errorText(e), 'error'); }
   };
-  let player: AuditPlayer;
+  let player: AuditPlayer | RdpPlayer;
   // Onglet qui affiche ce lecteur (remplacé par la version révélée).
   let owner: Tab | undefined = replace;
-  try {
-    player = new AuditPlayer(view, rec, {
+  // Bureau à distance : l'image est décodée par le moteur RDP à partir du flux enregistré.
+  if (s.type === 'rdp') {
+    const { RdpPlayer } = await import('./rdpplayer');
+    const rdp = new RdpPlayer(view, rec as unknown as RdpRecording, {
+      viewer: b.login,
+      start,
+      canReveal: b.role === 'admin',
+      reveal: () => {
+        if (!confirm(tr('Show the copied-pasted text in clear? This replay will be written to the bastion\'s log.', 'Afficher en clair le texte copié-collé ? Cette relecture sera inscrite au journal du bastion.'))) return;
+        openAuditReplay(b, s, undefined, true, owner);
+      },
+      exportText: () => exportFile('-transcription', 'txt', rdp.transcript(), tr('Transcript exported', 'Transcription exportée')),
+      open: (onMessage) => bastions.rdpReplay(b.id, s.id, onMessage),
+    });
+    player = rdp;
+  } else try {
+    const { AuditPlayer } = await import('./auditplayer');
+    const ssh: AuditPlayer = new AuditPlayer(view, rec, {
       viewer: b.login,
       start,
       canReveal: b.role === 'admin',
@@ -311,8 +327,9 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
         openAuditReplay(b, s, undefined, true, owner);
       },
       exportCast: () => exportFile(rec.revele ? '' : '-masque', 'cast', rec.cast, rec.revele ? tr('Signed recording exported', 'Enregistrement signé exporté') : tr('Masked copy exported (not signed)', 'Copie masquée exportée (non signée)')),
-      exportText: () => exportFile('-transcription', 'txt', player.transcript(), tr('Transcript exported', 'Transcription exportée')),
+      exportText: () => exportFile('-transcription', 'txt', ssh.transcript(), tr('Transcript exported', 'Transcription exportée')),
     });
+    player = ssh;
   } catch (e) {
     return toast(`Enregistrement illisible : ${errorText(e)}`, 'error');
   }

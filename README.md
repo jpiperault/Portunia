@@ -144,8 +144,9 @@ src/                 interface (TypeScript, no framework)
   bastion.ts         Heimdia extension: sidebar, sign-in, administration
   audit.ts           Heimdia audit: sessions and log
   auditplayer.ts     session player (subtitles, markers, skipped idle time)
+  rdpplayer.ts       Remote Desktop session player (image decoded by the RDP engine)
   i18n.ts            interface language: t("English", "Français") next to each other
-rdp-helper/          RDP engine (IronRDP), separate program started for each RDP session
+rdp-helper/          RDP engine (IronRDP), separate program started for each RDP session or replay
 scripts/             RDP engine build, check of t(…) calls (check-i18n.cjs)
 tools/license-tool/  publisher tool: signing key and licence generation (do not distribute)
 screenshot.html      demo with fake data for screenshots

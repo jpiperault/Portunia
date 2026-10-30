@@ -2139,8 +2139,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
+ "ironrdp-bulk",
  "ironrdp-client",
+ "ironrdp-connector",
+ "ironrdp-core",
+ "ironrdp-graphics",
  "ironrdp-pdu",
+ "ironrdp-session",
  "serde",
  "serde_json",
  "smallvec",

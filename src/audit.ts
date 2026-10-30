@@ -17,6 +17,8 @@ export interface AuditRow {
   debut: string; fin: string | null; enregistree: boolean; frappe: boolean; octets: number;
   /** Absent sur un bastion antérieur à la 0.8 : relisible si enregistrée. */
   relisible?: boolean;
+  /** Session Bureau à distance relisible (Heimdia 0.10 et suivants). */
+  relisible_rdp?: boolean;
   trouve: { t: number; extrait: string } | null;
 }
 
@@ -100,7 +102,7 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
           h('td', {}, h('strong', {}, s.serveur), s.type !== 'shell' ? h('span', { class: 'muted small' }, ` · ${s.type}${s.detail && s.type === 'exec' ? ` ${s.detail}` : ''}`) : null),
           h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null, s.frappe ? h('span', { class: 'chip keys', title: t('Keystrokes recorded', 'Frappe enregistrée') }, t('keystrokes', 'frappe')) : null),
           searching ? h('td', { class: 'hit' }, s.trouve ? h('button', { class: 'hit-btn', title: t('Replay from this moment', 'Relire à ce moment'), onclick: () => replay(s.trouve!.t) }, h('span', { class: 'num' }, clock(s.trouve.t)), ' ', h('code', {}, s.trouve.extrait)) : h('span', { class: 'muted' }, '—')) : null,
-          h('td', { class: 'acts' }, s.enregistree && s.relisible !== false
+          h('td', { class: 'acts' }, s.enregistree && (s.relisible_rdp || s.relisible !== false)
             ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, t('▶ Replay', '▶ Relire'))
             : s.enregistree
               ? h('span', { class: 'muted small', title: t('Recorded and signed by the bastion', 'Enregistrée et signée par le bastion') }, t('Remote Desktop: replay coming soon', 'Bureau à distance : relecture bientôt'))

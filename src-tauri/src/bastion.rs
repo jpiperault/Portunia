@@ -518,3 +518,103 @@ mod tests {
         assert!(split_address("hote:abc").is_err());
     }
 }
+
+// ---------- Relecture des sessions Bureau à distance ----------
+
+/// Relecture en cours : moteur RDP en mode relecture et son fichier temporaire.
+struct RdpReplay {
+    stdin: std::process::ChildStdin,
+    child: std::process::Child,
+    file: PathBuf,
+}
+
+impl Drop for RdpReplay {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = std::fs::remove_file(&self.file);
+    }
+}
+
+fn replays() -> &'static Mutex<HashMap<String, RdpReplay>> {
+    static REPLAYS: std::sync::OnceLock<Mutex<HashMap<String, RdpReplay>>> = std::sync::OnceLock::new();
+    REPLAYS.get_or_init(Mutex::default)
+}
+
+/// Ouvre la relecture d'une session Bureau à distance : télécharge son image depuis le bastion
+/// (signature contrôlée par le bastion) et la confie au moteur RDP. Ses messages (images,
+/// position) arrivent par `on_event` ; renvoie l'identifiant de la relecture.
+#[tauri::command]
+pub async fn bastion_rdp_replay(state: State<'_, AppState>, id: String, session: String, on_event: Channel<Value>) -> CmdResult<String> {
+    use std::io::{BufRead, Write};
+    state.unlocked()?;
+    state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
+    if !session.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
+        return Err(t!("Session not found", "Session introuvable").into());
+    }
+    let b = find(&state.data_dir, &id).map_err(full)?;
+    let t = token(&b).map_err(full)?;
+    let (http, _) = client(Some(&b.api_fingerprint)).map_err(full)?;
+    let resp = http
+        .get(format!("https://{}:{}/api/v1/audit/sessions/{session}/flux", b.host, b.api_port))
+        .bearer_auth(t)
+        .timeout(std::time::Duration::from_secs(300))
+        .send()
+        .await
+        .map_err(|e| root_cause(&e))?;
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("SESSION_EXPIREE".into());
+    }
+    if !resp.status().is_success() {
+        let value: Value = resp.json().await.unwrap_or(Value::Null);
+        return Err(value.get("erreur").and_then(Value::as_str).unwrap_or("?").to_string());
+    }
+    let bytes = resp.bytes().await.map_err(err)?;
+    let replay_id = uuid::Uuid::new_v4().to_string();
+    let file = std::env::temp_dir().join(format!("portunia-relecture-{replay_id}.flux"));
+    std::fs::write(&file, &bytes).map_err(err)?;
+
+    let helper = crate::connectors::rdp::helper_path()
+        .ok_or_else(|| t!("RDP engine not found (portunia-rdp.exe). Reinstall Portunia.", "Moteur RDP introuvable (portunia-rdp.exe). Réinstallez Portunia.").to_string())?;
+    let mut command = std::process::Command::new(helper);
+    command.stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let mut child = command.spawn().map_err(|e| format!("{}: {e}", t!("Cannot start the RDP engine", "Impossible de lancer le moteur RDP")))?;
+    let mut stdin = child.stdin.take().ok_or("stdin")?;
+    let stdout = child.stdout.take().ok_or("stdout")?;
+    writeln!(stdin, "{}", json!({ "replay": file.display().to_string() })).map_err(err)?;
+    stdin.flush().map_err(err)?;
+    std::thread::Builder::new()
+        .name("rdp-relecture".into())
+        .spawn(move || {
+            for line in std::io::BufReader::new(stdout).lines() {
+                let Ok(line) = line else { break };
+                let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
+                if on_event.send(message).is_err() {
+                    break;
+                }
+            }
+        })
+        .map_err(err)?;
+    replays().lock().unwrap().insert(replay_id.clone(), RdpReplay { stdin, child, file });
+    Ok(replay_id)
+}
+
+/// Amène la relecture à ce temps (secondes) : le moteur envoie les zones changées.
+#[tauri::command]
+pub fn bastion_rdp_replay_seek(replay: String, t: f64) -> CmdResult<()> {
+    use std::io::Write;
+    let mut all = replays().lock().unwrap();
+    let r = all.get_mut(&replay).ok_or_else(|| t!("Session closed", "Session fermée").to_string())?;
+    writeln!(r.stdin, "{}", json!({ "type": "seek", "t": t })).map_err(err)?;
+    r.stdin.flush().map_err(err)
+}
+
+/// Ferme la relecture (moteur arrêté, fichier temporaire effacé).
+#[tauri::command]
+pub fn bastion_rdp_replay_close(replay: String) {
+    replays().lock().unwrap().remove(&replay);
+}

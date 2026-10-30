@@ -7,7 +7,10 @@
 //! Sortie standard, une ligne JSON par message :
 //!   { "type": "connected" } | { "type": "resize", width, height }
 //!   | { "type": "image", x, y, width, height, rgba } | { "type": "closed", "reason": … }
+//!
+//! Relecture (bastion Heimdia) : 1re ligne { "replay": "fichier" }, voir `replay`.
 
+mod replay;
 mod scancodes;
 
 use std::{io::Write, time::Duration};
@@ -66,14 +69,18 @@ enum Input {
 
 #[derive(Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
-enum Output {
+pub(crate) enum Output {
     Connected,
     Resize { width: u16, height: u16 },
     Image { x: u16, y: u16, width: u16, height: u16, rgba: String },
     Closed { reason: Option<String> },
+    /// Relecture chargée : durée et nombre de messages.
+    Ready { duration: f64, frames: usize },
+    /// Relecture : image à jour pour ce temps.
+    Position { t: f64 },
 }
 
-fn emit(message: &Output) {
+pub(crate) fn emit(message: &Output) {
     let mut out = std::io::stdout().lock();
     let _ = serde_json::to_writer(&mut out, message);
     let _ = out.write_all(b"\n");
@@ -93,7 +100,13 @@ async fn run() -> Result<()> {
     let mut lines = BufReader::new(tokio::io::stdin()).lines();
     let first = lines.next_line().await?.ok_or_else(|| anyhow::anyhow!("configuration manquante"))?;
     // Certains lanceurs ajoutent une marque d'ordre des octets (BOM) en tête.
-    let s: Settings = serde_json::from_str(first.trim_start_matches('\u{feff}'))?;
+    let first = first.trim_start_matches('\u{feff}');
+    if let Ok(serde_json::Value::Object(o)) = serde_json::from_str::<serde_json::Value>(first) {
+        if let Some(path) = o.get("replay").and_then(|v| v.as_str()) {
+            return replay::run(path, lines).await;
+        }
+    }
+    let s: Settings = serde_json::from_str(first)?;
 
     let mut builder = ConfigBuilder::new()
         .with_destination(Destination::from_parts(s.host.clone(), s.port))
@@ -318,6 +331,44 @@ fn send_changes(previous: &[u32], current: &[u32], width: u16, height: u16) {
             for &px in &current[row * w + x..row * w + x + tw] {
                 // 0x00RRGGBB → R, G, B, A
                 rgba.extend_from_slice(&[(px >> 16) as u8, (px >> 8) as u8, px as u8, 255]);
+            }
+        }
+        emit(&Output::Image { x: x as u16, y: y as u16, width: tw as u16, height: th as u16, rgba: B64.encode(&rgba) });
+    }
+}
+
+/// Version RGBA (image d'IronRDP) : compare à l'image précédente (vide : tout envoyer).
+pub(crate) fn send_rgba_changes(previous: &[u8], current: &[u8], width: u16, height: u16) {
+    let (w, h) = (width as usize, height as usize);
+    if current.len() < w * h * 4 {
+        return;
+    }
+    let mut changed = Vec::new();
+    for ty in (0..h).step_by(TILE) {
+        for tx in (0..w).step_by(TILE) {
+            let tw = TILE.min(w - tx);
+            let th = TILE.min(h - ty);
+            let differs = previous.len() != current.len()
+                || (ty..ty + th).any(|y| {
+                    let row = (y * w + tx) * 4;
+                    previous[row..row + tw * 4] != current[row..row + tw * 4]
+                });
+            if differs {
+                changed.push((tx, ty, tw, th));
+            }
+        }
+    }
+    let total = w.div_ceil(TILE) * h.div_ceil(TILE);
+    // Plus de la moitié de l'écran a changé : une seule image complète.
+    if changed.len() * 2 > total {
+        changed = vec![(0, 0, w, h)];
+    }
+    for (x, y, tw, th) in changed {
+        let mut rgba = Vec::with_capacity(tw * th * 4);
+        for row in y..y + th {
+            let start = (row * w + x) * 4;
+            for px in current[start..start + tw * 4].chunks_exact(4) {
+                rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
             }
         }
         emit(&Output::Image { x: x as u16, y: y as u16, width: tw as u16, height: th as u16, rgba: B64.encode(&rgba) });

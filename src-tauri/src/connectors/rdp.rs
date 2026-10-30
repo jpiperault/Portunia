@@ -68,7 +68,7 @@ impl Connector for RdpConnector {
 
 /// Emplacement de `portunia-rdp.exe` : à côté de Portunia une fois installé,
 /// sinon dans le dossier de compilation du programme auxiliaire (développement).
-fn helper_path() -> Option<PathBuf> {
+pub(crate) fn helper_path() -> Option<PathBuf> {
     let name = if cfg!(windows) { "portunia-rdp.exe" } else { "portunia-rdp" };
     let beside = std::env::current_exe().ok()?.parent()?.join(name);
     let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..").join("rdp-helper").join("target");
