@@ -10,7 +10,7 @@ export const ASSIST_EXTENSION: Manifest = {
   id: 'assistance',
   name: t('Remote assistance', 'Assistance à distance'),
   version: '1.0.0',
-  description: t('Take control of a relative\'s or a customer\'s PC: they open Portunia Assist and read you a code. Goes through your Heimdia bastion, encrypted end to end.', 'Prendre la main sur le PC d\'un proche ou d\'un client : la personne ouvre Portunia Assist et vous lit un code. Passe par votre bastion Heimdia, chiffré de bout en bout.'),
+  description: t('Take control of a relative\'s or a customer\'s PC: they open Portunia Assistance and read you a code. Goes through your Gate, encrypted end to end.', 'Prendre la main sur le PC d\'un proche ou d\'un client : la personne ouvre Portunia Assistance et vous lit un code. Passe par votre Gate, chiffré de bout en bout.'),
   view: 'screen',
   builtin: true,
   fileBrowser: false,
@@ -57,10 +57,10 @@ export async function openAssistDialog(host: AssistHost) {
 
   if (!usable.length) {
     const why = !list.length
-      ? t('Sign in to a Heimdia bastion first (Bastions section): assistance goes through its relay.', 'Connectez-vous d\'abord à un bastion Heimdia (section Bastions) : l\'assistance passe par son relais.')
+      ? t('Sign in to a Gate first (Gates section): assistance goes through its relay.', 'Connectez-vous d\'abord à une Gate (section Gates) : l\'assistance passe par son relais.')
       : statuses.some((x) => x.s && !x.s.actif)
-        ? t('The assistance relay is disabled on your bastion. An administrator enables it in Administer › Assistance.', 'Le relais d\'assistance est coupé sur votre bastion. Un administrateur l\'active dans Administrer › Assistance.')
-        : t('Your account is not in the bastion\'s group of helpers (Administer › Assistance), or the bastion is too old (Heimdia 0.11 or later).', 'Votre compte n\'est pas dans le groupe des dépanneurs du bastion (Administrer › Assistance), ou le bastion est trop ancien (Heimdia 0.11 ou suivant).');
+        ? t('The assistance relay is disabled on your Gate. An administrator enables it in Administer › Assistance.', 'Le relais d\'assistance est coupé sur votre Gate. Un administrateur l\'active dans Administrer › Assistance.')
+        : t('Your account is not in the bastion\'s group of helpers (Administer › Assistance), or the Gate is too old (Portunia Gate 0.11 or later).', 'Votre compte n\'est pas dans le groupe des dépanneurs de la Gate (Administrer › Assistance), ou la Gate est trop ancienne (Portunia Gate 0.11 ou suivant).');
     body.append(h('p', { class: 'muted' }, why));
     dialog.append(h('footer', { class: 'dlg-foot' }, h('button', { type: 'button', class: 'btn', onclick: close }, t('Close', 'Fermer'))));
   } else {
@@ -69,11 +69,11 @@ export async function openAssistDialog(host: AssistHost) {
     const absent = h('p', { class: 'form-error' });
     const update = () => {
       const { s } = usable[Number(select.value)];
-      const page = s.adresse || t('(the bastion\'s web portal address is not set: Administer › Web portal)', '(adresse du portail web du bastion non réglée : Administrer › Portail web)');
+      const page = s.adresse || t('(the bastion\'s web portal address is not set: Administer › Web portal)', '(adresse du portail web de la Gate non réglée : Administrer › Portail web)');
       say.replaceChildren(
         h('span', { class: 'label' }, t('To say on the phone', 'À dire au téléphone')),
         h('span', {}, t('« Go to ', '« Va sur '), h('b', {}, page), t(', click the big button, open the downloaded file and read me the digits. »', ', clique sur le gros bouton, ouvre le fichier téléchargé et lis-moi les chiffres. »')));
-      absent.textContent = s.programme ? '' : t('The bastion has not downloaded Portunia Assist yet (it does so when assistance is enabled; it needs Internet access).', 'Le bastion n\'a pas encore téléchargé Portunia Assist (il le fait à l\'activation de l\'assistance ; il lui faut un accès Internet).');
+      absent.textContent = s.programme ? '' : t('The Gate has not downloaded Portunia Assistance yet (it does so when assistance is enabled; it needs Internet access).', 'La Gate n\'a pas encore téléchargé Portunia Assistance (elle le fait à l\'activation de l\'assistance ; il lui faut un accès Internet).');
     };
     select.addEventListener('change', update);
     update();
@@ -81,7 +81,7 @@ export async function openAssistDialog(host: AssistHost) {
     const error = h('p', { class: 'form-error', role: 'alert' });
     code.addEventListener('input', () => { code.value = formatCode(code.value); error.textContent = ''; });
     const form = h('form', { class: 'assist-form' },
-      usable.length > 1 ? h('label', { class: 'fld' }, t('Through the bastion', 'Par le bastion'), select) : null,
+      usable.length > 1 ? h('label', { class: 'fld' }, t('Through the Gate', 'Par la Gate'), select) : null,
       say, absent,
       h('label', { class: 'fld' }, t('Code read by the person', 'Code lu par la personne'), code),
       error,

@@ -1,7 +1,7 @@
 [package]
 name = "assist-proto"
 version = "0.1.0"
-description = "Portunia Assist : code, échange de clés (SPAKE2) et chiffrement de bout en bout"
+description = "Portunia Assistance : code, échange de clés (SPAKE2) et chiffrement de bout en bout"
 edition = "2021"
 
 [dependencies]

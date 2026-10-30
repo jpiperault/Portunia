@@ -168,7 +168,7 @@ pub fn run(stop: tokio::sync::watch::Sender<bool>) {
         let main = CreateWindowExW(
             WS_EX_TOPMOST,
             w!("PortuniaAssist"),
-            w!("Portunia Assist"),
+            w!("Portunia Assistance"),
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_VISIBLE,
             x,
             y,
@@ -314,7 +314,7 @@ unsafe extern "system" fn main_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -
             let brush = CreateSolidBrush(ACCENT);
             FillRect(dc, &band, brush);
             let _ = DeleteObject(brush.into());
-            title(dc, band, "Portunia Assist");
+            title(dc, band, "Portunia Assistance");
             let _ = EndPaint(h, &ps);
             LRESULT(0)
         }
@@ -495,10 +495,10 @@ unsafe extern "system" fn escape_hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRES
 pub fn demo(dir: &str) {
     let shots: [(&str, Screen); 5] = [
         ("1-code", Screen::Code("483 216 907".into())),
-        ("2-accord", Screen::Consent("julien (Bastion ACME)".into())),
-        ("3-session", Screen::Session { who: "julien (Bastion ACME)".into(), control: true }),
+        ("2-accord", Screen::Consent("julien (Gate ACME)".into())),
+        ("3-session", Screen::Session { who: "julien (Gate ACME)".into(), control: true }),
         ("4-fin", Screen::Ended("Terminée par la personne qui vous aide.".into())),
-        ("5-erreur", Screen::Error("Portunia Assist ne sait pas quel serveur utiliser.".into())),
+        ("5-erreur", Screen::Error("Portunia Assistance ne sait pas quel serveur utiliser.".into())),
     ];
     std::thread::sleep(std::time::Duration::from_millis(800));
     for (name, screen) in shots {

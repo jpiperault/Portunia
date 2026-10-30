@@ -81,7 +81,7 @@ impl Connector for SshConnector {
                     FieldKind::Bool,
                 )
                 .default(false),
-                Field::new("jump", t!("Jump server (bastion)", "Serveur de rebond (bastion)"), FieldKind::Suggest { source: "ssh-sessions".into() })
+                Field::new("jump", t!("Jump server (Gate)", "Serveur de rebond (Gate)"), FieldKind::Suggest { source: "ssh-sessions".into() })
                     .placeholder(t!("Empty = direct connection. SSH session or user@host:port", "Vide = connexion directe. Session SSH ou utilisateur@hôte:port")),
                 Field::new("mac", t!("MAC address (Wake-on-LAN)", "Adresse MAC (Wake-on-LAN)"), FieldKind::Text)
                     .placeholder(t!("Optional: AA:BB:CC:DD:EE:FF, to wake the machine up", "Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine")),

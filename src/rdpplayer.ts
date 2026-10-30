@@ -206,7 +206,7 @@ export class RdpPlayer {
       h('h2', {}, s.serveur, ' ', h('span', { class: 'badge proto-rdp' }, 'RDP'), ' ', h('span', { class: 'badge mode-enregistre' }, t('recorded', 'enregistré'))),
       h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} · ${fmt(this.duration)}${s.fin ? '' : t(' · ongoing', ' · en cours')}`),
       seal, actions);
-    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Copied-pasted text revealed: this replay is written to the bastion\'s log.', 'Texte copié-collé révélé : cette relecture est inscrite au journal du bastion.')));
+    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Copied-pasted text revealed: this replay is written to the bastion\'s log.', 'Texte copié-collé révélé : cette relecture est inscrite au journal de la Gate.')));
 
     this.screen.append(this.stage, this.loading,
       h('div', { class: 'ap-wm' }, t(`Viewed by ${this.opts.viewer}`, `Consulté par ${this.opts.viewer}`), h('br'), new Date().toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' })),
@@ -304,7 +304,7 @@ export class RdpPlayer {
     const s = r.session;
     const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : t('ongoing', 'en cours'));
     const row = (k: string, v: Node | string) => [h('dt', {}, k), h('dd', {}, v)];
-    const sig = { verifiee: t('checked with the bastion\'s key', 'vérifiée avec la clé du bastion'), alteree: t('DOES NOT MATCH: file modified', 'NE CORRESPOND PAS : fichier modifié'), absente: t('not added yet (session ongoing or interrupted)', 'pas encore posée (session en cours ou interrompue)') }[r.signature];
+    const sig = { verifiee: t('checked with the bastion\'s key', 'vérifiée avec la clé de la Gate'), alteree: t('DOES NOT MATCH: file modified', 'NE CORRESPOND PAS : fichier modifié'), absente: t('not added yet (session ongoing or interrupted)', 'pas encore posée (session en cours ou interrompue)') }[r.signature];
     return h('div', {},
       h('dl', { class: 'ap-kv' },
         ...row(t('Account', 'Compte'), s.compte),

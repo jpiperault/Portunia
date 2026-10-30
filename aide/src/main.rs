@@ -126,7 +126,7 @@ fn main() -> Result<()> {
     // Essai : serveur RDP local direct.
     if let Some(addr) = value("--ecoute") {
         let addr: SocketAddr = addr.parse().context("adresse d'écoute")?;
-        eprintln!("Portunia Assist : serveur RDP d'essai sur {addr}");
+        eprintln!("Portunia Assistance : serveur RDP d'essai sur {addr}");
         return runtime()?.block_on(async { server(&opts, addr, true)?.run().await });
     }
     // Essai en ligne de commande, sans fenêtre.
@@ -150,8 +150,8 @@ fn main() -> Result<()> {
     std::thread::spawn(move || {
         let Some(url) = url else {
             ui::error(t(
-                "Portunia Assist does not know which server to use. Download it again from the page given by the person helping you.",
-                "Portunia Assist ne sait pas quel serveur utiliser. Téléchargez-le de nouveau depuis la page donnée par la personne qui vous aide.",
+                "Portunia Assistance does not know which server to use. Download it again from the page given by the person helping you.",
+                "Portunia Assistance ne sait pas quel serveur utiliser. Téléchargez-le de nouveau depuis la page donnée par la personne qui vous aide.",
             ));
             return;
         };

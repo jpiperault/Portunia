@@ -8,9 +8,9 @@ import { LOCALE, t } from './i18n';
 /** Heimdia apparaît dans la page Extensions comme les protocoles. */
 export const HEIMDIA_EXTENSION: Manifest = {
   id: 'heimdia',
-  name: 'Heimdia (bastion)',
+  name: 'Portunia Gate',
   version: '1.0.0',
-  description: t('Servers protected by a Heimdia bastion: sign-in with a code, servers in the sidebar, sessions recorded by the bastion, administration.', 'Serveurs protégés par un bastion Heimdia : connexion avec code, serveurs dans la barre latérale, sessions enregistrées par le bastion, administration.'),
+  description: t('Servers protected by a Gate: sign-in with a code, servers in the sidebar, sessions recorded by the Gate, administration.', 'Serveurs protégés par une Gate : connexion avec code, serveurs dans la barre latérale, sessions enregistrées par la Gate, administration.'),
   view: 'terminal',
   builtin: true,
   fileBrowser: false,
@@ -33,9 +33,9 @@ export interface BastionHost {
 
 const MODE_LABEL: Record<BastionServer['mode'], string> = { coffre: t('Vault', 'Coffre'), enregistre: t('Recorded', 'Enregistré'), rebond: t('Jump', 'Rebond') };
 const MODE_TITLE: Record<BastionServer['mode'], string> = {
-  coffre: t('Account provided by the bastion, session recorded', 'Compte fourni par le bastion, session enregistrée'),
-  enregistre: t('Session recorded by the bastion; your credentials are asked in the terminal', 'Session enregistrée par le bastion ; vos identifiants sont demandés dans le terminal'),
-  rebond: t('End-to-end relay through the bastion: nothing is recorded', 'Relais de bout en bout par le bastion : rien n\'est enregistré'),
+  coffre: t('Account provided by the Gate, session recorded', 'Compte fourni par la Gate, session enregistrée'),
+  enregistre: t('Session recorded by the Gate; your credentials are asked in the terminal', 'Session enregistrée par la Gate ; vos identifiants sont demandés dans le terminal'),
+  rebond: t('End-to-end relay through the Gate: nothing is recorded', 'Relais de bout en bout par la Gate : rien n\'est enregistré'),
 };
 const COLLAPSED_KEY = 'portunia.bastions.replis';
 
@@ -119,7 +119,7 @@ export class BastionPanel {
   async add() {
     const b = await openBastionLogin(this.host);
     if (b) {
-      this.host.toast(t(`Bastion « ${b.name} » added`, `Bastion « ${b.name} » ajouté`));
+      this.host.toast(t(`Gate « ${b.name} » added`, `Gate « ${b.name} » ajouté`));
       await this.load();
     }
   }
@@ -127,14 +127,14 @@ export class BastionPanel {
   render() {
     const filter = this.host.filter().trim().toLowerCase();
     const head = h('div', { class: 'sidebar-head' },
-      h('span', { class: 'label' }, 'Bastions'),
+      h('span', { class: 'label' }, 'Gates'),
       h('div', { class: 'head-actions' },
-        h('button', { class: 'icon-btn', 'aria-label': t('Add a Heimdia bastion', 'Ajouter un bastion Heimdia'), title: t('Add a Heimdia bastion', 'Ajouter un bastion Heimdia'), onclick: () => this.add() }, icon('plus'))));
+        h('button', { class: 'icon-btn', 'aria-label': t('Add a Gate', 'Ajouter une Gate'), title: t('Add a Gate', 'Ajouter une Gate'), onclick: () => this.add() }, icon('plus'))));
     const body = h('div', { class: 'bastion-list' });
     if (!this.list.length) {
       body.append(h('div', { class: 'empty-tree' },
-        h('span', { class: 'small' }, t('No bastion. A Heimdia bastion protects access to your servers.', 'Aucun bastion. Un bastion Heimdia protège l\'accès à vos serveurs.')),
-        h('button', { class: 'btn', onclick: () => this.add() }, t('Add a bastion', 'Ajouter un bastion'))));
+        h('span', { class: 'small' }, t('No Gate. A Gate protects access to your servers.', 'Aucune Gate. Une Gate protège l\'accès à vos serveurs.')),
+        h('button', { class: 'btn', onclick: () => this.add() }, t('Add a Gate', 'Ajouter une Gate'))));
     }
     for (const b of this.list) body.append(...this.renderBastion(b, filter));
     this.root.replaceChildren(head, body);
@@ -152,8 +152,8 @@ export class BastionPanel {
       'separator',
       ...(b.connected ? [{ label: t('Sign out', 'Se déconnecter'), icon: 'power', action: async () => { await bastions.logout(b.id).catch(() => {}); this.load(); } }] : []),
       {
-        label: t('Remove this bastion', 'Retirer ce bastion'), icon: 'trash', danger: true, action: async () => {
-          if (!confirm(t(`Remove the bastion « ${b.name} » from Portunia? Its token and server list will be erased from this PC.`, `Retirer le bastion « ${b.name} » de Portunia ? Son jeton et sa liste de serveurs seront effacés de ce PC.`))) return;
+        label: t('Remove this Gate', 'Retirer cette Gate'), icon: 'trash', danger: true, action: async () => {
+          if (!confirm(t(`Remove the Gate « ${b.name} » from Portunia? Its token and server list will be erased from this PC.`, `Retirer la Gate « ${b.name} » de Portunia ? Son jeton et sa liste de serveurs seront effacés de ce PC.`))) return;
           await bastions.remove(b.id).catch((e) => this.host.toast(errorText(e), 'error'));
           this.load();
         },
@@ -172,7 +172,7 @@ export class BastionPanel {
         h('span', { class: 'grow' },
           h('span', { class: 'bastion-name ellipsis' }, b.name),
           h('span', { class: 'bastion-sub ellipsis' }, b.connected ? `${b.login} · ${remaining(b.expires)}` : t('session expired · click to sign in again', 'session expirée · cliquer pour se reconnecter')))),
-      h('button', { class: 'icon-btn sm', 'aria-label': t(`Actions for bastion ${b.name}`, `Actions du bastion ${b.name}`), title: t('More actions', 'Plus d\'actions'), onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, this.menu(b)) }, icon('more', 14)));
+      h('button', { class: 'icon-btn sm', 'aria-label': t(`Actions for Gate ${b.name}`, `Actions de la Gate ${b.name}`), title: t('More actions', 'Plus d\'actions'), onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, this.menu(b)) }, icon('more', 14)));
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, this.menu(b)); });
     const out: HTMLElement[] = [card];
     if (this.collapsed.has(b.id) && !filter) return out;
@@ -180,7 +180,7 @@ export class BastionPanel {
     const bypass = b.connected ? bypassing(b, this.host.sessions()) : [];
     if (bypass.length) {
       out.push(h('button', { class: 'bastion-warn', onclick: () => openBypass(this.host, b, bypass) },
-        t(`${bypass.length} session(s) go directly to servers of this bastion`, `${bypass.length} session(s) vont directement sur des serveurs de ce bastion`)));
+        t(`${bypass.length} session(s) go directly to servers of this Gate`, `${bypass.length} session(s) vont directement sur des serveurs de cette Gate`)));
     }
     const servers = b.servers.filter((s) => !filter || s.nom.toLowerCase().includes(filter) || s.dossier.toLowerCase().includes(filter));
     const groups = new Map<string, BastionServer[]>();
@@ -263,10 +263,10 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
     let rememberAllowed = existing?.rememberAllowed ?? false;
     let result: Bastion | null = null;
 
-    const address = input({ id: 'b-address', placeholder: t('bastion.example.com or 192.168.1.10:8443', 'bastion.exemple.fr ou 192.168.1.10:8443'), value: existing ? `${existing.host}:${existing.apiPort}` : '' });
+    const address = input({ id: 'b-address', placeholder: t('gate.example.com or 192.168.1.10:8443', 'gate.exemple.fr ou 192.168.1.10:8443'), value: existing ? `${existing.host}:${existing.apiPort}` : '' });
     const fingerprintBox = h('div', { class: 'fp', hidden: !existing }, existing?.apiFingerprint ?? '');
     const fingerprintField = h('div', { class: 'fld', hidden: true },
-      h('span', {}, t('Certificate fingerprint', 'Empreinte du certificat'), h('span', { class: 'muted small' }, t(' to compare with the one given at install (or « sudo heimdia info » on the bastion)', ' à comparer avec celle donnée à l\'installation (ou « sudo heimdia info » sur le bastion)'))), fingerprintBox);
+      h('span', {}, t('Certificate fingerprint', 'Empreinte du certificat'), h('span', { class: 'muted small' }, t(' to compare with the one given at install (or « sudo heimdia info » on the Gate)', ' à comparer avec celle donnée à l\'installation (ou « sudo heimdia info » sur la Gate)'))), fingerprintBox);
     const login = input({ id: 'b-login', value: existing?.login ?? '', autocomplete: 'username' });
     const password = input({ id: 'b-password', type: 'password', autocomplete: 'current-password', placeholder: existing?.passwordSaved ? t('Remembered: leave empty', 'Mémorisé : laisser vide') : '' });
     const code = input({ id: 'b-code', inputmode: 'numeric', placeholder: '6 chiffres', maxlength: 7 });
@@ -285,10 +285,10 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
     const newFields = h('div', { class: 'fld-group', hidden: true },
       h('p', { class: 'muted' }, t('Your password is temporary: choose a new one.', 'Votre mot de passe est provisoire : choisissez-en un nouveau.')),
       h('div', { class: 'row2' }, field(t('New password', 'Nouveau mot de passe'), newPassword), field(t('Confirmation', 'Confirmation'), confirmPassword)));
-    const intro = h('p', { class: 'muted' }, existing ? t(`Session expired: sign in to ${existing.name} again.`, `Session expirée : reconnectez-vous à ${existing.name}.`) : t('Bastion address (port 8443 by default).', 'Adresse du bastion (port 8443 par défaut).'));
+    const intro = h('p', { class: 'muted' }, existing ? t(`Session expired: sign in to ${existing.name} again.`, `Session expirée : reconnectez-vous à ${existing.name}.`) : t('Gate address (port 8443 by default).', 'Adresse de la Gate (port 8443 par défaut).'));
     const submit = h('button', { type: 'submit', class: 'btn primary' }, existing ? t('Connect', 'Se connecter') : t('Continue', 'Continuer'));
     const cancel = h('button', { type: 'button', class: 'btn' }, t('Cancel', 'Annuler'));
-    const { dialog, form, error } = modal(existing ? `Reconnexion · ${existing.name}` : t('Add a Heimdia bastion', 'Ajouter un bastion Heimdia'), [
+    const { dialog, form, error } = modal(existing ? `Reconnexion · ${existing.name}` : t('Add a Gate', 'Ajouter une Gate'), [
       intro, existing ? h('span') : field(t('Address', 'Adresse'), address), fingerprintField, credFields, newFields, enrolBox, codeField, rememberRow,
     ], [cancel, submit]);
     codeField.hidden = !existing;
@@ -311,7 +311,7 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
           fingerprintBox.textContent = probe.fingerprint;
           fingerprintBox.hidden = false;
           fingerprintField.hidden = false;
-          intro.textContent = t(`${probe.info.nom} · Heimdia ${probe.info.version}. Check the fingerprint before sending your password.`, `${probe.info.nom} · Heimdia ${probe.info.version}. Vérifiez l'empreinte avant d'envoyer votre mot de passe.`);
+          intro.textContent = t(`${probe.info.nom} · Portunia Gate ${probe.info.version}. Check the fingerprint before sending your password.`, `${probe.info.nom} · Portunia Gate ${probe.info.version}. Vérifiez l'empreinte avant d'envoyer votre mot de passe.`);
           address.disabled = true;
           credFields.hidden = false;
           codeField.hidden = false;
@@ -368,8 +368,8 @@ function openBypass(host: BastionHost, b: Bastion, list: { session: Session; ser
   });
   const remove = h('button', { type: 'button', class: 'btn danger' }, t('Delete the checked sessions', 'Supprimer les sessions cochées'));
   const keep = h('button', { type: 'button', class: 'btn' }, t('Keep', 'Garder'));
-  const { dialog } = modal(t('Sessions that bypass the bastion', 'Sessions qui contournent le bastion'), [
-    h('p', {}, t(`These sessions connect directly to servers that « ${b.name} » protects: they escape access control and recording. From now on, open these servers from the bastion's section.`, `Ces sessions se connectent directement à des serveurs que « ${b.name} » protège : elles échappent au contrôle d'accès et à l'enregistrement. Ouvrez désormais ces serveurs depuis la section du bastion.`)),
+  const { dialog } = modal(t('Sessions that bypass the Gate', 'Sessions qui contournent la Gate'), [
+    h('p', {}, t(`These sessions connect directly to servers that « ${b.name} » protects: they escape access control and recording. From now on, open these servers from the Gate's section.`, `Ces sessions se connectent directement à des serveurs que « ${b.name} » protège : elles échappent au contrôle d'accès et à l'enregistrement. Ouvrez désormais ces serveurs depuis la section de la Gate.`)),
     h('div', { class: 'check-list' }, ...checks.map((c) => c.row)),
     h('p', { class: 'muted small' }, t('Their saved passwords will also be erased.', 'Leurs mots de passe enregistrés seront aussi effacés.')),
   ], [keep, remove]);
@@ -416,7 +416,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
   const nav = h('div', { class: 'seg admin-nav', role: 'tablist' });
   const content = h('div', { class: 'admin-content' });
   const call = <T = any>(method: string, path: string, body?: unknown) => bastions.admin<T>(b.id, method, path, body);
-  const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Bastion session expired: sign in again (sidebar).', 'Session du bastion expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
+  const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
 
   const show = async (id: Section) => {
     current = id;
@@ -488,7 +488,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
     const dossier = input({ id: 't-dossier', value: cur?.dossier ?? '', placeholder: t('Production, Staging…', 'Production, Recette…') });
     const hote = input({ id: 't-hote', value: cur?.hote ?? '' });
     const port = input({ id: 't-port', value: String(cur?.port ?? 22), inputmode: 'numeric' });
-    const mode = select('t-mode', [['coffre', t('Vault: account provided by the bastion', 'Coffre : compte fourni par le bastion')], ['enregistre', t('Recorded: the user\'s credentials', 'Enregistré : identifiants de l\'utilisateur')], ['rebond', t('Jump: end-to-end relay', 'Rebond : relais de bout en bout')]], cur?.mode ?? 'coffre');
+    const mode = select('t-mode', [['coffre', t('Vault: account provided by the Gate', 'Coffre : compte fourni par la Gate')], ['enregistre', t('Recorded: the user\'s credentials', 'Enregistré : identifiants de l\'utilisateur')], ['rebond', t('Jump: end-to-end relay', 'Rebond : relais de bout en bout')]], cur?.mode ?? 'coffre');
     const compte = input({ id: 't-compte', value: cur?.compte ?? '' });
     const secretKind = select('t-secret', [
       ...(cur ? [['', cur.secret === 'none' ? t('None', 'Aucun') : t('Keep the current secret', 'Garder le secret actuel')] as [string, string]] : [['', t('None', 'Aucun')] as [string, string]]),
@@ -501,7 +501,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
     const passField = field(t('Account\'s current password', 'Mot de passe actuel du compte'), secretPass, t('used only once', 'utilisé une seule fois'));
     const keyField = field(t('Private key (without passphrase)', 'Clé privée (sans phrase de passe)'), secretKey);
     const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', t('Remote Desktop (RDP)', 'Bureau à distance (RDP)')]], cur?.protocole ?? 'ssh');
-    const rdpNote = h('p', { class: 'muted small', hidden: true }, t('Remote Desktop: the user types their Windows credentials at each opening. Jump: the bastion relays the encrypted connection without reading it (Portunia only). Recorded: the bastion relays and records the session, without seeing the password; also opens from the web portal. Vault mode is coming.', 'Bureau à distance : l\'utilisateur tape ses identifiants Windows à chaque ouverture. Rebond : le bastion relaie la connexion chiffrée sans la lire (Portunia seulement). Enregistré : le bastion relaie et enregistre la session, sans voir le mot de passe ; s\'ouvre aussi depuis le portail web. Le mode coffre arrive.'));
+    const rdpNote = h('p', { class: 'muted small', hidden: true }, t('Remote Desktop: the user types their Windows credentials at each opening. Jump: the Gate relays the encrypted connection without reading it (Portunia only). Recorded: the Gate relays and records the session, without seeing the password; also opens from the web portal. Vault mode is coming.', 'Bureau à distance : l\'utilisateur tape ses identifiants Windows à chaque ouverture. Rebond : la Gate relaie la connexion chiffrée sans la lire (Portunia seulement). Enregistré : la Gate relaie et enregistre la session, sans voir le mot de passe ; s\'ouvre aussi depuis le portail web. Le mode coffre arrive.'));
     // Port par défaut du protocole, tant que l'administrateur ne l'a pas changé.
     proto.addEventListener('change', () => {
       if (['22', '3389', ''].includes(port.value.trim())) port.value = proto.value === 'rdp' ? '3389' : '22';
@@ -526,7 +526,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       h('div', { class: 'quick-row' }, field(t('Address', 'Adresse'), hote), field('Port', port)),
       field('Mode', mode), rdpNote, field(t('Account on the server', 'Compte sur le serveur'), compte, t('required in vault mode; for Remote Desktop: DOMAIN\\account, offered at opening', 'obligatoire en mode coffre ; en Bureau à distance : DOMAINE\\compte, proposé à l\'ouverture')),
       field(t('Vault secret', 'Secret du coffre'), secretKind), passField, keyField,
-      h('p', { class: 'muted small' }, t('The secret is encrypted by the bastion and can never be read back. « Generate » creates a key, installs it with the password given only once, then checks that it works.', 'Le secret est chiffré par le bastion et ne se relit jamais. « Générer » crée une clé, l\'installe avec le mot de passe donné une seule fois, puis vérifie qu\'elle fonctionne.')),
+      h('p', { class: 'muted small' }, t('The secret is encrypted by the Gate and can never be read back. « Generate » creates a key, installs it with the password given only once, then checks that it works.', 'Le secret est chiffré par la Gate et ne se relit jamais. « Générer » crée une clé, l\'installe avec le mot de passe donné une seule fois, puis vérifie qu\'elle fonctionne.')),
     ];
     setTimeout(sync);
     formDialog(cur ? t(`Edit ${cur.nom}`, `Modifier ${cur.nom}`) : t('Add a server', 'Ajouter un serveur'), body, cur ? t('Save', 'Enregistrer') : t('Add', 'Ajouter'), async () => {
@@ -697,7 +697,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
         p = await call<any>('GET', '/admin/portail');
       } catch (e) {
         // Bastion antérieur à la 0.7 : pas de portail.
-        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('The web portal needs Heimdia 0.7 or later: update the bastion (sudo bash installer.sh update).', 'Le portail web demande Heimdia 0.7 ou plus récent : mettez le bastion à jour (sudo bash installer.sh mise-a-jour).')));
+        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('The web portal needs Portunia Gate 0.7 or later: update the Gate (sudo bash installer.sh update).', 'Le portail web demande Portunia Gate 0.7 ou plus récent : mettez la Gate à jour (sudo bash installer.sh mise-a-jour).')));
         throw e;
       }
       const sw = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(p.actif), 'aria-label': t('Web portal', 'Portail web') });
@@ -744,15 +744,15 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
         h('h3', {}, t('Address', 'Adresse')),
         field(t('Public address', 'Adresse publique'), url, t('the one Cloudflare publishes; checked at every connection', 'celle que Cloudflare publie ; vérifiée à chaque connexion')),
         h('p', { class: 'muted small' }, t(
-          `The bastion serves the portal on ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` and ${p.ecoute.proxy} over HTTPS (Cloudflare proxy, Cloudflare addresses only)` : ''}. Install the tunnel: sudo bash installer.sh portal.`,
-          `Le bastion sert le portail sur ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` et ${p.ecoute.proxy} en HTTPS (proxy Cloudflare, adresses de Cloudflare seulement)` : ''}. Installer le tunnel : sudo bash installer.sh portail.`)),
+          `The Gate serves the portal on ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` and ${p.ecoute.proxy} over HTTPS (Cloudflare proxy, Cloudflare addresses only)` : ''}. Install the tunnel: sudo bash installer.sh portal.`,
+          `La Gate sert le portail sur ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` et ${p.ecoute.proxy} en HTTPS (proxy Cloudflare, adresses de Cloudflare seulement)` : ''}. Installer le tunnel : sudo bash installer.sh portail.`)),
         h('h3', {}, t('Who and for how long', 'Qui et combien de temps')),
         field(t('Allowed group', 'Groupe autorisé'), groupe, groupMissing ? t(`the group « ${p.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${p.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can sign in to the portal', 'seuls ses membres peuvent se connecter au portail')),
         h('div', { class: 'row2' }, field(t('Web session duration', 'Durée d\'une session web'), duree), field(t('Close after inactivity', 'Fermeture après inactivité'), idle)),
         clip.row,
         h('p', { class: 'muted small' }, t('Always required on the portal: password and code. First sign-in and lost code are handled in Portunia. Servers in jump mode: only with Portunia for now.', 'Toujours exigés sur le portail : mot de passe et code. Première connexion et code perdu se font dans Portunia. Serveurs en mode rebond et Bureau à distance : seulement avec Portunia pour l\'instant.')),
         h('h3', {}, t('Anti-bot (Cloudflare Turnstile)', 'Anti-robots (Cloudflare Turnstile)')),
-        h('div', { class: 'row2' }, field(t('Site key', 'Clé du site'), site), field(t('Secret key', 'Clé secrète'), secret, t('kept encrypted by the bastion', 'gardée chiffrée par le bastion'))),
+        h('div', { class: 'row2' }, field(t('Site key', 'Clé du site'), site), field(t('Secret key', 'Clé secrète'), secret, t('kept encrypted by the Gate', 'gardée chiffrée par la Gate'))),
         h('div', {}, save));
     },
 
@@ -762,7 +762,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
         a = await call<any>('GET', '/admin/assistance');
       } catch (e) {
         // Bastion antérieur à la 0.11 : pas de relais d'assistance.
-        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('Remote assistance needs Heimdia 0.11 or later: update the bastion (sudo bash installer.sh update).', 'L\'assistance à distance demande Heimdia 0.11 ou plus récent : mettez le bastion à jour (sudo bash installer.sh mise-a-jour).')));
+        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('Remote assistance needs Portunia Gate 0.11 or later: update the Gate (sudo bash installer.sh update).', 'L\'assistance à distance demande Portunia Gate 0.11 ou plus récent : mettez la Gate à jour (sudo bash installer.sh mise-a-jour).')));
         throw e;
       }
       const sw = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(a.actif), 'aria-label': t('Assistance relay', 'Relais d\'assistance') });
@@ -782,15 +782,15 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       return h('div', { class: 'admin-section form-narrow' },
         h('div', { class: 'portal-head' }, sw, h('div', {},
           h('div', {}, h('b', {}, t('Assistance relay', 'Relais d\'assistance')), ' · ', stateText),
-          h('p', { class: 'muted small' }, t('Lets helpers take control of a PC with Portunia Assist: the person downloads it from the page below and reads a code. The relay only passes on encrypted data.', 'Permet aux dépanneurs de prendre la main sur un PC avec Portunia Assist : la personne le télécharge sur la page ci-dessous et lit un code. Le relais ne fait que transmettre des données chiffrées.')))),
+          h('p', { class: 'muted small' }, t('Lets helpers take control of a PC with Portunia Assistance: the person downloads it from the page below and reads a code. The relay only passes on encrypted data.', 'Permet aux dépanneurs de prendre la main sur un PC avec Portunia Assistance : la personne le télécharge sur la page ci-dessous et lit un code. Le relais ne fait que transmettre des données chiffrées.')))),
         h('div', { class: 'portal-stats' },
           stat(a.en_attente, t('people waiting', 'personnes en attente')), stat(a.aujourd_hui, t('assistance today', 'assistances aujourd\'hui')), stat(a.total, t('in total', 'en tout')),
-          h('div', { class: 'portal-stat' }, h('b', { class: `chip ${a.programme ? 'ok' : 'warn'}` }, a.programme ? t('ready', 'prêt') : t('missing', 'absent')), h('span', {}, 'Portunia Assist'))),
+          h('div', { class: 'portal-stat' }, h('b', { class: `chip ${a.programme ? 'ok' : 'warn'}` }, a.programme ? t('ready', 'prêt') : t('missing', 'absent')), h('span', {}, 'Portunia Assistance'))),
         h('h3', {}, t('Page for the person helped', 'Page de la personne aidée')),
         a.adresse
           ? h('div', { class: 'assist-url' }, h('code', {}, a.adresse), small(t('Copy', 'Copier'), () => { navigator.clipboard.writeText(a.adresse).then(() => host.toast(t('Copied', 'Copié'))).catch(() => {}); }))
           : h('p', { class: 'muted small' }, t('Set the public address in Web portal first: the page and the relay use it (Cloudflare Tunnel).', 'Réglez d\'abord l\'adresse publique dans Portail web : la page et le relais l\'utilisent (Cloudflare Tunnel).')),
-        a.programme ? null : h('p', { class: 'muted small' }, t('The bastion downloads Portunia Assist from the Portunia releases when the relay is enabled (Internet access needed).', 'Le bastion télécharge Portunia Assist depuis les versions de Portunia à l\'activation du relais (accès Internet nécessaire).')),
+        a.programme ? null : h('p', { class: 'muted small' }, t('The Gate downloads Portunia Assistance from the Portunia releases when the relay is enabled (Internet access needed).', 'La Gate télécharge Portunia Assistance depuis les versions de Portunia à l\'activation du relais (accès Internet nécessaire).')),
         h('h3', {}, t('Who and for how long', 'Qui et combien de temps')),
         field(t('Group of helpers', 'Groupe des dépanneurs'), groupe, groupMissing ? t(`the group « ${a.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${a.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can start an assistance from Portunia', 'seuls ses membres peuvent lancer une assistance depuis Portunia')),
         field(t('Maximum duration of an assistance', 'Durée maximale d\'une assistance'), duree),
@@ -804,7 +804,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       const policy = select('s-policy', POLICIES.slice(1).some(([v]) => v === r.politique) ? POLICIES.slice(1) : [...POLICIES.slice(1), [r.politique, r.politique]], r.politique);
       const hours = input({ id: 's-hours', type: 'number', min: 1, max: 168, value: r.duree_session_h });
       const memo = checkbox('s-memo', t('Allow Portunia to remember the password (the code is still asked)', 'Autoriser Portunia à mémoriser le mot de passe (le code reste demandé)'), r.memo_mot_de_passe);
-      const own = checkbox('s-own', t('Each account can replay its own sessions (bastion\'s « My sessions » menu)', 'Chaque compte peut relire ses propres sessions (menu « Mes sessions » du bastion)'), !!r.relecture_propres);
+      const own = checkbox('s-own', t('Each account can replay its own sessions (bastion\'s « My sessions » menu)', 'Chaque compte peut relire ses propres sessions (menu « Mes sessions » de la Gate)'), !!r.relecture_propres);
       const sensitive = h('textarea', { id: 's-sensitive', class: 'input', rows: 4, spellcheck: 'false' }, (r.commandes_sensibles ?? []).join('\n')) as HTMLTextAreaElement;
       // Langue du bastion (Heimdia 0.9 et suivants) : menu SSH, bannière par défaut, journaux.
       const langue = r.langue === undefined ? null : select('s-langue', [['', t('System language', 'Langue du système')], ['en', 'English'], ['fr', 'Français']], r.langue);
@@ -819,11 +819,11 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
         } catch (e) { fail(e); }
       } }, t('Save', 'Enregistrer'));
       return h('div', { class: 'admin-section form-narrow' },
-        field(t('Bastion name', 'Nom du bastion'), nom, t('shown in Portunia and the authenticator app', 'affiché dans Portunia et l\'application d\'authentification')),
+        field(t('Gate name', 'Nom de la Gate'), nom, t('shown in Portunia and the authenticator app', 'affiché dans Portunia et l\'application d\'authentification')),
         field(t('Sign-in banner', 'Bannière de connexion'), banner, t('legal warning shown before sign-in', 'avertissement légal affiché avant l\'identification')),
         field(t('Default sign-in for accounts', 'Connexion par défaut des comptes'), policy),
         field(t('Session duration in Portunia (hours)', 'Durée d\'une session dans Portunia (heures)'), hours),
-        langue ? field(t('Bastion language', 'Langue du bastion'), langue, t('SSH menu and messages, default banner, logs; Portunia and the web portal follow each user\'s language', 'menu et messages SSH, bannière par défaut, journaux ; Portunia et le portail web suivent la langue de chacun')) : null,
+        langue ? field(t('Gate language', 'Langue de la Gate'), langue, t('SSH menu and messages, default banner, logs; Portunia and the web portal follow each user\'s language', 'menu et messages SSH, bannière par défaut, journaux ; Portunia et le portail web suivent la langue de chacun')) : null,
         memo.row,
         h('h3', {}, t('Session replay', 'Relecture des sessions')),
         own.row,

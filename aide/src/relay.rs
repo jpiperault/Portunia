@@ -76,7 +76,7 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
                 failures += 1;
                 let _ = ws.close(None).await;
                 if failures >= TRIES {
-                    bail!(crate::t("Wrong code three times: open Portunia Assist again for a new code", "Code faux trois fois : rouvrez Portunia Assist pour un nouveau code"));
+                    bail!(crate::t("Wrong code three times: open Portunia Assistance again for a new code", "Code faux trois fois : rouvrez Portunia Assistance pour un nouveau code"));
                 }
                 // Mauvais code : nouvelle place, nouveau code.
                 continue;

@@ -85,7 +85,7 @@ impl Feature {
             Feature::MultiExec => t!("Command on several servers", "Commande sur plusieurs serveurs"),
             Feature::Containers => t!("Docker and Kubernetes containers", "Conteneurs Docker et Kubernetes"),
             Feature::CloudStorage => t!("S3 storage", "Stockage S3"),
-            Feature::BastionAdmin => t!("Heimdia bastion administration", "Administration des bastions Heimdia"),
+            Feature::BastionAdmin => t!("Gate administration", "Administration des Gates"),
         }
     }
 }

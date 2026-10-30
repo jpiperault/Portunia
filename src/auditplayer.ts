@@ -207,13 +207,13 @@ export class AuditPlayer {
       this.opts.canReveal && r.saisies_masquees && !r.revele
         ? h('button', { class: 'btn sm', title: t('Shows input typed without echo (passwords) in clear. Written to the log.', 'Affiche en clair les saisies sans écho (mots de passe). Inscrit au journal.'), onclick: () => this.opts.reveal() }, t(`Reveal ${r.saisies_masquees} masked input(s)`, `Révéler ${r.saisies_masquees} saisie(s) masquée(s)`))
         : null,
-      h('button', { class: 'btn sm', title: r.revele ? t('Original file, signed by the bastion', 'Fichier d\'origine, signé par le bastion') : t('Masked copy (without input typed without echo), not signed', 'Copie masquée (sans les saisies sans écho), non signée'), onclick: () => this.opts.exportCast() }, icon('download', 14), t('.cast recording', 'Enregistrement .cast')),
+      h('button', { class: 'btn sm', title: r.revele ? t('Original file, signed by the Gate', 'Fichier d\'origine, signé par la Gate') : t('Masked copy (without input typed without echo), not signed', 'Copie masquée (sans les saisies sans écho), non signée'), onclick: () => this.opts.exportCast() }, icon('download', 14), t('.cast recording', 'Enregistrement .cast')),
       h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')));
     const head = h('div', { class: 'ap-head' },
       h('h2', {}, s.serveur, ' ', s.mode ? h('span', { class: `badge mode-${s.mode}` }, s.mode === 'enregistre' ? t('recorded', 'enregistré') : s.mode) : null),
       h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} · ${fmt(this.duration)}${s.fin ? '' : ' · en cours'}`),
       seal, actions);
-    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Masked input revealed: this replay is written to the bastion\'s log.', 'Saisies masquées révélées : cette relecture est inscrite au journal du bastion.')));
+    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Masked input revealed: this replay is written to the bastion\'s log.', 'Saisies masquées révélées : cette relecture est inscrite au journal de la Gate.')));
 
     // Écran : terminal, filigrane, sous-titres.
     this.screen.append(
@@ -303,7 +303,7 @@ export class AuditPlayer {
     const s = r.session;
     const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : t('ongoing', 'en cours'));
     const row = (k: string, v: Node | string) => [h('dt', {}, k), h('dd', {}, v)];
-    const sig = { verifiee: t('checked with the bastion\'s key', 'vérifiée avec la clé du bastion'), alteree: t('DOES NOT MATCH: file modified', 'NE CORRESPOND PAS : fichier modifié'), absente: t('not added yet (session ongoing or interrupted)', 'pas encore posée (session en cours ou interrompue)') }[r.signature];
+    const sig = { verifiee: t('checked with the bastion\'s key', 'vérifiée avec la clé de la Gate'), alteree: t('DOES NOT MATCH: file modified', 'NE CORRESPOND PAS : fichier modifié'), absente: t('not added yet (session ongoing or interrupted)', 'pas encore posée (session en cours ou interrompue)') }[r.signature];
     return h('div', {},
       h('dl', { class: 'ap-kv' },
         ...row(t('Account', 'Compte'), s.compte),

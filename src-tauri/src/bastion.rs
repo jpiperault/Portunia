@@ -75,7 +75,7 @@ fn save(data_dir: &Path, list: &[Bastion]) -> Result<()> {
 }
 
 fn find(data_dir: &Path, id: &str) -> Result<Bastion> {
-    load(data_dir).into_iter().find(|b| b.id == id).ok_or_else(|| anyhow!(t!("Unknown bastion", "Bastion inconnu")))
+    load(data_dir).into_iter().find(|b| b.id == id).ok_or_else(|| anyhow!(t!("Unknown Gate", "Gate inconnu")))
 }
 
 fn update(data_dir: &Path, bastion: &Bastion) -> Result<()> {
@@ -91,7 +91,7 @@ fn update(data_dir: &Path, bastion: &Bastion) -> Result<()> {
 fn split_address(address: &str) -> Result<(String, u16)> {
     let a = address.trim().trim_start_matches("https://").trim_end_matches('/');
     if a.is_empty() {
-        bail!(t!("Give the bastion's address", "Indiquez l'adresse du bastion"));
+        bail!(t!("Give the Gate's address", "Indiquez l'adresse de la Gate"));
     }
     match a.rsplit_once(':') {
         Some((h, p)) if !h.contains(':') || h.starts_with('[') => {
@@ -183,12 +183,12 @@ async fn pinned_tls(host: &str, port: u16, fingerprint: &str) -> Result<tokio_ru
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(verifier))
         .with_no_client_auth();
-    let name = ServerName::try_from(host.to_string()).map_err(|_| anyhow!(t!("Invalid bastion address", "Adresse du bastion invalide")))?;
-    let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| anyhow!("{}", t!(format!("Bastion unreachable ({host}:{port}): {e}"), format!("Bastion injoignable ({host}:{port}) : {e}"))))?;
+    let name = ServerName::try_from(host.to_string()).map_err(|_| anyhow!(t!("Invalid Gate address", "Adresse de la Gate invalide")))?;
+    let tcp = tokio::net::TcpStream::connect((host, port)).await.map_err(|e| anyhow!("{}", t!(format!("Gate unreachable ({host}:{port}): {e}"), format!("Gate injoignable ({host}:{port}) : {e}"))))?;
     let tls = tokio_rustls::TlsConnector::from(Arc::new(config))
         .connect(name, tcp)
         .await
-        .map_err(|e| anyhow!("{}", t!(format!("Bastion {host}:{port}: {e}"), format!("Bastion {host}:{port} : {e}"))))?;
+        .map_err(|e| anyhow!("{}", t!(format!("Gate {host}:{port}: {e}"), format!("Gate {host}:{port} : {e}"))))?;
     Ok(tls)
 }
 
@@ -202,7 +202,7 @@ async fn call(host: &str, port: u16, fingerprint: &str, token: Option<&str>, met
     if let Some(b) = body {
         req = req.json(&b);
     }
-    let resp = req.send().await.map_err(|e| anyhow!("{}", t!(format!("Bastion unreachable ({host}:{port}): {}", root_cause(&e)), format!("Bastion injoignable ({host}:{port}) : {}", root_cause(&e)))))?;
+    let resp = req.send().await.map_err(|e| anyhow!("{}", t!(format!("Gate unreachable ({host}:{port}): {}", root_cause(&e)), format!("Gate injoignable ({host}:{port}) : {}", root_cause(&e)))))?;
     let status = resp.status();
     let value: Value = resp.json().await.unwrap_or(Value::Null);
     if status == reqwest::StatusCode::UNAUTHORIZED && token.is_some() {
@@ -271,10 +271,10 @@ pub async fn bastion_probe(address: String) -> CmdResult<Value> {
         .get(format!("https://{host}:{port}/api/v1/bastion"))
         .send()
         .await
-        .map_err(|e| format!("Bastion injoignable ({host}:{port}) : {}", root_cause(&e)))?;
-    let info: Value = resp.json().await.map_err(|_| t!("This server does not answer like a Heimdia bastion", "Ce serveur ne répond pas comme un bastion Heimdia").to_string())?;
+        .map_err(|e| format!("Gate injoignable ({host}:{port}) : {}", root_cause(&e)))?;
+    let info: Value = resp.json().await.map_err(|_| t!("This server does not answer like a Gate", "Ce serveur ne répond pas comme une Gate").to_string())?;
     if info.get("empreinte_ssh").is_none() {
-        return Err(t!("This server does not answer like a Heimdia bastion", "Ce serveur ne répond pas comme un bastion Heimdia").into());
+        return Err(t!("This server does not answer like a Gate", "Ce serveur ne répond pas comme une Gate").into());
     }
     let fp = seen.lock().unwrap().clone().unwrap_or_default();
     Ok(json!({ "host": host, "apiPort": port, "fingerprint": fp, "info": info }))
@@ -323,7 +323,7 @@ pub async fn bastion_login(state: State<'_, AppState>, request: LoginRequest) ->
     }
     let info = &answer["bastion"];
     let mut b = existing.unwrap_or_else(|| Bastion { id: uuid::Uuid::new_v4().to_string(), ..Default::default() });
-    b.name = info["nom"].as_str().unwrap_or("Heimdia").to_string();
+    b.name = info["nom"].as_str().unwrap_or("Portunia Gate").to_string();
     b.host = request.host.clone();
     b.api_port = request.api_port;
     b.api_fingerprint = request.fingerprint.clone();
@@ -455,7 +455,7 @@ pub async fn bastion_connect(
     let mut b = find(&data_dir, &id).map_err(full)?;
     let path = format!("/serveurs/{}/ticket", urlencode(&server));
     let t = authed(&data_dir, &mut b, reqwest::Method::POST, &path, None).await.map_err(full)?;
-    let ticket = t["ticket"].as_str().ok_or(t!("The bastion gave no token", "Le bastion n'a pas donné de jeton"))?.to_string();
+    let ticket = t["ticket"].as_str().ok_or(t!("The Gate gave no token", "La Gate n'a pas donné de jeton"))?.to_string();
     let ssh_user = t["utilisateur_ssh"].as_str().unwrap_or_default().to_string();
     let bastion_values: serde_json::Map<String, Value> = [
         ("host".to_string(), json!(b.host)),
@@ -698,7 +698,7 @@ pub async fn bastion_assist(
             }
         }
     }
-    let gone = || t!("The person closed Portunia Assist", "La personne a fermé Portunia Assist").to_string();
+    let gone = || t!("The person closed Portunia Assistance", "La personne a fermé Portunia Assistance").to_string();
     // Échange de clés, puis confirmation : prouve que les deux ont le même code.
     let (hs, mine) = Handshake::start(Role::Helper, &code);
     ws.send(Message::Binary(mine.into())).await.map_err(err)?;

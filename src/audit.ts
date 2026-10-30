@@ -50,7 +50,7 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
   const nav = h('div', { class: 'seg admin-nav', role: 'tablist' });
   const content = h('div', { class: 'admin-content' });
   const call = <T = any>(path: string) => bastions.admin<T>(b.id, 'GET', path);
-  const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Bastion session expired: sign in again (sidebar).', 'Session du bastion expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
+  const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
 
   const show = async (id: Section) => {
     nav.replaceChildren(...sections.map((s) => h('button', { type: 'button', role: 'tab', class: `seg-opt${s.id === id ? ' on' : ''}`, 'aria-selected': String(s.id === id), onclick: () => show(s.id) }, s.label)));
@@ -105,14 +105,14 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
           h('td', { class: 'acts' }, s.enregistree && (s.relisible_rdp || s.relisible !== false)
             ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, t('▶ Replay', '▶ Relire'))
             : s.enregistree
-              ? h('span', { class: 'muted small', title: t('Recorded and signed by the bastion', 'Enregistrée et signée par le bastion') }, t('Remote Desktop: replay coming soon', 'Bureau à distance : relecture bientôt'))
+              ? h('span', { class: 'muted small', title: t('Recorded and signed by the Gate', 'Enregistrée et signée par la Gate') }, t('Remote Desktop: replay coming soon', 'Bureau à distance : relecture bientôt'))
               : h('span', { class: 'muted small' }, s.mode === 'rebond' ? t('jump, not recorded', 'rebond, non enregistrée') : t('not recorded', 'non enregistrée'))));
       });
       const head = [t('Start', 'Début'), t('Duration', 'Durée'), ...(full ? [t('Account', 'Compte')] : []), t('Server', 'Serveur'), 'Mode', ...(searching ? [t('Found', 'Trouvé')] : []), ''];
       list.replaceChildren(rows.length ? table(head, rows) : h('p', { class: 'muted' }, searching ? t('No session contains this text in this period.', 'Aucune session ne contient ce texte sur cette période.') : t('No session in this period.', 'Aucune session sur cette période.')));
       note.textContent = searching
         ? t('The search covers keystrokes and displayed text (masked input excluded). « Found » opens the replay at that moment.', 'La recherche porte sur la frappe et le texte affiché (saisies masquées exclues). « Trouvé » ouvre la relecture à ce moment.')
-        : t(`${sessions.length} session(s). Each replay is written to the bastion's log.`, `${sessions.length} session(s). Chaque relecture est inscrite au journal du bastion.`);
+        : t(`${sessions.length} session(s). Each replay is written to the Gate's log.`, `${sessions.length} session(s). Chaque relecture est inscrite au journal de la Gate.`);
     };
     let timer = 0;
     const later = () => { clearTimeout(timer); timer = window.setTimeout(() => load().catch(fail), 350); };
@@ -120,7 +120,7 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
     for (const x of [when, keys]) x.addEventListener('change', () => load().catch(fail));
     await load();
     return h('div', { class: 'admin-section' },
-      full ? null : h('div', { class: 'banner info' }, t('The bastion lets you replay your own sessions.', 'Le bastion vous permet de relire vos propres sessions.')),
+      full ? null : h('div', { class: 'banner info' }, t('The Gate lets you replay your own sessions.', 'La Gate vous permet de relire vos propres sessions.')),
       h('div', { class: 'audit-filters' }, text, who, srv, when, h('label', { class: 'check-row' }, keys, h('span', {}, t('With keystrokes', 'Avec frappe'))), whoList, srvList),
       list, note);
   };
@@ -155,6 +155,6 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
   return h('div', { class: 'ext-page bastion-admin' },
     h('header', {}, h('h2', {}, `Audit · ${b.name}`), h('p', { class: 'muted' }, full
       ? t(`${b.host} · ${b.login} (${b.role === 'admin' ? 'administrator' : 'auditor'}) · session replay and log`, `${b.host} · ${b.login} (${b.role === 'admin' ? 'administrateur' : 'auditeur'}) · relecture des sessions et journal`)
-      : t(`${b.host} · your sessions on this bastion`, `${b.host} · vos sessions sur ce bastion`))),
+      : t(`${b.host} · your sessions on this Gate`, `${b.host} · vos sessions sur cette Gate`))),
     nav, content);
 }

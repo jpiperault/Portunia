@@ -4,7 +4,7 @@
 
 Remote session manager for Windows: all your connections (SSH, Remote Desktop, web consoles, Telnet…) in one window. Lightweight (Tauri 2 + Rust, framework-free interface) and extensible (one protocol = one extension).
 
-Portunia was called **Termoria** until version 0.39. The update to Portunia removes the old app and takes over its data (sessions, vault, settings), copied on first launch; the old `fr.termoria.app` folder stays as a backup copy. The **Heimdia** SSH and Remote Desktop bastion plugs in as an extension (see below).
+Portunia was called **Termoria** until version 0.39. The update to Portunia removes the old app and takes over its data (sessions, vault, settings), copied on first launch; the old `fr.termoria.app` folder stays as a backup copy. The **Portunia Gate** SSH and Remote Desktop Gate plugs in as an extension (see below).
 
 ## Installing Portunia
 
@@ -44,14 +44,14 @@ To build the installer locally: set `TAURI_SIGNING_PRIVATE_KEY` (path or content
 
 | Protocol | Display | Notes |
 |---|---|---|
-| SSH | Terminal tab | Private key, password or agent (Pageant / OpenSSH). Jump host (bastion, like ProxyJump): a saved SSH session or `user@host:port`, up to 3 chained jumps (`bastion1,bastion2`), taken from ~/.ssh/config on import. Server keys are remembered on first connection, and a changed key blocks the connection. SSH-2 only, compatible with OpenSSH 10. "Legacy equipment compatibility" option for servers that only accept old algorithms (diffie-hellman-group1/14-sha1, aes-cbc, 3des-cbc, hmac-sha1, ssh-dss): used only as a last resort, with a warning in the terminal. |
+| SSH | Terminal tab | Private key, password or agent (Pageant / OpenSSH). Jump host (Gate, like ProxyJump): a saved SSH session or `user@host:port`, up to 3 chained jumps (`bastion1,bastion2`), taken from ~/.ssh/config on import. Server keys are remembered on first connection, and a changed key blocks the connection. SSH-2 only, compatible with OpenSSH 10. "Legacy equipment compatibility" option for servers that only accept old algorithms (diffie-hellman-group1/14-sha1, aes-cbc, 3des-cbc, hmac-sha1, ssh-dss): used only as a last resort, with a warning in the terminal. |
 | Remote Desktop (RDP) | Screen tab (IronRDP) or Windows client | In a tab with the IronRDP engine (NLA authentication, domain account, shared clipboard, screen automatically fitted to the tab), or in the Windows Remote Desktop client if you prefer. |
 | Web interface | Dedicated window | The web window has no access to the app. |
 | Telnet | Terminal tab | Unencrypted: keep it to the local network. |
 | VNC | Screen tab | Keyboard, mouse, wheel, clipboard both ways, Ctrl+Alt+Del, fit to window. Tight, ZRLE, CopyRect, Raw encodings. |
 | Local shell | Terminal tab | PowerShell 7, Windows PowerShell, Command Prompt, WSL distributions, Git Bash and custom shells, through the Windows Terminal console shipped with Portunia (OpenConsole, faster than the system's: keystroke echo 47 → 17 ms, large outputs 11 → 38 MB/s). "This PC" section, "+" menu, Ctrl+Shift+T. |
-| Heimdia bastion (extension) | Terminal or screen tab | "Bastions" section of the sidebar: add a [Heimdia](https://github.com/jpiperault/Heimdia) bastion (certificate fingerprint checked, password and code, first sign-in with a temporary password and code enrolment by QR code). Allowed servers are shown by folder; each opening uses a one-time token, without typing the code again. Vault (account supplied by the bastion), recorded (credentials asked in the terminal) and jump (end-to-end) modes. Windows servers (RDP badge): opened in a Remote Desktop tab through the bastion, in jump mode (bastion 0.6, end-to-end encrypted) or recorded mode (bastion 0.8, RDCleanPath gateway: the bastion relays and records the session without seeing the password); Windows credentials asked when opening and never kept. Flags sessions that bypass the bastion. In Portunia Teams: bastion administration (servers and vault, accounts, groups, rules, settings) and audit ("Audit" menu of the bastion): video-like session replay, with keystrokes as subtitles, idle time skipped, sensitive commands highlighted, search across all sessions, typed passwords masked (an administrator can reveal them), .cast or transcript export, and the verified audit log. Bastion option: each account replays its own sessions ("My sessions"). Bastion web portal (Heimdia 0.7 and later): Administer › Web portal, a switch to turn it on or off (open web sessions close), public address, allowed group, durations, copy and paste, Turnstile keys, Cloudflare tunnel status and a "Close all web sessions" button. Enabled in Extensions. Installing the bastion (`installer.sh` wizard) and adding it to Portunia step by step: [Heimdia README](https://github.com/jpiperault/Heimdia#install). |
-| Remote assistance (extension, needs Heimdia 0.11) | Remote Desktop tab | Take control of a relative's or a customer's PC. They go to the bastion page (`https://your-portal/assistance`), download **Portunia Assist** (no install, no account) and read you a 9-digit code; you type it in "Remote assistance" in the sidebar. They see your name and choose: view only, or view and control. A frame and a "Stop" bar stay on their screen; Esc three times also stops. The bastion only relays: the link is encrypted end to end from the code (SPAKE2, ChaCha20-Poly1305), and the code is single use. Administer › Assistance: switch, group of helpers, maximum duration, audit log of each assistance. |
+| Gate (extension) | Terminal or screen tab | "Gates" section of the sidebar: add a [Portunia Gate](https://github.com/jpiperault/Heimdia) Gate (certificate fingerprint checked, password and code, first sign-in with a temporary password and code enrolment by QR code). Allowed servers are shown by folder; each opening uses a one-time token, without typing the code again. Vault (account supplied by the Gate), recorded (credentials asked in the terminal) and jump (end-to-end) modes. Windows servers (RDP badge): opened in a Remote Desktop tab through the Gate, in jump mode (Gate 0.6, end-to-end encrypted) or recorded mode (Gate 0.8, RDCleanPath gateway: the Gate relays and records the session without seeing the password); Windows credentials asked when opening and never kept. Flags sessions that bypass the Gate. In Portunia Teams: Gate administration (servers and vault, accounts, groups, rules, settings) and audit ("Audit" menu of the Gate): video-like session replay, with keystrokes as subtitles, idle time skipped, sensitive commands highlighted, search across all sessions, typed passwords masked (an administrator can reveal them), .cast or transcript export, and the verified audit log. Gate option: each account replays its own sessions ("My sessions"). Gate web portal (Portunia Gate 0.7 and later): Administer › Web portal, a switch to turn it on or off (open web sessions close), public address, allowed group, durations, copy and paste, Turnstile keys, Cloudflare tunnel status and a "Close all web sessions" button. Enabled in Extensions. Installing the Gate (`installer.sh` wizard) and adding it to Portunia step by step: [Portunia Gate README](https://github.com/jpiperault/Heimdia#install). |
+| Remote assistance (extension, needs Portunia Gate 0.11) | Remote Desktop tab | Take control of a relative's or a customer's PC. They go to the Gate page (`https://your-portal/assistance`), download **Portunia Assistance** (no install, no account) and read you a 9-digit code; you type it in "Remote assistance" in the sidebar. They see your name and choose: view only, or view and control. A frame and a "Stop" bar stay on their screen; Esc three times also stops. The Gate only relays: the link is encrypted end to end from the code (SPAKE2, ChaCha20-Poly1305), and the code is single use. Administer › Assistance: switch, group of helpers, maximum duration, audit log of each assistance. |
 | FTP / FTPS | Files tab | Full-width browser (upload, download, drag and drop, rename, delete). Explicit FTPS by default, with TLS session resumption (required by FileZilla Server and vsftpd) and certificates checked by Windows; self-signed certificate accepted on request. Connection reopened by itself after inactivity. `ftps://user@host` in quick connect. |
 | S3 storage (Pro) | Files tab | Amazon S3 and compatible services (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…): buckets, folders, upload and download (up to 5 GB per file), renaming and deleting whole folders. Path-style addressing for MinIO / Ceph. Built-in client (AWS SigV4 signing), without Amazon's SDK. |
 | Serial port | Terminal tab | COM ports detected automatically, speed, parity, flow control, line ending. |
@@ -122,7 +122,7 @@ src-tauri/src/       core (Rust)
   recording.rs       session recording (asciicast, text)
   monitor.rs         monitoring (TCP connection test)
   transfer.rs        whole-folder transfers, remote file editing
-  bastion.rs         Heimdia bastions (API with pinned certificate, one-time tokens)
+  bastion.rs         Gates (API with pinned certificate, one-time tokens)
 src/                 interface (TypeScript, no framework)
   main.ts            tree, tabs, split screen, toolbar
   dialog.ts          form generated from the extension's manifest
@@ -142,15 +142,15 @@ src/                 interface (TypeScript, no framework)
   theme.ts           themes, terminal palettes, folder colours
   localshells.ts     local shells: "This PC" section and settings
   extensions.ts      Extensions page
-  bastion.ts         Heimdia extension: sidebar, sign-in, administration
-  audit.ts           Heimdia audit: sessions and log
+  bastion.ts         Portunia Gate extension: sidebar, sign-in, administration
+  audit.ts           Portunia Gate audit: sessions and log
   assist.ts          remote assistance: "New assistance" dialog (code)
   auditplayer.ts     session player (subtitles, markers, skipped idle time)
   rdpplayer.ts       Remote Desktop session player (image decoded by the RDP engine)
   i18n.ts            interface language: t("English", "Français") next to each other
 rdp-helper/          RDP engine (IronRDP), separate program started for each RDP session or replay
-aide/                Portunia Assist, the program of the person helped (screen shared as RDP, window, consent)
-assist-proto/        assistance code, key exchange (SPAKE2) and end-to-end encryption, shared by Portunia and Portunia Assist
+aide/                Portunia Assistance, the program of the person helped (screen shared as RDP, window, consent)
+assist-proto/        assistance code, key exchange (SPAKE2) and end-to-end encryption, shared by Portunia and Portunia Assistance
 scripts/             RDP engine build, check of t(…) calls (check-i18n.cjs)
 tools/license-tool/  publisher tool: signing key and licence generation (do not distribute)
 screenshot.html      demo with fake data for screenshots

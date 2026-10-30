@@ -59,9 +59,9 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
 
-      # Portunia Assist (programme de la personne aidée) : les bastions Heimdia le téléchargent
+      # Portunia Assistance (programme de la personne aidée) : les Gates le téléchargent
       # depuis « latest/download » du dépôt public, avec son empreinte SHA-256 pour le vérifier.
-      - name: Portunia Assist
+      - name: Portunia Assistance
         shell: bash
         run: |
           cargo build --release --manifest-path aide/Cargo.toml

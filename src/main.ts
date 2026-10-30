@@ -219,7 +219,7 @@ function openBastionServer(b: Bastion, s: BastionServer) {
     } catch (e) {
       if (errorText(e) !== 'SESSION_EXPIREE') throw e;
       if (await bastionPanel.reconnect(b.id)) return connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
-      throw new Error(tr('Bastion session expired: sign in again (Bastions section).', 'Session du bastion expirée : reconnectez-vous (section Bastions).'));
+      throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
     }
   };
   return openSession(session, undefined, { connect, typing: rebond });
@@ -234,8 +234,8 @@ async function openBastionDesktop(b: Bastion, s: BastionServer) {
   const cred = await askCredentials(
     { protocol: 'rdp', name: s.nom, values: { host: s.nom, username: s.compte ?? '' } } as QuickTarget,
     s.mode === 'enregistre'
-      ? tr(`Windows credentials for ${s.nom} (local account or DOMAIN\\user). The bastion relays and records the session; it does not see your password.`, `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). Le bastion relaie et enregistre la session ; il ne voit pas votre mot de passe.`)
-      : tr(`Windows credentials for ${s.nom} (local account or DOMAIN\\user). The bastion relays the encrypted connection without reading it.`, `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). Le bastion relaie la connexion chiffrée sans la lire.`),
+      ? tr(`Windows credentials for ${s.nom} (local account or DOMAIN\\user). The Gate relays and records the session; it does not see your password.`, `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). La Gate relaie et enregistre la session ; il ne voit pas votre mot de passe.`)
+      : tr(`Windows credentials for ${s.nom} (local account or DOMAIN\\user). The Gate relays the encrypted connection without reading it.`, `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). La Gate relaie la connexion chiffrée sans la lire.`),
   );
   if (!cred) return;
   const session: Session = {
@@ -249,7 +249,7 @@ async function openBastionDesktop(b: Bastion, s: BastionServer) {
     } catch (e) {
       if (errorText(e) !== 'SESSION_EXPIREE') throw e;
       if (await bastionPanel.reconnect(b.id)) return connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
-      throw new Error(tr('Bastion session expired: sign in again (Bastions section).', 'Session du bastion expirée : reconnectez-vous (section Bastions).'));
+      throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
     }
   };
   return openSession(session, undefined, { connect, typing: false });
@@ -270,7 +270,7 @@ function openAssist(b: Bastion, code: string) {
     } catch (e) {
       if (errorText(e) !== 'SESSION_EXPIREE') throw e;
       if (await bastionPanel.reconnect(b.id)) return connectAssist(b.id, code, cols, rows, onEvent);
-      throw new Error(tr('Bastion session expired: sign in again (Bastions section).', 'Session du bastion expirée : reconnectez-vous (section Bastions).'));
+      throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
     }
   };
   return openSession(session, undefined, { connect, typing: false });
@@ -282,7 +282,7 @@ function showAssist() {
 }
 
 function openBastionAdmin(b: Bastion) {
-  if (!allows('bastionAdmin')) return toast(tr('Bastion administration is part of Portunia Teams (Settings › Licence)', 'L’administration des bastions fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
+  if (!allows('bastionAdmin')) return toast(tr('Gate administration is part of Portunia Teams (Settings › Licence)', 'L’administration des Gates fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
   const title = `Admin · ${b.name}`;
   const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
   if (existing) return activate(existing.id);
@@ -295,7 +295,7 @@ function openBastionAdmin(b: Bastion) {
 
 /** Audit du bastion (sessions et journal), chargé à la demande. */
 async function openBastionAudit(b: Bastion) {
-  if (!allows('bastionAdmin')) return toast(tr('Bastion audit is part of Portunia Teams (Settings › Licence)', 'L’audit des bastions fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
+  if (!allows('bastionAdmin')) return toast(tr('Gate audit is part of Portunia Teams (Settings › Licence)', 'L’audit des Gates fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
   const title = `Audit · ${b.name}`;
   const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
   if (existing) return activate(existing.id);
@@ -316,7 +316,7 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
   try {
     rec = await bastions.admin<AuditRecording>(b.id, 'GET', `/audit/sessions/${s.id}/enregistrement${reveal ? '?reveler=true' : ''}`);
   } catch (e) {
-    return toast(errorText(e) === 'SESSION_EXPIREE' ? tr('Bastion session expired: sign in again (sidebar).', 'Session du bastion expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
+    return toast(errorText(e) === 'SESSION_EXPIREE' ? tr('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
   }
   const view = h('div', { class: 'pane audit-pane' });
   const stamp = new Date(s.debut).toISOString().slice(0, 16).replace(/[T:]/g, '-');
@@ -336,7 +336,7 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
       start,
       canReveal: b.role === 'admin',
       reveal: () => {
-        if (!confirm(tr('Show the copied-pasted text in clear? This replay will be written to the bastion\'s log.', 'Afficher en clair le texte copié-collé ? Cette relecture sera inscrite au journal du bastion.'))) return;
+        if (!confirm(tr('Show the copied-pasted text in clear? This replay will be written to the bastion\'s log.', 'Afficher en clair le texte copié-collé ? Cette relecture sera inscrite au journal de la Gate.'))) return;
         openAuditReplay(b, s, undefined, true, owner);
       },
       exportText: () => exportFile('-transcription', 'txt', rdp.transcript(), tr('Transcript exported', 'Transcription exportée')),
@@ -350,7 +350,7 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
       start,
       canReveal: b.role === 'admin',
       reveal: () => {
-        if (!confirm(tr('Show input typed without echo (usually passwords) in clear? This replay will be written to the bastion\'s log.', 'Afficher en clair les saisies sans écho (le plus souvent des mots de passe) ? Cette relecture sera inscrite au journal du bastion.'))) return;
+        if (!confirm(tr('Show input typed without echo (usually passwords) in clear? This replay will be written to the bastion\'s log.', 'Afficher en clair les saisies sans écho (le plus souvent des mots de passe) ? Cette relecture sera inscrite au journal de la Gate.'))) return;
         openAuditReplay(b, s, undefined, true, owner);
       },
       exportCast: () => exportFile(rec.revele ? '' : '-masque', 'cast', rec.cast, rec.revele ? tr('Signed recording exported', 'Enregistrement signé exporté') : tr('Masked copy exported (not signed)', 'Copie masquée exportée (non signée)')),

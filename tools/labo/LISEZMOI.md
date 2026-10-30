@@ -1,7 +1,7 @@
 # Labo de test de Portunia
 
 Des serveurs jetables sur votre PC pour passer la recette avant la vente : SSH (mot de passe,
-clé, bastions, ancien équipement, double authentification), SFTP, FTP/FTPS, S3, VNC, telnet,
+clé, Gates, ancien équipement, double authentification), SFTP, FTP/FTPS, S3, VNC, telnet,
 web, Docker. Tout tourne dans Docker Desktop et n'écoute que sur `127.0.0.1` : rien n'est
 visible depuis le réseau.
 
@@ -39,9 +39,9 @@ Le dossier **Labo** contient alors toutes les sessions de test.
 | Session Portunia | Serveur | Adresse | Pour tester |
 |---|---|---|---|
 | Labo — serveur | Linux Debian | 127.0.0.1:2201 | mot de passe, clés, SFTP, tableau de bord, conteneurs, tunnels, X11 |
-| Labo — bastion | Linux | 127.0.0.1:2202 | entrée du réseau interne |
-| Labo — interne (via bastion) | Linux | `interne`, seulement par le bastion | serveur de rebond |
-| Labo — interne (2 bastions) | Linux | par `bastion` puis `bastion2` | rebonds enchaînés |
+| Labo — Gate | Linux | 127.0.0.1:2202 | entrée du réseau interne |
+| Labo — interne (via Gate) | Linux | `interne`, seulement par la Gate | serveur de rebond |
+| Labo — interne (2 Gates) | Linux | par `Gate` puis `bastion2` | rebonds enchaînés |
 | Labo — ancien équipement | Linux, algorithmes anciens | 127.0.0.1:2203 | « Compatibilité anciens équipements » |
 | Labo — double authentification | Linux, mot de passe + code | 127.0.0.1:2204 | codes à 6 chiffres |
 | Labo — FTPS / FTP non chiffré | vsftpd | 127.0.0.1:2121 | FTP, FTPS (reprise de session TLS exigée) |

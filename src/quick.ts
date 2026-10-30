@@ -99,7 +99,7 @@ export function parseQuick(input: string): QuickTarget | null {
 }
 
 /** Texte d'aide affiché sous la barre de connexion rapide. */
-export const QUICK_HELP = t('address only (connection window) · ssh user@host[:port] · ssh -J bastion user@host · rdp host · vnc host:5901 · telnet host · https://address · ftps://user@host · COM3@9600', 'adresse seule (fenêtre de connexion) · ssh user@hôte[:port] · ssh -J bastion user@hôte · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · ftps://user@hôte · COM3@9600');
+export const QUICK_HELP = t('address only (connection window) · ssh user@host[:port] · ssh -J Gate user@host · rdp host · vnc host:5901 · telnet host · https://address · ftps://user@host · COM3@9600', 'adresse seule (fenêtre de connexion) · ssh user@hôte[:port] · ssh -J Gate user@hôte · rdp hôte · vnc hôte:5901 · telnet hôte · https://adresse · ftps://user@hôte · COM3@9600');
 
 // ---------- Historique des connexions rapides ----------
 
@@ -288,7 +288,7 @@ export function openQuickConnect(enabled: (protocol: string) => boolean, initial
     const port = field({ inputmode: 'numeric' });
     const pass = field({ type: 'password' });
     const key = field({ placeholder: t('Empty = ~/.ssh/id_ed25519, id_ecdsa, id_rsa or agent', 'Vide = ~/.ssh/id_ed25519, id_ecdsa, id_rsa ou agent') });
-    const jump = field({ placeholder: t('SSH session or user@bastion:port', 'Session SSH ou utilisateur@bastion:port') });
+    const jump = field({ placeholder: t('SSH session or user@Gate:port', 'Session SSH ou utilisateur@Gate:port') });
     const optional = h('span', { class: 'muted small' }, ' facultatif');
     const userField = h('label', { class: 'fld' }, h('span', {}, t('Login', 'Identifiant'), optional.cloneNode(true)), user);
     const portField = h('label', { class: 'fld fld-port' }, 'Port', port);
