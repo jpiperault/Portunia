@@ -1,4 +1,4 @@
-<title>Heimdia dans Portunia</title>
+<title>Portunia Gate dans Portunia</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Maquette fidèle à Portunia (tokens de src/styles.css, sombre par défaut) + questionnaire.
@@ -217,8 +217,8 @@ td code { font-family: var(--mono); font-size: 12px; }
 
 <div class="wrap">
   <div class="intro">
-    <p class="label">Maquette · Heimdia, étape 2 · intégration dans Portunia</p>
-    <h1>Heimdia dans Portunia : se connecter, ouvrir, administrer</h1>
+    <p class="label">Maquette · Portunia Gate, étape 2 · intégration dans Portunia</p>
+    <h1>Portunia Gate dans Portunia : se connecter, ouvrir, administrer</h1>
     <p>Ce que l'utilisateur et l'administrateur verront dans Portunia une fois l'étape 2 livrée. L'onglet Questions rassemble les choix à faire avant de coder ; les réponses s'enregistrent toutes seules.</p>
   </div>
 
@@ -229,7 +229,7 @@ td code { font-family: var(--mono); font-size: 12px; }
 
   <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
     <div class="flow" aria-label="Fonctionnement">
-      <div><b>1. Connexion au bastion</b>Une fois par journée : mot de passe et code. Heimdia rend un jeton de session.</div>
+      <div><b>1. Connexion à la Gate</b>Une fois par journée : mot de passe et code. Portunia Gate rend un jeton de session.</div>
       <div><b>2. Liste des serveurs</b>Portunia lit les serveurs autorisés par l'API et les range dans l'arbre.</div>
       <div><b>3. Ouverture</b>Pour chaque session, un jeton à usage unique : pas de code à retaper.</div>
       <div><b>4. Administration</b>Comptes, serveurs, règles, journal : mêmes écrans pour qui a le rôle.</div>
@@ -237,7 +237,7 @@ td code { font-family: var(--mono); font-size: 12px; }
 
     <div class="steps" role="group" aria-label="Écrans">
       <span class="grp">Utilisateur</span>
-      <button data-s="list" aria-pressed="true">1. Bastions</button>
+      <button data-s="list" aria-pressed="true">1. Gates</button>
       <button data-s="add" aria-pressed="false">2. Ajouter</button>
       <button data-s="tree" aria-pressed="false">3. Arbre</button>
       <button data-s="open" aria-pressed="false">4. Ouvrir</button>
@@ -253,8 +253,8 @@ td code { font-family: var(--mono); font-size: 12px; }
         <div class="search">Rechercher ou taper une adresse…</div>
         <div class="sec">Mes sessions</div>
         <div class="trow"><span class="n">NAS bureau</span><span class="tags"><span class="proto">SSH</span></span></div>
-        <div class="sec">Bastions</div>
-        <div class="bcard"><div class="top"><span class="led" id="bled"></span>Heimdia · ACME</div><div class="small muted" id="bsub">julien · expire dans 7 h 52</div></div>
+        <div class="sec">Gates</div>
+        <div class="bcard"><div class="top"><span class="led" id="bled"></span>Portunia Gate · ACME</div><div class="small muted" id="bsub">julien · expire dans 7 h 52</div></div>
         <div id="btree">
           <div class="trow folder">▾ Production</div>
           <div class="trow" id="t-web"><span class="n">web-01</span><span class="tags"><span class="mode vault">Coffre</span><span class="proto">SSH</span></span></div>
@@ -264,11 +264,11 @@ td code { font-family: var(--mono); font-size: 12px; }
           <div class="trow folder">▾ Réseau</div>
           <div class="trow"><span class="n">fw-edge</span><span class="tags"><span class="mode">Rebond</span><span class="proto">SSH</span></span></div>
         </div>
-        <div class="bcard" style="margin-top:6px"><div class="top"><span class="led warn"></span>Heimdia · Client Durand</div><div class="small muted">session expirée · cliquer pour se reconnecter</div></div>
+        <div class="bcard" style="margin-top:6px"><div class="top"><span class="led warn"></span>Portunia Gate · Client Durand</div><div class="small muted">session expirée · cliquer pour se reconnecter</div></div>
       </aside>
       <aside class="side" id="side-admin" hidden>
-        <div class="sec">Administration · Heimdia ACME</div>
-        <div class="bcard"><div class="top"><span class="led"></span>bastion.acme.local</div><div class="small muted">Rôle : administrateur</div></div>
+        <div class="sec">Administration · Portunia Gate ACME</div>
+        <div class="bcard"><div class="top"><span class="led"></span>Gate.acme.local</div><div class="small muted">Rôle : administrateur</div></div>
         <div class="nrow" data-nav="targets">Serveurs et coffre<span class="c">12</span></div>
         <div class="nrow" data-nav="users">Comptes et groupes<span class="c">9</span></div>
         <div class="nrow" data-nav="rules">Règles<span class="c">4</span></div>
@@ -278,34 +278,34 @@ td code { font-family: var(--mono); font-size: 12px; }
       </aside>
 
       <section class="main">
-        <!-- 1 Liste des bastions -->
+        <!-- 1 Liste des Gates -->
         <div data-screen="list" class="main">
-          <div class="tabs"><div class="tab on">Paramètres › Bastions</div></div>
+          <div class="tabs"><div class="tab on">Paramètres › Gates</div></div>
           <div class="content">
-            <div class="row" style="justify-content:space-between"><p class="small muted">Chaque bastion ajouté devient une section de l'arbre.</p><button class="btn primary">Ajouter un bastion</button></div>
-            <div class="bl"><span class="led"></span><div class="grow"><b>Heimdia · ACME</b><span class="small muted">bastion.acme.local:8443 · julien · administrateur · expire dans 7 h 52</span></div><button class="btn sm">Administrer</button><button class="btn sm">Se déconnecter</button></div>
-            <div class="bl"><span class="led warn"></span><div class="grow"><b>Heimdia · Client Durand</b><span class="small muted">10.40.0.5:8443 · julien · utilisateur · session expirée</span></div><button class="btn sm primary">Se reconnecter</button><button class="btn sm">Retirer</button></div>
-            <div class="bl"><span class="led off"></span><div class="grow"><b>Heimdia · Labo</b><span class="small muted">192.168.91.51:8443 · injoignable depuis 10:42</span></div><button class="btn sm">Réessayer</button><button class="btn sm">Retirer</button></div>
+            <div class="row" style="justify-content:space-between"><p class="small muted">Chaque Gate ajouté devient une section de l'arbre.</p><button class="btn primary">Ajouter une Gate</button></div>
+            <div class="bl"><span class="led"></span><div class="grow"><b>Portunia Gate · ACME</b><span class="small muted">Gate.acme.local:8443 · julien · administrateur · expire dans 7 h 52</span></div><button class="btn sm">Administrer</button><button class="btn sm">Se déconnecter</button></div>
+            <div class="bl"><span class="led warn"></span><div class="grow"><b>Portunia Gate · Client Durand</b><span class="small muted">10.40.0.5:8443 · julien · utilisateur · session expirée</span></div><button class="btn sm primary">Se reconnecter</button><button class="btn sm">Retirer</button></div>
+            <div class="bl"><span class="led off"></span><div class="grow"><b>Portunia Gate · Labo</b><span class="small muted">192.168.91.51:8443 · injoignable depuis 10:42</span></div><button class="btn sm">Réessayer</button><button class="btn sm">Retirer</button></div>
             <div class="tbl-wrap"><table>
               <thead><tr><th>Réglage</th><th>Valeur</th></tr></thead>
               <tbody>
-                <tr><td>Durée de la session du bastion</td><td>Fixée par l'administrateur du bastion (8 h ici)</td></tr>
-                <tr><td>Mémoriser mon mot de passe du bastion</td><td><span class="mode">voir les questions</span></td></tr>
-                <tr><td>Serveurs du bastion dans la recherche</td><td><span class="mode ok">oui</span></td></tr>
+                <tr><td>Durée de la session de la Gate</td><td>Fixée par l'administrateur de la Gate (8 h ici)</td></tr>
+                <tr><td>Mémoriser mon mot de passe de la Gate</td><td><span class="mode">voir les questions</span></td></tr>
+                <tr><td>Serveurs de la Gate dans la recherche</td><td><span class="mode ok">oui</span></td></tr>
               </tbody>
             </table></div>
           </div>
-          <div class="status"><span>3 bastions</span><span>1 connecté</span></div>
+          <div class="status"><span>3 Gates</span><span>1 connecté</span></div>
         </div>
 
         <!-- 2 Ajouter -->
         <div data-screen="add" class="main" hidden>
-          <div class="tabs"><div class="tab on">Paramètres › Bastions</div></div>
+          <div class="tabs"><div class="tab on">Paramètres › Gates</div></div>
           <div class="content" style="justify-content:center">
             <div class="card dialog">
-              <h3 style="font-size:15px">Ajouter un bastion Heimdia</h3>
-              <label class="fld">Adresse<input class="input" id="a-addr" value="bastion.acme.local"></label>
-              <div class="fld">Empreinte du certificat, à comparer avec celle affichée par « heimdia init »<div class="fp">SHA256:41AB 7C0E 92D1 F3A8 55B0 6E14 C9D2 08FF</div></div>
+              <h3 style="font-size:15px">Ajouter une Gate</h3>
+              <label class="fld">Adresse<input class="input" id="a-addr" value="Gate.acme.local"></label>
+              <div class="fld">Empreinte du certificat, à comparer avec celle affichée par « portunia-gate init »<div class="fp">SHA256:41AB 7C0E 92D1 F3A8 55B0 6E14 C9D2 08FF</div></div>
               <div class="row"><label class="fld">Identifiant<input class="input" id="a-user" value="julien"></label><label class="fld">Mot de passe<input class="input" id="a-pass" type="password" value="xxxxxxxxxxxx"></label></div>
               <label class="fld">Code de l'application d'authentification<input class="input" id="a-otp" value="482 913" inputmode="numeric"></label>
               <p class="small muted">Première connexion de ce compte ? Portunia affichera ici le code QR à scanner.</p>
@@ -319,9 +319,9 @@ td code { font-family: var(--mono); font-size: 12px; }
         <div data-screen="tree" class="main" hidden>
           <div class="tabs"><div class="tab on">Accueil</div></div>
           <div class="content">
-            <div class="banner info"><span class="ico">i</span><div>Les serveurs du bastion se rangent comme l'administrateur les a classés. On ne peut ni les modifier ni les supprimer dans Portunia ; on peut les mettre en favoris et les chercher.</div></div>
+            <div class="banner info"><span class="ico">i</span><div>Les serveurs de la Gate se rangent comme l'administrateur les a classés. On ne peut ni les modifier ni les supprimer dans Portunia ; on peut les mettre en favoris et les chercher.</div></div>
             <div class="tbl-wrap"><table>
-              <thead><tr><th>État du bastion</th><th>Dans l'arbre</th><th>Au double-clic</th></tr></thead>
+              <thead><tr><th>État de la Gate</th><th>Dans l'arbre</th><th>Au double-clic</th></tr></thead>
               <tbody>
                 <tr><td><span class="led" style="display:inline-block"></span> Connecté</td><td>Serveurs autorisés maintenant</td><td>Ouvre la session</td></tr>
                 <tr><td><span class="led warn" style="display:inline-block"></span> Session expirée</td><td>Dernière liste connue, grisée</td><td>Redemande mot de passe et code, puis ouvre</td></tr>
@@ -337,22 +337,22 @@ td code { font-family: var(--mono); font-size: 12px; }
         <div data-screen="open" class="main" hidden>
           <div class="tabs"><div class="tab">Accueil</div><div class="tab on"><span class="rec-dot" aria-label="Enregistré"></span>web-01 · ACME</div></div>
           <div class="content">
-            <div class="banner"><span class="ico">●</span><div>Session <b>enregistrée</b> par Heimdia · compte <b>admin</b> fourni par le coffre.</div></div>
-<div class="term"><span class="d">Connexion à web-01 via Heimdia ACME…</span>
-<span class="d">Heimdia : session enregistrée.</span>
+            <div class="banner"><span class="ico">●</span><div>Session <b>enregistrée</b> par Portunia Gate · compte <b>admin</b> fourni par le coffre.</div></div>
+<div class="term"><span class="d">Connexion à web-01 via Portunia Gate ACME…</span>
+<span class="d">Portunia Gate : session enregistrée.</span>
 <span class="h">admin@web-01</span>:~$ uptime
  10:41:02 up 32 days,  2:14,  1 user,  load average: 0.08, 0.05, 0.01
 <span class="h">admin@web-01</span>:~$ <span class="cursor"></span></div>
             <div class="tbl-wrap"><table>
               <thead><tr><th>Mode</th><th>Ce que fait Portunia</th></tr></thead>
               <tbody>
-                <tr><td><span class="mode vault">Coffre</span></td><td>Ouvre directement : le bastion fournit le compte. Panneau Fichiers (SFTP) si la règle l'autorise.</td></tr>
-                <tr><td><span class="mode rec">Enregistré</span></td><td>Le bastion demande identifiant et mot de passe du serveur dans le terminal, comme pour la connexion rapide.</td></tr>
-                <tr><td><span class="mode">Rebond</span></td><td>Connexion de bout en bout par le bastion (comme ssh -J) : votre clé ou votre mot de passe va au serveur, le bastion ne voit rien.</td></tr>
+                <tr><td><span class="mode vault">Coffre</span></td><td>Ouvre directement : la Gate fournit le compte. Panneau Fichiers (SFTP) si la règle l'autorise.</td></tr>
+                <tr><td><span class="mode rec">Enregistré</span></td><td>La Gate demande identifiant et mot de passe du serveur dans le terminal, comme pour la connexion rapide.</td></tr>
+                <tr><td><span class="mode">Rebond</span></td><td>Connexion de bout en bout par la Gate (comme ssh -J) : votre clé ou votre mot de passe va au serveur, la Gate ne voit rien.</td></tr>
               </tbody>
             </table></div>
           </div>
-          <div class="status"><span>Via <b>Heimdia ACME</b></span><span>Jeton à usage unique</span><span>Reconnexion : nouveau jeton, sans code</span></div>
+          <div class="status"><span>Via <b>Portunia Gate ACME</b></span><span>Jeton à usage unique</span><span>Reconnexion : nouveau jeton, sans code</span></div>
         </div>
 
         <!-- 5 Serveurs -->
@@ -484,10 +484,10 @@ td code { font-family: var(--mono); font-size: 12px; }
 
 <script>
 const TEXT = {
-  list: { t: 'Paramètres › Bastions', p: ['Plusieurs bastions, chacun avec son état : connecté, session expirée, injoignable.', 'Le bouton Administrer n\'apparaît que pour les rôles administrateur et auditeur.', 'Retirer un bastion efface son jeton et sa liste de serveurs de ce PC.'], s: ['L\'API du bastion écoute sur le port 8443, en HTTPS.'] },
-  add: { t: 'Ajouter un bastion', p: ['Même logique qu\'un nouveau serveur SSH : on compare l\'empreinte du certificat avant d\'envoyer le mot de passe.', 'Mot de passe et code donnent un jeton de session, valable la durée fixée par l\'administrateur.', 'Premier passage d\'un compte : mot de passe provisoire à changer, puis code QR à scanner, directement dans Portunia.'], s: ['Ni le mot de passe ni le code ne sont gardés, sauf choix contraire (questions).'] },
-  tree: { t: 'Les serveurs du bastion dans l\'arbre', p: ['Lecture seule : c\'est l\'administrateur du bastion qui classe et nomme.', 'Hors connexion, la dernière liste reste visible, grisée.', 'Recherche, favoris et palette de commandes incluent ces serveurs.'], s: [] },
-  open: { t: 'Ouvrir une session', p: ['Portunia demande au bastion un jeton à usage unique et se connecte avec : pas de code à chaque onglet.', 'Coffre et Enregistré passent par le proxy du bastion ; Rebond passe de bout en bout.', 'La reconnexion automatique de Portunia redemande un jeton, sans rien demander à l\'utilisateur tant que la session du bastion est valide.'], s: ['Le jeton à usage unique expire en 30 secondes s\'il n\'est pas utilisé.'] },
+  list: { t: 'Paramètres › Gates', p: ['Plusieurs Gates, chacun avec son état : connecté, session expirée, injoignable.', 'Le bouton Administrer n\'apparaît que pour les rôles administrateur et auditeur.', 'Retirer une Gate efface son jeton et sa liste de serveurs de ce PC.'], s: ['L\'API de la Gate écoute sur le port 8443, en HTTPS.'] },
+  add: { t: 'Ajouter une Gate', p: ['Même logique qu\'un nouveau serveur SSH : on compare l\'empreinte du certificat avant d\'envoyer le mot de passe.', 'Mot de passe et code donnent un jeton de session, valable la durée fixée par l\'administrateur.', 'Premier passage d\'un compte : mot de passe provisoire à changer, puis code QR à scanner, directement dans Portunia.'], s: ['Ni le mot de passe ni le code ne sont gardés, sauf choix contraire (questions).'] },
+  tree: { t: 'Les serveurs de la Gate dans l\'arbre', p: ['Lecture seule : c\'est l\'administrateur de la Gate qui classe et nomme.', 'Hors connexion, la dernière liste reste visible, grisée.', 'Recherche, favoris et palette de commandes incluent ces serveurs.'], s: [] },
+  open: { t: 'Ouvrir une session', p: ['Portunia demande à la Gate un jeton à usage unique et se connecte avec : pas de code à chaque onglet.', 'Coffre et Enregistré passent par le proxy de la Gate ; Rebond passe de bout en bout.', 'La reconnexion automatique de Portunia redemande un jeton, sans rien demander à l\'utilisateur tant que la session de la Gate est valide.'], s: ['Le jeton à usage unique expire en 30 secondes s\'il n\'est pas utilisé.'] },
   targets: { t: 'Administration : serveurs et coffre', p: ['Liste filtrable, fiche à droite : adresse, mode, compte, secret.', 'Le secret ne se lit jamais, il se remplace.', '« Oublier l\'empreinte » après la réinstallation d\'un serveur.'], s: ['Génération et installation automatique d\'une clé sur le serveur : voir les questions.'] },
   users: { t: 'Administration : comptes et groupes', p: ['Création avec un mot de passe provisoire affiché une fois.', 'Rôle, groupes et façon de se connecter (réglage général ou personnalisé).', 'Désactiver, réinitialiser le code, ajouter une clé SSH.'], s: [] },
   rules: { t: 'Administration : règles', p: ['Formulaire visuel : groupe, serveurs, jours, heures, options, expiration.', 'L\'état de chaque règle se voit d\'un coup d\'œil : active, hors plage, expirée.', 'Effet à la prochaine ouverture de session.'], s: ['Couper les sessions en cours à la modification : étape 3 (vue en direct).'] },
@@ -531,16 +531,16 @@ if (location.hash === '#questions') tab('q');
 
 const SECTIONS = [
   { title: 'Connexion depuis Portunia', qs: [
-    { id: 'memo', t: 'Portunia peut-il mémoriser le mot de passe du bastion ?', why: 'Il serait chiffré dans le coffre de Portunia ; seul le code serait redemandé chaque jour. Pratique, mais un PC volé et déverrouillé donne alors un facteur.', type: 'one', o: ['Non, mot de passe et code à chaque session du bastion', 'Oui, au choix de l\'utilisateur', 'Oui, si l\'administrateur du bastion l\'autorise'], rec: 2 },
+    { id: 'memo', t: 'Portunia peut-il mémoriser le mot de passe de la Gate ?', why: 'Il serait chiffré dans le coffre de Portunia ; seul le code serait redemandé chaque jour. Pratique, mais un PC volé et déverrouillé donne alors un facteur.', type: 'one', o: ['Non, mot de passe et code à chaque session de la Gate', 'Oui, au choix de l\'utilisateur', 'Oui, si l\'administrateur de la Gate l\'autorise'], rec: 2 },
     { id: 'enrol', t: 'Comment un nouveau compte enrôle-t-il son code TOTP ?', why: 'L\'administrateur ne doit idéalement jamais voir le secret TOTP d\'un autre.', type: 'one', o: ['Mot de passe provisoire, puis code QR à la 1ʳᵉ connexion dans Portunia', 'L\'administrateur montre le code QR (comme aujourd\'hui en ligne de commande)', 'Les deux possibles'], rec: 0 },
-    { id: 'cert', t: 'Certificat HTTPS de l\'API du bastion ?', why: 'Auto-signé avec empreinte vérifiée : rien à configurer. Un certificat d\'entreprise évite la vérification manuelle.', type: 'many', o: ['Auto-signé, empreinte vérifiée dans Portunia', 'Certificat fourni par l\'entreprise', 'Let\'s Encrypt (bastion exposé sur Internet)'], rec: [0, 1] },
+    { id: 'cert', t: 'Certificat HTTPS de l\'API de la Gate ?', why: 'Auto-signé avec empreinte vérifiée : rien à configurer. Un certificat d\'entreprise évite la vérification manuelle.', type: 'many', o: ['Auto-signé, empreinte vérifiée dans Portunia', 'Certificat fourni par l\'entreprise', 'Let\'s Encrypt (Gate exposé sur Internet)'], rec: [0, 1] },
   ]},
-  { title: 'Serveurs du bastion dans Portunia', qs: [
-    { id: 'doublons', t: 'Que faire des sessions Portunia qui pointent vers un serveur désormais protégé par le bastion ?', why: 'Elles contourneraient le bastion si le serveur reste joignable directement.', type: 'one', o: ['Proposer de les remplacer par le serveur du bastion', 'Les signaler seulement', 'Ne rien faire'], rec: 0 },
-    { id: 'cle', t: 'Ajout d\'un serveur en mode coffre : générer et installer la clé automatiquement ?', why: 'L\'administrateur donne une fois un mot de passe du serveur ; Heimdia crée une clé, l\'installe, puis n\'utilise plus que la clé.', type: 'one', o: ['Oui, dès l\'étape 2', 'Plus tard'], rec: 0 },
+  { title: 'Serveurs de la Gate dans Portunia', qs: [
+    { id: 'doublons', t: 'Que faire des sessions Portunia qui pointent vers un serveur désormais protégé par la Gate ?', why: 'Elles contourneraient la Gate si le serveur reste joignable directement.', type: 'one', o: ['Proposer de les remplacer par le serveur de la Gate', 'Les signaler seulement', 'Ne rien faire'], rec: 0 },
+    { id: 'cle', t: 'Ajout d\'un serveur en mode coffre : générer et installer la clé automatiquement ?', why: 'L\'administrateur donne une fois un mot de passe du serveur ; Portunia Gate crée une clé, l\'installe, puis n\'utilise plus que la clé.', type: 'one', o: ['Oui, dès l\'étape 2', 'Plus tard'], rec: 0 },
   ]},
   { title: 'Offre', qs: [
-    { id: 'offre', t: 'Dans quelle édition de Portunia l\'intégration est-elle disponible ?', why: 'Heimdia est vendu à part ; Portunia peut le rendre visible partout ou le réserver.', type: 'one', o: ['Utiliser un bastion : toutes les éditions ; administrer : Équipes', 'Tout réservé à Équipes', 'Tout dans toutes les éditions'], rec: 0 },
+    { id: 'offre', t: 'Dans quelle édition de Portunia l\'intégration est-elle disponible ?', why: 'Portunia Gate est vendu à part ; Portunia peut le rendre visible partout ou le réserver.', type: 'one', o: ['Utiliser une Gate : toutes les éditions ; administrer : Équipes', 'Tout réservé à Équipes', 'Tout dans toutes les éditions'], rec: 0 },
   ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.qs);
@@ -594,7 +594,7 @@ function progress() {
 }
 function changed(card, q) {
   card.classList.toggle('done', answered(q)); progress();
-  try { localStorage.setItem('heimdia-etape2', JSON.stringify(answers)); } catch {}
+  try { localStorage.setItem('portunia-gate-etape2', JSON.stringify(answers)); } catch {}
   clearTimeout(saveTimer);
   if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
   setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
@@ -604,7 +604,7 @@ async function save() {
   catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
 }
 function summary() {
-  const lines = ['Réponses Heimdia étape 2']; let n = 0;
+  const lines = ['Réponses Portunia Gate étape 2']; let n = 0;
   for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
   return lines.join('\n');
 }
@@ -613,7 +613,7 @@ document.getElementById('copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
   catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
 });
-try { answers = JSON.parse(localStorage.getItem('heimdia-etape2') || '{}') || {}; } catch { answers = {}; }
+try { answers = JSON.parse(localStorage.getItem('portunia-gate-etape2') || '{}') || {}; } catch { answers = {}; }
 render();
 (async () => {
   const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;

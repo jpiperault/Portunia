@@ -1,4 +1,4 @@
-<title>Heimdia RDP</title>
+<title>Portunia Gate RDP</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Maquette fidèle à Portunia (tokens de src/styles.css, sombre par défaut) + questionnaire.
@@ -215,9 +215,9 @@ p { margin: 0; }
 
 <div class="wrap">
   <div class="intro">
-    <p class="label">Maquette · Heimdia, Bureau à distance (RDP)</p>
-    <h1>Les serveurs Windows derrière le bastion : ouverture, coffre, enregistrement, relecture</h1>
-    <p>Même logique que SSH : l'utilisateur ouvre un serveur depuis la section du bastion, Heimdia vérifie la règle, fournit le compte du coffre et enregistre la session ; l'audit la relit comme une vidéo. Les écrans se parcourent avec les boutons ; l'onglet Questions rassemble les choix à faire avant de coder, et les réponses s'enregistrent toutes seules.</p>
+    <p class="label">Maquette · Portunia Gate, Bureau à distance (RDP)</p>
+    <h1>Les serveurs Windows derrière la Gate : ouverture, coffre, enregistrement, relecture</h1>
+    <p>Même logique que SSH : l'utilisateur ouvre un serveur depuis la section de la Gate, Portunia Gate vérifie la règle, fournit le compte du coffre et enregistre la session ; l'audit la relit comme une vidéo. Les écrans se parcourent avec les boutons ; l'onglet Questions rassemble les choix à faire avant de coder, et les réponses s'enregistrent toutes seules.</p>
   </div>
 
   <div class="maintabs" role="tablist">
@@ -228,7 +228,7 @@ p { margin: 0; }
   <section id="pane-maq" role="tabpanel" aria-labelledby="tab-maq" class="wrap" style="max-width:none">
     <div class="steps" aria-label="Écrans">
       <button data-s="how" aria-pressed="true">1. Fonctionnement</button>
-      <button data-s="tree" aria-pressed="false">2. Serveurs du bastion</button>
+      <button data-s="tree" aria-pressed="false">2. Serveurs de la Gate</button>
       <button data-s="open" aria-pressed="false">3. Session RDP</button>
       <button data-s="target" aria-pressed="false">4. Ajouter un serveur</button>
       <button data-s="rule" aria-pressed="false">5. Règle</button>
@@ -238,7 +238,7 @@ p { margin: 0; }
     <!-- 1. Fonctionnement -->
     <div data-screen="how" class="wrap" style="max-width:none;gap:12px">
       <div class="svgwrap">
-        <svg viewBox="0 0 960 250" width="100%" style="min-width:720px" role="img" aria-label="Portunia se connecte au relais RDP de Heimdia, qui se connecte au serveur Windows avec le compte du coffre et enregistre la session">
+        <svg viewBox="0 0 960 250" width="100%" style="min-width:720px" role="img" aria-label="Portunia se connecte au relais RDP de Portunia Gate, qui se connecte au serveur Windows avec le compte du coffre et enregistre la session">
           <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>
           <rect x="10" y="60" width="220" height="130" rx="10" fill="var(--work)" stroke="var(--line-strong)"/>
           <text x="120" y="88" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="600">Portunia</text>
@@ -246,7 +246,7 @@ p { margin: 0; }
           <text x="120" y="130" text-anchor="middle" fill="var(--muted)" font-size="12">(moteur IronRDP actuel)</text>
           <text x="120" y="160" text-anchor="middle" fill="var(--text-2)" font-size="12">jeton à usage unique</text>
           <rect x="370" y="30" width="230" height="190" rx="10" fill="var(--work)" stroke="var(--accent)"/>
-          <text x="485" y="58" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="600">Heimdia</text>
+          <text x="485" y="58" text-anchor="middle" fill="var(--text)" font-size="15" font-weight="600">Portunia Gate</text>
           <text x="485" y="82" text-anchor="middle" fill="var(--muted)" font-size="12">relais RDP (port 3390)</text>
           <text x="485" y="110" text-anchor="middle" fill="var(--text-2)" font-size="12">1. vérifie jeton et règle</text>
           <text x="485" y="130" text-anchor="middle" fill="var(--text-2)" font-size="12">2. ouvre la session Windows</text>
@@ -269,18 +269,18 @@ p { margin: 0; }
         </svg>
       </div>
       <div class="flow">
-        <div><b>Deux connexions séparées</b>Heimdia termine la connexion de Portunia puis en ouvre une seconde vers Windows. C'est ce qui lui permet de fournir le compte du coffre, d'appliquer la règle (presse-papiers, lecteurs) et d'enregistrer.</div>
-        <div><b>Même moteur des deux côtés</b>IronRDP (Rust), déjà dans Portunia, sert aussi au relais de Heimdia : pas de dépendance à FreeRDP ni à Windows sur le bastion.</div>
-        <div><b>Enregistrement léger</b>Le bastion garde le flux graphique RDP tel quel (quelques Mo par heure), signé. Portunia le rejoue avec IronRDP : pas de vidéo calculée sur le bastion.</div>
-        <div><b>Rebond possible</b>Pour un serveur en mode rebond, Heimdia relaie seulement la connexion chiffrée : pas d'enregistrement, pas de coffre, comme <code>ssh -J</code>.</div>
+        <div><b>Deux connexions séparées</b>Portunia Gate termine la connexion de Portunia puis en ouvre une seconde vers Windows. C'est ce qui lui permet de fournir le compte du coffre, d'appliquer la règle (presse-papiers, lecteurs) et d'enregistrer.</div>
+        <div><b>Même moteur des deux côtés</b>IronRDP (Rust), déjà dans Portunia, sert aussi au relais de Portunia Gate : pas de dépendance à FreeRDP ni à Windows sur la Gate.</div>
+        <div><b>Enregistrement léger</b>La Gate garde le flux graphique RDP tel quel (quelques Mo par heure), signé. Portunia le rejoue avec IronRDP : pas de vidéo calculée sur la Gate.</div>
+        <div><b>Rebond possible</b>Pour un serveur en mode rebond, Portunia Gate relaie seulement la connexion chiffrée : pas d'enregistrement, pas de coffre, comme <code>ssh -J</code>.</div>
       </div>
     </div>
 
     <!-- Fenêtre Portunia (écrans 2 à 6) -->
     <div class="win" data-screen="win" hidden>
       <nav class="side" aria-label="Barre latérale">
-        <div class="sec">Bastions</div>
-        <div class="bcard"><i class="led"></i><div><b>Heimdia · Production</b><span>julien · expire dans 7 h 52</span></div></div>
+        <div class="sec">Gates</div>
+        <div class="bcard"><i class="led"></i><div><b>Portunia Gate · Production</b><span>julien · expire dans 7 h 52</span></div></div>
         <div class="trow folder">▾ Linux</div>
         <div class="trow"><i class="dot"></i><span class="n">srv-web-01</span><span class="proto ssh">SSH</span><span class="mode vault">Coffre</span></div>
         <div class="trow"><i class="dot"></i><span class="n">srv-db-02</span><span class="proto ssh">SSH</span><span class="mode rec">Enregistré</span></div>
@@ -300,7 +300,7 @@ p { margin: 0; }
           <div data-sub="tree" class="wrap" style="max-width:none;gap:12px">
             <div class="card">
               <h3>Ce qui change dans la barre latérale</h3>
-              <p class="small muted">Un badge de protocole à côté du mode. Les serveurs Windows du bastion s'ouvrent dans un onglet Bureau à distance, comme une session RDP de Portunia, mais en passant par Heimdia.</p>
+              <p class="small muted">Un badge de protocole à côté du mode. Les serveurs Windows de la Gate s'ouvrent dans un onglet Bureau à distance, comme une session RDP de Portunia, mais en passant par Portunia Gate.</p>
               <div class="checks">
                 <div class="check"><i class="on">✓</i><span>Clic sur <b>srv-ad-01</b> : onglet Bureau à distance, connecté avec le compte du coffre, sans rien taper.</span></div>
                 <div class="check"><i class="on">✓</i><span>Clic droit : <b>Ouvrir</b>, <b>Ouvrir dans le client Windows (mstsc)</b> (voir les questions), <b>Copier l'adresse</b>.</span></div>
@@ -312,9 +312,9 @@ p { margin: 0; }
 
           <!-- 3. Session ouverte -->
           <div data-sub="open" class="wrap" style="max-width:none;gap:10px" hidden>
-            <div class="bar"><span class="recpill"><i></i>Enregistré par Heimdia</span><span>ACME\svc-admin (coffre) · 1920 × 1080 · presse-papiers : texte, vers le serveur seulement</span><span class="sp"></span><button class="btn sm">Ctrl+Alt+Suppr</button><button class="btn sm">Plein écran</button></div>
+            <div class="bar"><span class="recpill"><i></i>Enregistré par Portunia Gate</span><span>ACME\svc-admin (coffre) · 1920 × 1080 · presse-papiers : texte, vers le serveur seulement</span><span class="sp"></span><button class="btn sm">Ctrl+Alt+Suppr</button><button class="btn sm">Plein écran</button></div>
             <div class="desk" id="desk-open"></div>
-            <p class="small muted">Un fichier copié depuis le PC est refusé par la règle : Portunia affiche « Presse-papiers : copie de fichiers interdite par le bastion ».</p>
+            <p class="small muted">Un fichier copié depuis le PC est refusé par la règle : Portunia affiche « Presse-papiers : copie de fichiers interdite par la Gate ».</p>
           </div>
 
           <!-- 4. Ajouter un serveur -->
@@ -327,9 +327,9 @@ p { margin: 0; }
                 <label class="fld">Dossier<input class="input" id="f-dos" value="Windows"></label>
                 <label class="fld">Adresse<input class="input" id="f-host" value="10.0.3.10"></label>
                 <label class="fld">Port<input class="input" id="f-port" value="3389"></label>
-                <label class="fld">Mode<select class="input" id="f-mode"><option>Coffre : compte fourni par le bastion</option><option>Enregistré : l'utilisateur tape ses identifiants Windows</option><option>Rebond : relais de bout en bout, sans enregistrement</option></select></label>
+                <label class="fld">Mode<select class="input" id="f-mode"><option>Coffre : compte fourni par la Gate</option><option>Enregistré : l'utilisateur tape ses identifiants Windows</option><option>Rebond : relais de bout en bout, sans enregistrement</option></select></label>
                 <label class="fld">Compte Windows<input class="input" id="f-acc" value="ACME\svc-admin"><span class="h">DOMAINE\compte ou compte@domaine</span></label>
-                <label class="fld">Mot de passe du compte<input class="input" id="f-pw" type="password" value="xxxxxxxxxxxx"><span class="h">chiffré par le bastion, ne se relit jamais</span></label>
+                <label class="fld">Mot de passe du compte<input class="input" id="f-pw" type="password" value="xxxxxxxxxxxx"><span class="h">chiffré par la Gate, ne se relit jamais</span></label>
               </div>
               <div class="fp">Certificat du serveur Windows : vérifié à la première connexion (empreinte gardée), comme la clé d'un serveur SSH.</div>
               <div class="note">« Générer une clé et l'installer » n'existe pas en RDP : le coffre garde un mot de passe. La rotation automatique de ce mot de passe est une question à part.</div>
@@ -512,20 +512,20 @@ track.addEventListener('click', (e) => { const r = track.getBoundingClientRect()
 
 // ---------- Écrans ----------
 const TEXT = {
-  how: { t: 'Fonctionnement', p: ['Portunia se connecte au relais RDP de Heimdia avec un jeton à usage unique (comme pour SSH), sans code à retaper.', 'Heimdia vérifie la règle, ouvre la session Windows avec le compte du coffre, puis relaie l\'écran, le clavier, la souris et le presse-papiers.', 'Le flux est enregistré et signé à la fermeture, comme une session SSH.'], s: ['Le relais RDP de Heimdia écoute sur un port à lui (3390 dans la maquette) : une question porte sur ce choix.', 'IronRDP côté bastion : les rôles serveur (accepteur) et client existent dans le projet ; le relais complet est le plus gros du travail.'] },
-  tree: { t: 'Serveurs du bastion', p: ['Les serveurs Windows apparaissent sous le bastion avec un badge RDP.', 'Un clic ouvre un onglet Bureau à distance ; rien à taper en mode coffre.', 'Sans l\'extension Bureau à distance, ils restent visibles mais grisés.'], s: ['Une seule extension Heimdia : elle passe la main au moteur RDP de Portunia.'] },
-  open: { t: 'Session RDP par le bastion', p: ['Onglet Bureau à distance habituel (IronRDP), avec un bandeau « Enregistré par Heimdia ».', 'Le bandeau rappelle le compte utilisé et ce que la règle permet (presse-papiers, lecteurs).', 'Ce que la règle interdit est refusé par le bastion, et Portunia le dit.'], s: ['Le redimensionnement de l\'onglet suit si le serveur le permet (canal d\'affichage dynamique).'] },
-  target: { t: 'Ajouter un serveur Windows', p: ['Même fenêtre que pour SSH, avec le protocole en premier.', 'Mode coffre : compte Windows (DOMAINE\\compte) et son mot de passe, chiffrés par le bastion.', 'Certificat du serveur vérifié à la première connexion, puis gardé.'], s: ['Pas de clé à générer en RDP ; la rotation automatique du mot de passe est une question.'] },
+  how: { t: 'Fonctionnement', p: ['Portunia se connecte au relais RDP de Portunia Gate avec un jeton à usage unique (comme pour SSH), sans code à retaper.', 'Portunia Gate vérifie la règle, ouvre la session Windows avec le compte du coffre, puis relaie l\'écran, le clavier, la souris et le presse-papiers.', 'Le flux est enregistré et signé à la fermeture, comme une session SSH.'], s: ['Le relais RDP de Portunia Gate écoute sur un port à lui (3390 dans la maquette) : une question porte sur ce choix.', 'IronRDP côté Gate : les rôles serveur (accepteur) et client existent dans le projet ; le relais complet est le plus gros du travail.'] },
+  tree: { t: 'Serveurs de la Gate', p: ['Les serveurs Windows apparaissent sous la Gate avec un badge RDP.', 'Un clic ouvre un onglet Bureau à distance ; rien à taper en mode coffre.', 'Sans l\'extension Bureau à distance, ils restent visibles mais grisés.'], s: ['Une seule extension Portunia Gate : elle passe la main au moteur RDP de Portunia.'] },
+  open: { t: 'Session RDP par la Gate', p: ['Onglet Bureau à distance habituel (IronRDP), avec un bandeau « Enregistré par Portunia Gate ».', 'Le bandeau rappelle le compte utilisé et ce que la règle permet (presse-papiers, lecteurs).', 'Ce que la règle interdit est refusé par la Gate, et Portunia le dit.'], s: ['Le redimensionnement de l\'onglet suit si le serveur le permet (canal d\'affichage dynamique).'] },
+  target: { t: 'Ajouter un serveur Windows', p: ['Même fenêtre que pour SSH, avec le protocole en premier.', 'Mode coffre : compte Windows (DOMAINE\\compte) et son mot de passe, chiffrés par la Gate.', 'Certificat du serveur vérifié à la première connexion, puis gardé.'], s: ['Pas de clé à générer en RDP ; la rotation automatique du mot de passe est une question.'] },
   rule: { t: 'Options de la règle', p: ['Presse-papiers par sens et par type (texte, fichiers).', 'Redirections : lecteurs, imprimantes, son, cartes à puce.', 'Enregistrement : écran, frappe, texte copié.'], s: ['Par défaut : texte dans les deux sens, aucune redirection, écran et frappe enregistrés (à confirmer).'] },
   replay: { t: 'Relecture d\'une session RDP', p: ['Le même lecteur que pour SSH : barre de temps, pauses sautées, vitesse, plein écran, filigrane.', 'Une bande d\'images au-dessus de la barre aide à repérer les moments.', 'Sous-titres de la frappe, et indicateur des clics.', 'Panneau Événements : connexion, frappe, presse-papiers, refus de la règle ; un clic y saute.'], s: ['La recherche de texte affiché (comme en SSH) n\'existe pas pour une image : la recherche porte sur la frappe et les événements (voir questions).', 'Vidéo MP4 à la demande, comme décidé pour SSH.'] },
 };
 const explain = document.getElementById('explain');
 const TABS = {
   tree: [['srv-web-01', false]],
-  open: [['srv-web-01', false], ['srv-ad-01 · Heimdia', true]],
-  target: [['srv-ad-01 · Heimdia', false], ['Admin · Heimdia', true]],
-  rule: [['srv-ad-01 · Heimdia', false], ['Admin · Heimdia', true]],
-  replay: [['Audit · Heimdia', false], ['▶ srv-ad-01 · 29/10 14:02', true]],
+  open: [['srv-web-01', false], ['srv-ad-01 · Portunia Gate', true]],
+  target: [['srv-ad-01 · Portunia Gate', false], ['Admin · Portunia Gate', true]],
+  rule: [['srv-ad-01 · Portunia Gate', false], ['Admin · Portunia Gate', true]],
+  replay: [['Audit · Portunia Gate', false], ['▶ srv-ad-01 · 29/10 14:02', true]],
 };
 let extOff = false;
 function show(s) {
@@ -571,13 +571,13 @@ if (location.hash === '#questions') tab('q');
 // ---------- Questions ----------
 const SECTIONS = [
   { title: 'Connexion', qs: [
-    { id: 'port', t: 'Par où passe la connexion RDP vers le bastion ?', why: 'Un port RDP dédié est simple et standard. Le faire passer dans la connexion SSH du bastion (port 2222) évite d\'ouvrir un port de plus, mais ne marche qu\'avec Portunia.', type: 'one', o: ['Port RDP dédié sur le bastion (3390 par défaut)', 'Dans la connexion SSH du bastion, sans nouveau port', 'Les deux'], rec: 0 },
-    { id: 'clients', t: 'Quels clients peuvent passer par le bastion en RDP ?', why: 'Le client Windows (mstsc) ne sait pas demander un code TOTP : il faudrait un mot de passe à usage unique généré dans Portunia (ou une page web) et collé dans mstsc.', type: 'one', o: ['Portunia seulement', 'Portunia, et mstsc / Remmina avec un mot de passe à usage unique', 'Plus tard pour les autres clients'], rec: 2 },
-    { id: 'modes', t: 'Modes proposés pour un serveur RDP', why: 'Coffre : compte fourni par le bastion. Enregistré : l\'utilisateur tape ses identifiants Windows (relayés à la connexion, jamais gardés). Rebond : relais chiffré de bout en bout, sans enregistrement.', type: 'many', o: ['Coffre', 'Enregistré', 'Rebond'], rec: [0, 1, 2] },
+    { id: 'port', t: 'Par où passe la connexion RDP vers la Gate ?', why: 'Un port RDP dédié est simple et standard. Le faire passer dans la connexion SSH de la Gate (port 2222) évite d\'ouvrir un port de plus, mais ne marche qu\'avec Portunia.', type: 'one', o: ['Port RDP dédié sur la Gate (3390 par défaut)', 'Dans la connexion SSH de la Gate, sans nouveau port', 'Les deux'], rec: 0 },
+    { id: 'clients', t: 'Quels clients peuvent passer par la Gate en RDP ?', why: 'Le client Windows (mstsc) ne sait pas demander un code TOTP : il faudrait un mot de passe à usage unique généré dans Portunia (ou une page web) et collé dans mstsc.', type: 'one', o: ['Portunia seulement', 'Portunia, et mstsc / Remmina avec un mot de passe à usage unique', 'Plus tard pour les autres clients'], rec: 2 },
+    { id: 'modes', t: 'Modes proposés pour un serveur RDP', why: 'Coffre : compte fourni par la Gate. Enregistré : l\'utilisateur tape ses identifiants Windows (relayés à la connexion, jamais gardés). Rebond : relais chiffré de bout en bout, sans enregistrement.', type: 'many', o: ['Coffre', 'Enregistré', 'Rebond'], rec: [0, 1, 2] },
     { id: 'taille', t: 'Taille de l\'écran de la session', why: 'Suivre l\'onglet est le plus agréable ; une taille fixe donne des enregistrements homogènes.', type: 'one', o: ['Suit la taille de l\'onglet (redimensionnement dynamique)', 'Taille fixe choisie dans la règle'], rec: 0 },
   ]},
   { title: 'Coffre et serveurs', qs: [
-    { id: 'rotation', t: 'Rotation du mot de passe des comptes Windows du coffre ?', why: 'Le bastion changerait lui-même le mot de passe (après chaque session ou chaque semaine), pour qu\'il ne serve plus s\'il a fuité. Demande un compte avec le droit de changer les mots de passe (local ou Active Directory).', type: 'one', o: ['Plus tard', 'Oui, réglable par serveur'], rec: 0 },
+    { id: 'rotation', t: 'Rotation du mot de passe des comptes Windows du coffre ?', why: 'La Gate changerait lui-même le mot de passe (après chaque session ou chaque semaine), pour qu\'il ne serve plus s\'il a fuité. Demande un compte avec le droit de changer les mots de passe (local ou Active Directory).', type: 'one', o: ['Plus tard', 'Oui, réglable par serveur'], rec: 0 },
     { id: 'cert', t: 'Certificat du serveur Windows', why: 'Les serveurs Windows ont souvent un certificat auto-signé. On peut faire comme SSH : empreinte gardée à la première connexion, alerte si elle change.', type: 'one', o: ['Empreinte gardée à la 1ʳᵉ connexion, connexion bloquée si elle change', 'Certificat vérifié par l\'autorité de l\'entreprise', 'Les deux, au choix par serveur'], rec: 0 },
   ]},
   { title: 'Règles', qs: [
@@ -585,14 +585,14 @@ const SECTIONS = [
     { id: 'redir', t: 'Redirections à proposer dans les règles', why: 'Chaque redirection est un canal en plus à relayer et à contrôler. Lecteurs et USB permettent de sortir des fichiers.', type: 'many', o: ['Lecteurs du PC', 'Imprimantes', 'Son', 'Cartes à puce / USB'], rec: [2] },
   ]},
   { title: 'Enregistrement et relecture', qs: [
-    { id: 'format', t: 'Format de l\'enregistrement', why: 'Garder le flux graphique RDP tel quel est léger (quelques Mo par heure) et exact ; Portunia le rejoue avec IronRDP. Calculer une vidéo sur le bastion coûte beaucoup de processeur.', type: 'one', o: ['Flux RDP rejoué par Portunia, vidéo MP4 à la demande', 'Vidéo calculée par le bastion'], rec: 0 },
+    { id: 'format', t: 'Format de l\'enregistrement', why: 'Garder le flux graphique RDP tel quel est léger (quelques Mo par heure) et exact ; Portunia le rejoue avec IronRDP. Calculer une vidéo sur la Gate coûte beaucoup de processeur.', type: 'one', o: ['Flux RDP rejoué par Portunia, vidéo MP4 à la demande', 'Vidéo calculée par la Gate'], rec: 0 },
     { id: 'frappe', t: 'Frappe en RDP', why: 'En RDP, impossible de savoir si une touche part dans un champ mot de passe : la frappe enregistrée contiendra les mots de passe Windows tapés.', type: 'one', o: ['Au choix dans la règle, désactivée par défaut', 'Au choix dans la règle, activée par défaut', 'Jamais'], rec: 0 },
     { id: 'pptexte', t: 'Garder le texte copié dans le presse-papiers ?', why: 'Utile en cas d\'incident (qu\'est-ce qui est sorti ?), mais peut contenir des données sensibles.', type: 'one', o: ['Seulement la taille et le sens', 'Le contenu aussi, au choix dans la règle'], rec: 0 },
     { id: 'recherche', t: 'Recherche dans les sessions RDP', why: 'Le texte affiché à l\'écran n\'existe pas en RDP (ce sont des images). Lire l\'écran (OCR) est possible mais lourd.', type: 'one', o: ['Frappe et événements seulement', 'Plus tard : texte lu à l\'écran (OCR)'], rec: 0 },
     { id: 'direct', t: 'Vue en direct et coupure', why: 'Prévue pour SSH dans la phase 2 ; même lecteur pour RDP.', type: 'one', o: ['Avec la phase 2 de SSH', 'Après RDP'], rec: 0 },
   ]},
   { title: 'Offre', qs: [
-    { id: 'offre', t: 'RDP dans quelle offre de Heimdia ?', why: 'RDP intéresse surtout les parcs Windows et les prestataires ; c\'est un argument pour une offre supérieure.', type: 'one', o: ['Dans toutes les offres', 'Offre supérieure seulement', 'À décider plus tard'], rec: 2 },
+    { id: 'offre', t: 'RDP dans quelle offre de Portunia Gate ?', why: 'RDP intéresse surtout les parcs Windows et les prestataires ; c\'est un argument pour une offre supérieure.', type: 'one', o: ['Dans toutes les offres', 'Offre supérieure seulement', 'À décider plus tard'], rec: 2 },
   ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.qs);
@@ -646,7 +646,7 @@ function progress() {
 }
 function changed() {
   progress();
-  try { localStorage.setItem('heimdia-rdp', JSON.stringify(answers)); } catch {}
+  try { localStorage.setItem('portunia-gate-rdp', JSON.stringify(answers)); } catch {}
   clearTimeout(saveTimer);
   if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
   setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
@@ -656,7 +656,7 @@ async function save() {
   catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
 }
 function summary() {
-  const lines = ['Réponses Heimdia : RDP']; let n = 0;
+  const lines = ['Réponses Portunia Gate : RDP']; let n = 0;
   for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
   return lines.join('\n');
 }
@@ -665,7 +665,7 @@ document.getElementById('copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
   catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
 });
-try { answers = JSON.parse(localStorage.getItem('heimdia-rdp') || '{}') || {}; } catch { answers = {}; }
+try { answers = JSON.parse(localStorage.getItem('portunia-gate-rdp') || '{}') || {}; } catch { answers = {}; }
 render();
 (async () => {
   const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;

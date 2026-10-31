@@ -67,8 +67,8 @@ pub enum Role {
 impl Role {
     fn label(self) -> &'static [u8] {
         match self {
-            Role::Agent => b"portunia-assist/agent",
-            Role::Helper => b"portunia-assist/helper",
+            Role::Agent => b"portunia-assistance/agent",
+            Role::Helper => b"portunia-assistance/helper",
         }
     }
     fn other(self) -> Role {

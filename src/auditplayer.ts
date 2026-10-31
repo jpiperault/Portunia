@@ -1,4 +1,4 @@
-// Lecteur d'audit des sessions Heimdia : comme une vidéo, avec la frappe en sous-titres,
+// Lecteur d'audit des sessions Portunia Gate : comme une vidéo, avec la frappe en sous-titres,
 // les pauses sautées, des repères sur la barre de temps et la liste des lignes tapées.
 // Chargé seulement à l'ouverture d'un enregistrement (xterm).
 import { Terminal } from '@xterm/xterm';
@@ -81,7 +81,7 @@ function parse(cast: string) {
   return { cols, rows, events };
 }
 
-/** Lignes tapées (« i », et « x » pour les saisies masquées par le bastion). */
+/** Lignes tapées (« i », et « x » pour les saisies masquées par la Gate). */
 function typedLines(events: Ev[]): Line[] {
   const lines: Line[] = [];
   let cur: Line | null = null;
@@ -213,7 +213,7 @@ export class AuditPlayer {
       h('h2', {}, s.serveur, ' ', s.mode ? h('span', { class: `badge mode-${s.mode}` }, s.mode === 'enregistre' ? t('recorded', 'enregistré') : s.mode) : null),
       h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} · ${fmt(this.duration)}${s.fin ? '' : ' · en cours'}`),
       seal, actions);
-    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Masked input revealed: this replay is written to the bastion\'s log.', 'Saisies masquées révélées : cette relecture est inscrite au journal de la Gate.')));
+    if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Masked input revealed: this replay is written to the gate\'s log.', 'Saisies masquées révélées : cette relecture est inscrite au journal de la Gate.')));
 
     // Écran : terminal, filigrane, sous-titres.
     this.screen.append(
@@ -303,7 +303,7 @@ export class AuditPlayer {
     const s = r.session;
     const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : t('ongoing', 'en cours'));
     const row = (k: string, v: Node | string) => [h('dt', {}, k), h('dd', {}, v)];
-    const sig = { verifiee: t('checked with the bastion\'s key', 'vérifiée avec la clé de la Gate'), alteree: t('DOES NOT MATCH: file modified', 'NE CORRESPOND PAS : fichier modifié'), absente: t('not added yet (session ongoing or interrupted)', 'pas encore posée (session en cours ou interrompue)') }[r.signature];
+    const sig = { verifiee: t('checked with the gate\'s key', 'vérifiée avec la clé de la Gate'), alteree: t('DOES NOT MATCH: file modified', 'NE CORRESPOND PAS : fichier modifié'), absente: t('not added yet (session ongoing or interrupted)', 'pas encore posée (session en cours ou interrompue)') }[r.signature];
     return h('div', {},
       h('dl', { class: 'ap-kv' },
         ...row(t('Account', 'Compte'), s.compte),

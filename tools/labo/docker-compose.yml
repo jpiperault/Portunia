@@ -19,25 +19,25 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks: [public]
 
-  # Bastion : seul point d'entrée vers le réseau interne.
-  bastion:
+  # Gate : seul point d'entrée vers le réseau interne.
+  gate:
     build: ./serveur
-    hostname: bastion
+    hostname: gate
     ports:
       - "127.0.0.1:2202:22"
     volumes:
       - ./cles:/cles:ro
     networks: [public, interne]
 
-  # Second bastion, joignable seulement depuis le premier (rebonds enchaînés).
-  bastion2:
+  # Second gate, joignable seulement depuis le premier (rebonds enchaînés).
+  gate2:
     build: ./serveur
-    hostname: bastion2
+    hostname: gate2
     volumes:
       - ./cles:/cles:ro
     networks: [interne]
 
-  # Serveur interne : aucun port publié, joignable seulement par les bastions.
+  # Serveur interne : aucun port publié, joignable seulement par les gates.
   interne:
     build: ./serveur
     hostname: interne

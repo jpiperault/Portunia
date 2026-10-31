@@ -1,4 +1,4 @@
-//! Liaison avec le dépanneur par le relais du bastion : place et code, échange de clés,
+//! Liaison avec le dépanneur par le relais de la Gate : place et code, échange de clés,
 //! accord de la personne, puis session RDP dans le canal chiffré de bout en bout.
 
 use anyhow::{anyhow, bail, Result};

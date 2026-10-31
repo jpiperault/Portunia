@@ -283,7 +283,7 @@ impl Sink for QuietSink {
     fn closed(&self, _reason: Option<String>) {}
 }
 
-/// Ce que seule la session d'un terminal reçoit (pas les bastions ni les commandes multiples).
+/// Ce que seule la session d'un terminal reçoit (pas les Gates ni les commandes multiples).
 struct Extras {
     remote: RemoteForwards,
     /// Adresse TCP du serveur X de ce PC.
@@ -304,11 +304,11 @@ fn x11_display(ctx: &ConnectContext) -> Result<Option<String>> {
 /// Établissement de la connexion SSH (empreinte d'un nouveau serveur à confirmer comprise).
 const HANDSHAKE: Duration = Duration::from_secs(330);
 
-/// Rebonds enchaînés au plus (bastion → bastion → serveur).
+/// Rebonds enchaînés au plus (Gate → Gate → serveur).
 const MAX_HOPS: usize = 3;
 
-/// Tunnel vers `host:port` à travers le serveur de rebond `jumpHost` des valeurs (bastion
-/// Heimdia, avec son jeton), pour un autre moteur que SSH : Bureau à distance.
+/// Tunnel vers `host:port` à travers le serveur de rebond `jumpHost` des valeurs (Gate
+/// Portunia Gate, avec son jeton), pour un autre moteur que SSH : Bureau à distance.
 /// Renvoie le port local, sur 127.0.0.1, qui accepte une seule connexion (celle du moteur).
 pub fn local_tunnel(ctx: &ConnectContext, host: &str, port: u16) -> Result<u16> {
     let Some(Value::Object(jump)) = ctx.values.get("jumpHost") else {
@@ -319,23 +319,23 @@ pub fn local_tunnel(ctx: &ConnectContext, host: &str, port: u16) -> Result<u16> 
     let via = hop.str("host").unwrap_or_default();
     let host = host.to_string();
     tauri::async_runtime::block_on(async move {
-        let (bastion, earlier) = session(&hop, 1, None).await.with_context(|| format!("Serveur de rebond {via}"))?;
+        let (gate, earlier) = session(&hop, 1, None).await.with_context(|| format!("Serveur de rebond {via}"))?;
         // Canal ouvert tout de suite : un refus (règle, serveur injoignable) s'affiche à l'ouverture.
-        let channel = bastion
+        let channel = gate
             .channel_open_direct_tcpip(host.clone(), port as u32, "127.0.0.1", 0)
             .await
             .with_context(|| format!("{via} n'a pas pu joindre {host}:{port}"))?;
         let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
         let local = listener.local_addr()?.port();
         tauri::async_runtime::spawn(async move {
-            // Les connexions SSH (bastion et rebonds précédents) vivent autant que le tunnel.
-            let _hops = (earlier, &bastion);
+            // Les connexions SSH (Gate et rebonds précédents) vivent autant que le tunnel.
+            let _hops = (earlier, &gate);
             if let Ok(Ok((mut socket, _))) = tokio::time::timeout(Duration::from_secs(60), listener.accept()).await {
                 let _ = socket.set_nodelay(true);
                 let mut stream = channel.into_stream();
                 let _ = tokio::io::copy_bidirectional(&mut socket, &mut stream).await;
             }
-            let _ = bastion.disconnect(Disconnect::ByApplication, "", "fr").await;
+            let _ = gate.disconnect(Disconnect::ByApplication, "", "fr").await;
         });
         Ok(local)
     })
@@ -376,16 +376,16 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
                 let mut hop = ctx.clone();
                 hop.values = jump.clone().into_iter().collect();
                 let via = hop.str("host").unwrap_or_default();
-                let (bastion, earlier) = session(&hop, depth + 1, None)
+                let (gate, earlier) = session(&hop, depth + 1, None)
                     .await
                     .with_context(|| format!("Serveur de rebond {via}"))?;
                 ctx.sink.data(t!(format!("\x1b[90m[Portunia] Jump through {via} to {host}:{port}\x1b[0m\r\n"), format!("\x1b[90m[Portunia] Rebond par {via} vers {host}:{port}\x1b[0m\r\n")).as_bytes());
-                let tunnel = bastion
+                let tunnel = gate
                     .channel_open_direct_tcpip(host.clone(), port as u32, "127.0.0.1", 0)
                     .await
                     .with_context(|| format!("{via} n'a pas pu joindre {host}:{port}"))?;
                 hops = earlier;
-                hops.push(bastion);
+                hops.push(gate);
                 tokio::time::timeout(HANDSHAKE, client::connect_stream(config, tunnel.into_stream(), handler)).await
             }
             // TCP : 15 s au plus. Poignée de main : plus longue, l'utilisateur peut avoir une empreinte à vérifier.
@@ -805,7 +805,7 @@ impl client::Handler for Handler {
     }
 }
 
-/// Mémorise une empreinte déjà vérifiée par un autre moyen (bastion Heimdia, dont l'API
+/// Mémorise une empreinte déjà vérifiée par un autre moyen (Gate, dont l'API
 /// donne l'empreinte de son serveur SSH) : pas de question à la première connexion.
 /// Une empreinte déjà connue n'est jamais remplacée.
 pub fn remember_host(data_dir: &Path, host_id: &str, fingerprint: &str) {

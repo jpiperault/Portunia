@@ -10,7 +10,7 @@ pub fn is_fr() -> bool {
     FRENCH.load(Ordering::Relaxed)
 }
 
-/// Code envoyé aux bastions Heimdia (en-tête Accept-Language).
+/// Code envoyé aux Gates (en-tête Accept-Language).
 pub fn code() -> &'static str {
     if is_fr() {
         "fr"

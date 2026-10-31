@@ -39,7 +39,7 @@ export function parseQuick(input: string): QuickTarget | null {
   const text = input.trim();
   if (!text) return null;
 
-  // « ssh -J bastion user@hôte » (ou -J à la fin) : serveur de rebond, comme OpenSSH.
+  // « ssh -J Gate user@hôte » (ou -J à la fin) : serveur de rebond, comme OpenSSH.
   const before = text.match(/^(?:ssh\s+)?-J\s+(\S+)\s+(\S+)$/i);
   const after = text.match(/^ssh\s+(\S+)\s+-J\s+(\S+)$/i);
   if (before || after) {

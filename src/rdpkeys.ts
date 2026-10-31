@@ -1,4 +1,4 @@
-// Frappe d'une session Bureau à distance : le bastion enregistre des codes de touche matériels ;
+// Frappe d'une session Bureau à distance : la Gate enregistre des codes de touche matériels ;
 // on en tire le texte selon la disposition du clavier, en appliquant accents et effacements.
 import { LANG, t } from './i18n';
 import type { RdpEvent } from './rdpplayer';

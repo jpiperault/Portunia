@@ -1,8 +1,8 @@
-<title>Relecture des sessions Heimdia</title>
+<title>Relecture des sessions Portunia Gate</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Maquette fidèle à Portunia (tokens de src/styles.css, sombre par défaut) + questionnaire.
-   Mise en page : onglets Maquette / Questions ; la maquette montre l'onglet d'administration du bastion. */
+   Mise en page : onglets Maquette / Questions ; la maquette montre l'onglet d'administration de la Gate. */
 :root {
   --bg: #16171b; --work: #1c1d22; --panel: #1e1f24; --field: #16171b; --hover: #23252b;
   --line: #2a2c33; --line-soft: #2e3037; --line-strong: #34363d; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
@@ -203,9 +203,9 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
 <div class="wrap">
   <div class="intro">
-    <p class="label">Maquette · Heimdia, étape 3 · audit</p>
+    <p class="label">Maquette · Portunia Gate, étape 3 · audit</p>
     <h1>Relire une session comme une vidéo, avec la frappe en sous-titres</h1>
-    <p>Lecteur réservé aux rôles auditeur et administrateur, dans l'onglet d'administration du bastion. Le lecteur ci-dessous fonctionne : lancez la lecture, cliquez sur la barre ou sur une commande. L'onglet Questions rassemble les choix à faire avant de coder ; les réponses s'enregistrent toutes seules.</p>
+    <p>Lecteur réservé aux rôles auditeur et administrateur, dans l'onglet d'administration de la Gate. Le lecteur ci-dessous fonctionne : lancez la lecture, cliquez sur la barre ou sur une commande. L'onglet Questions rassemble les choix à faire avant de coder ; les réponses s'enregistrent toutes seules.</p>
   </div>
 
   <div class="maintabs" role="tablist">
@@ -222,7 +222,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
     <div class="win">
       <nav class="side" aria-label="Administration">
-        <div class="sec">Heimdia · Production</div>
+        <div class="sec">Portunia Gate · Production</div>
         <div class="nrow">Serveurs et coffre <span class="c">24</span></div>
         <div class="nrow">Comptes <span class="c">12</span></div>
         <div class="nrow">Groupes <span class="c">4</span></div>
@@ -234,12 +234,12 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
       <div class="main">
         <div class="tabs">
           <div class="tab">srv-web-01</div>
-          <div class="tab on" id="wintab">Administrer · Heimdia</div>
+          <div class="tab on" id="wintab">Administrer · Portunia Gate</div>
         </div>
         <div class="content">
           <!-- 1. Liste -->
           <div data-screen="list" class="wrap" style="max-width:none;gap:12px">
-            <div class="banner"><span><b>Relecture réservée aux auditeurs et aux administrateurs.</b> Chaque relecture est inscrite au journal du bastion.</span></div>
+            <div class="banner"><span><b>Relecture réservée aux auditeurs et aux administrateurs.</b> Chaque relecture est inscrite au journal de la Gate.</span></div>
             <div class="filters">
               <input class="input grow" id="f-text" value="rm -rf" aria-label="Rechercher dans la frappe et l'écran">
               <select class="input" id="f-who" aria-label="Compte"><option>Tous les comptes</option><option>julien</option><option>presta-acme</option></select>
@@ -267,7 +267,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
             <div class="ph">
               <h2>srv-web-01 <span class="pill vault">coffre</span></h2>
               <span class="meta" id="pmeta">julien · compte deploy · 29/10/2026 14:02:11 · 3 min 24</span>
-              <span class="seal" title="Empreinte SHA-256 du fichier vérifiée avec la clé publique du bastion">✓ Signature vérifiée</span>
+              <span class="seal" title="Empreinte SHA-256 du fichier vérifiée avec la clé publique de la Gate">✓ Signature vérifiée</span>
               <div class="right"><button class="btn sm">Exporter</button><button class="btn sm">Copier le lien</button></div>
             </div>
             <div class="player">
@@ -310,14 +310,14 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
                   <dl class="kv">
                     <dt>Compte</dt><dd>julien (Julien P.)</dd>
                     <dt>Serveur</dt><dd>srv-web-01 · 10.0.2.5:22</dd>
-                    <dt>Mode</dt><dd>coffre, compte <code>deploy</code> fourni par le bastion</dd>
+                    <dt>Mode</dt><dd>coffre, compte <code>deploy</code> fourni par la Gate</dd>
                     <dt>Depuis</dt><dd>Portunia 0.42 · 10.0.0.4</dd>
                     <dt>Règle</dt><dd>Exploitation web (frappe enregistrée)</dd>
                     <dt>Début</dt><dd>29/10/2026 14:02:11</dd>
                     <dt>Fin</dt><dd>29/10/2026 14:05:35 · déconnexion normale</dd>
                     <dt>Fichier</dt><dd>48 Ko · <code>2026/10/9f3c…e1.cast</code></dd>
                     <dt>Empreinte</dt><dd><code>SHA-256 7A:1F:C2:…:09:B4</code></dd>
-                    <dt>Signature</dt><dd style="color:var(--ok)">vérifiée avec la clé du bastion</dd>
+                    <dt>Signature</dt><dd style="color:var(--ok)">vérifiée avec la clé de la Gate</dd>
                   </dl>
                   <div class="note">Relu 2 fois : claire (29/10 18:40), julien (29/10 15:10).</div>
                 </div>
@@ -354,7 +354,7 @@ const PROMPT = '\u0001deploy@srv-web-01:~$\u0002 ';
 const out = (d, dt = 0) => { T += dt; EV.push({ t: T, k: 'o', d }); };
 const type = (str, o = {}) => { for (const ch of str) { T += (0.08 + rnd() * 0.14); EV.push({ t: T, k: 'i', d: ch, s: !!o.secret }); if (!o.secret) EV.push({ t: T + 0.01, k: 'o', d: ch }); } };
 const key = (d, echo, dt = 0.35) => { T += dt; EV.push({ t: T, k: 'i', d }); if (echo != null) EV.push({ t: T + 0.01, k: 'o', d: echo }); };
-out('\u0003Heimdia : session enregistrée (frappe comprise).\u0004\n');
+out('\u0003Portunia Gate : session enregistrée (frappe comprise).\u0004\n');
 out('Linux srv-web-01 6.12.0-amd64 Debian GNU/Linux 13\n\u0003Dernière connexion : mar. 28 oct. 17:42 depuis 10.0.0.4\u0004\n', 0.3);
 out(PROMPT, 0.3);
 T += 1.4; type('sudo systemctl restart nginx'); key('\r', '\n');
@@ -548,7 +548,7 @@ document.getElementById('st-i').addEventListener('click', () => sideTab(false));
 // ---------- Écrans ----------
 const TEXT = {
   list: { t: 'Liste des sessions', p: ['Nouvel écran « Sessions » de l\'administration : filtres par compte, serveur et période.', 'La recherche porte sur la frappe et sur le texte affiché. « Trouvé » montre l\'extrait et son moment ; « Relire » démarre juste avant.', 'Les sessions en mode rebond ne sont pas enregistrées : elles apparaissent sans bouton.', 'Une session en cours se signale ; la regarder en direct est une question à trancher.'], s: ['Visible pour les rôles auditeur et administrateur seulement. Un compte « utilisateur » ne voit pas l\'entrée Sessions.', 'Chaque ouverture du lecteur est inscrite au journal : « enregistrement.consulte ».'] },
-  player: { t: 'Lecteur', p: ['Comme une vidéo : lecture, pause (barre d\'espace), ±10 s, vitesse 1× à 8×, plein écran.', 'Les pauses de plus de 5 s sont hachurées sur la barre et sautées pendant la lecture.', 'Sous-titres « CC Frappe » : ce que la personne tape, touches spéciales comprises (Entrée, Tab, ⌫, Ctrl+C).', 'Une saisie qui ne s\'affiche pas à l\'écran (mot de passe sudo) est remplacée par des points.', 'Repères sur la barre : chaque commande, en orange sudo et saisies masquées, en rouge les commandes sensibles.', 'Le panneau Frappe liste les lignes tapées : un clic y saute.'], s: ['Signature du fichier vérifiée à l\'ouverture ; un fichier modifié affiche un bandeau rouge et reste lisible.', 'Filigrane avec le nom de la personne qui regarde (dissuade les captures).', 'Le fichier est lu depuis le bastion, sans copie sur le PC (sauf « Exporter »).'] },
+  player: { t: 'Lecteur', p: ['Comme une vidéo : lecture, pause (barre d\'espace), ±10 s, vitesse 1× à 8×, plein écran.', 'Les pauses de plus de 5 s sont hachurées sur la barre et sautées pendant la lecture.', 'Sous-titres « CC Frappe » : ce que la personne tape, touches spéciales comprises (Entrée, Tab, ⌫, Ctrl+C).', 'Une saisie qui ne s\'affiche pas à l\'écran (mot de passe sudo) est remplacée par des points.', 'Repères sur la barre : chaque commande, en orange sudo et saisies masquées, en rouge les commandes sensibles.', 'Le panneau Frappe liste les lignes tapées : un clic y saute.'], s: ['Signature du fichier vérifiée à l\'ouverture ; un fichier modifié affiche un bandeau rouge et reste lisible.', 'Filigrane avec le nom de la personne qui regarde (dissuade les captures).', 'Le fichier est lu depuis la Gate, sans copie sur le PC (sauf « Exporter »).'] },
   nokeys: { t: 'Session sans frappe enregistrée', p: ['La règle n\'enregistrait que l\'écran : pas de sous-titres, le bouton CC est grisé.', 'Le panneau liste les commandes repérées à l\'écran (le texte qui suit l\'invite). Les touches effacées, Ctrl+C et les saisies masquées n\'y figurent pas.'], s: ['Activer la frappe se fait dans la règle (case « Enregistrer la frappe »).'] },
 };
 const explain = document.getElementById('explain');
@@ -556,7 +556,7 @@ function show(s) {
   document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
   document.querySelector('[data-screen="list"]').hidden = s !== 'list';
   document.querySelector('[data-screen="player"]').hidden = s === 'list';
-  document.getElementById('wintab').textContent = s === 'list' ? 'Administrer · Heimdia' : (s === 'nokeys' ? '▶ srv-db-02 · 29/10 11:37' : '▶ srv-web-01 · 29/10 14:02');
+  document.getElementById('wintab').textContent = s === 'list' ? 'Administrer · Portunia Gate' : (s === 'nokeys' ? '▶ srv-db-02 · 29/10 11:37' : '▶ srv-web-01 · 29/10 14:02');
   state.nokeys = s === 'nokeys';
   const cc = document.getElementById('b-cc'); cc.disabled = state.nokeys; cc.title = state.nokeys ? 'Frappe non enregistrée pour cette session' : 'Sous-titres : la frappe';
   const note = document.getElementById('knote'); note.hidden = !state.nokeys;
@@ -597,18 +597,18 @@ const SECTIONS = [
     { id: 'qui', t: 'Qui peut relire les sessions ?', why: 'Un périmètre par groupe de serveurs sert surtout aux prestataires et à la console maître (étape 5).', type: 'one', o: ['Auditeurs et administrateurs, toutes les sessions', 'Auditeurs et administrateurs, limités à certains groupes de serveurs', 'Administrateurs seulement'], rec: 0 },
     { id: 'journal', t: 'Inscrire chaque relecture au journal d\'audit ?', why: 'Qui a regardé quelle session, et quand. Les enregistrements contiennent parfois des données sensibles.', type: 'one', o: ['Oui', 'Non'], rec: 0 },
     { id: 'filigrane', t: 'Filigrane avec le nom de la personne qui regarde ?', why: 'Dissuade les captures d\'écran ; n\'apparaît pas dans un export .cast.', type: 'one', o: ['Oui', 'Non'], rec: 0 },
-    { id: 'edition', t: 'Dans quelle édition de Portunia ?', why: 'L\'administration du bastion est déjà réservée à Équipes.', type: 'one', o: ['Équipes, comme l\'administration', 'Toutes les éditions pour les rôles auditeur et administrateur'], rec: 0 },
+    { id: 'edition', t: 'Dans quelle édition de Portunia ?', why: 'L\'administration de la Gate est déjà réservée à Équipes.', type: 'one', o: ['Équipes, comme l\'administration', 'Toutes les éditions pour les rôles auditeur et administrateur'], rec: 0 },
   ]},
   { title: 'Frappe en sous-titres', qs: [
-    { id: 'masque', t: 'Saisies sans écho (mot de passe tapé à une invite) : que montrer ?', why: 'Heimdia voit qu\'une frappe n\'est pas réaffichée à l\'écran : c\'est presque toujours un mot de passe.', type: 'one', o: ['Toujours masquées (•••), pour tout le monde', 'Masquées, révélables par un administrateur (inscrit au journal)', 'Affichées en clair'], rec: 0 },
-    { id: 'masque-ou', t: 'Où masquer ces saisies ?', why: 'Masquer dès l\'enregistrement : le mot de passe n\'est jamais écrit sur le disque du bastion, mais il ne pourra jamais être révélé (incompatible avec la 2ᵉ option ci-dessus).', type: 'one', o: ['Dès l\'enregistrement', 'À l\'affichage seulement'], rec: 0 },
+    { id: 'masque', t: 'Saisies sans écho (mot de passe tapé à une invite) : que montrer ?', why: 'Portunia Gate voit qu\'une frappe n\'est pas réaffichée à l\'écran : c\'est presque toujours un mot de passe.', type: 'one', o: ['Toujours masquées (•••), pour tout le monde', 'Masquées, révélables par un administrateur (inscrit au journal)', 'Affichées en clair'], rec: 0 },
+    { id: 'masque-ou', t: 'Où masquer ces saisies ?', why: 'Masquer dès l\'enregistrement : le mot de passe n\'est jamais écrit sur le disque de la Gate, mais il ne pourra jamais être révélé (incompatible avec la 2ᵉ option ci-dessus).', type: 'one', o: ['Dès l\'enregistrement', 'À l\'affichage seulement'], rec: 0 },
     { id: 'style', t: 'Présentation des sous-titres', why: 'En bas de l\'image comme une vidéo, ils peuvent cacher les dernières lignes ; une barre sous le terminal ne cache rien mais éloigne le regard.', type: 'one', o: ['En bas de l\'image, comme une vidéo', 'Barre sous le terminal', 'Les deux, au choix dans le lecteur'], rec: 0 },
     { id: 'sans', t: 'Sessions enregistrées sans la frappe', why: 'On peut repérer les commandes à l\'écran (texte après l\'invite), sans les touches effacées ni les saisies masquées.', type: 'one', o: ['Commandes repérées à l\'écran dans le panneau, pas de sous-titres', 'Commandes repérées aussi en sous-titres', 'Rien'], rec: 0 },
     { id: 'defaut', t: 'Enregistrer la frappe par défaut dans une nouvelle règle ?', why: 'Aujourd\'hui la case est décochée par défaut.', type: 'one', o: ['Non, au choix de l\'administrateur', 'Oui'], rec: 0 },
   ]},
   { title: 'Lecteur', qs: [
     { id: 'pauses', t: 'Pauses', why: 'Une session de 2 h contient souvent 1 h 30 sans rien.', type: 'one', o: ['Sauter les pauses de plus de 5 s par défaut', 'Lecture en temps réel par défaut'], rec: 0 },
-    { id: 'reperes', t: 'Repères sur la barre de temps', why: 'Les commandes sensibles viendraient d\'une liste réglable dans les réglages du bastion.', type: 'many', o: ['Chaque commande', 'Commandes sensibles (sudo, rm -rf, liste réglable)', 'Ctrl+C et erreurs affichées', 'Changements de taille de fenêtre'], rec: [0, 1, 2] },
+    { id: 'reperes', t: 'Repères sur la barre de temps', why: 'Les commandes sensibles viendraient d\'une liste réglable dans les réglages de la Gate.', type: 'many', o: ['Chaque commande', 'Commandes sensibles (sudo, rm -rf, liste réglable)', 'Ctrl+C et erreurs affichées', 'Changements de taille de fenêtre'], rec: [0, 1, 2] },
     { id: 'recherche', t: 'Recherche', why: 'Chercher dans le texte affiché demande d\'indexer chaque enregistrement à sa fermeture (quelques Mo de plus par Go).', type: 'one', o: ['Frappe et texte affiché, depuis la liste des sessions', 'Frappe seulement', 'Plus tard'], rec: 0 },
     { id: 'export', t: 'Exporter', why: 'Le .cast signé sert de preuve et se relit avec asciinema ; une vidéo MP4 se partage mais perd la signature.', type: 'many', o: ['Fichier .cast signé', 'Transcription texte horodatée (frappe et commandes)', 'Vidéo MP4', 'Rien'], rec: [0, 1] },
     { id: 'ou', t: 'Où s\'ouvre le lecteur ?', why: 'Un onglet comme les sessions ; une fenêtre à part pour un second écran.', type: 'one', o: ['Onglet de Portunia', 'Onglet, détachable dans une fenêtre', 'Fenêtre séparée'], rec: 1 },
@@ -666,7 +666,7 @@ function progress() {
 }
 function changed() {
   progress();
-  try { localStorage.setItem('heimdia-relecture', JSON.stringify(answers)); } catch {}
+  try { localStorage.setItem('portunia-gate-relecture', JSON.stringify(answers)); } catch {}
   clearTimeout(saveTimer);
   if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
   setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
@@ -676,7 +676,7 @@ async function save() {
   catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
 }
 function summary() {
-  const lines = ['Réponses Heimdia : relecture des sessions']; let n = 0;
+  const lines = ['Réponses Portunia Gate : relecture des sessions']; let n = 0;
   for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
   return lines.join('\n');
 }
@@ -685,7 +685,7 @@ document.getElementById('copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
   catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
 });
-try { answers = JSON.parse(localStorage.getItem('heimdia-relecture') || '{}') || {}; } catch { answers = {}; }
+try { answers = JSON.parse(localStorage.getItem('portunia-gate-relecture') || '{}') || {}; } catch { answers = {}; }
 render();
 (async () => {
   const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;

@@ -1,8 +1,8 @@
 // Assistance à distance (Portunia Assist) : prendre la main sur le PC d'un proche ou d'un client.
-// La personne ouvre Portunia Assist (téléchargé sur la page du bastion), lit son code ; vous le
+// La personne ouvre Portunia Assist (téléchargé sur la page de la Gate), lit son code ; vous le
 // tapez ici, elle accepte, et son écran s'ouvre dans un onglet Bureau à distance. Le relais du
-// bastion met en relation ; la liaison est chiffrée de bout en bout à partir du code.
-import { Bastion, bastions, Manifest } from './api';
+// Gate met en relation ; la liaison est chiffrée de bout en bout à partir du code.
+import { Gate, gates, Manifest } from './api';
 import { h, icon } from './dom';
 import { t } from './i18n';
 
@@ -26,8 +26,8 @@ export interface AssistStatus {
 }
 
 export interface AssistHost {
-  /** Ouvre l'onglet de l'assistance avec ce bastion et ce code. */
-  open(b: Bastion, code: string): void;
+  /** Ouvre l'onglet de l'assistance avec cette Gate et ce code. */
+  open(b: Gate, code: string): void;
   toast(message: string, kind?: 'info' | 'error'): void;
 }
 
@@ -37,14 +37,14 @@ function formatCode(raw: string): string {
   return [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9)].filter(Boolean).join(' ');
 }
 
-/** Fenêtre « Nouvelle assistance » : bastion, phrase à dire, code. */
+/** Fenêtre « Nouvelle assistance » : Gate, phrase à dire, code. */
 export async function openAssistDialog(host: AssistHost) {
-  let list: Bastion[] = [];
-  try { list = (await bastions.list()).filter((b) => b.connected); } catch { /* aucun bastion */ }
+  let list: Gate[] = [];
+  try { list = (await gates.list()).filter((b) => b.connected); } catch { /* aucun Gate */ }
   const statuses = await Promise.all(list.map(async (b) => {
-    try { return { b, s: await bastions.assistStatus(b.id) }; } catch { return { b, s: null as AssistStatus | null }; }
+    try { return { b, s: await gates.assistStatus(b.id) }; } catch { return { b, s: null as AssistStatus | null }; }
   }));
-  const usable = statuses.filter((x) => x.s?.actif && x.s.autorise) as { b: Bastion; s: AssistStatus }[];
+  const usable = statuses.filter((x) => x.s?.actif && x.s.autorise) as { b: Gate; s: AssistStatus }[];
 
   const dialog = h('dialog', { class: 'dialog narrow assist-dialog', 'aria-labelledby': 'assist-title' }) as HTMLDialogElement;
   const close = () => dialog.close();
@@ -60,16 +60,16 @@ export async function openAssistDialog(host: AssistHost) {
       ? t('Sign in to a Gate first (Gates section): assistance goes through its relay.', 'Connectez-vous d\'abord à une Gate (section Gates) : l\'assistance passe par son relais.')
       : statuses.some((x) => x.s && !x.s.actif)
         ? t('The assistance relay is disabled on your Gate. An administrator enables it in Administer › Assistance.', 'Le relais d\'assistance est coupé sur votre Gate. Un administrateur l\'active dans Administrer › Assistance.')
-        : t('Your account is not in the bastion\'s group of helpers (Administer › Assistance), or the Gate is too old (Portunia Gate 0.11 or later).', 'Votre compte n\'est pas dans le groupe des dépanneurs de la Gate (Administrer › Assistance), ou la Gate est trop ancienne (Portunia Gate 0.11 ou suivant).');
+        : t('Your account is not in the gate\'s group of helpers (Administer › Assistance), or the Gate is too old (Portunia Gate 0.11 or later).', 'Votre compte n\'est pas dans le groupe des dépanneurs de la Gate (Administrer › Assistance), ou la Gate est trop ancienne (Portunia Gate 0.11 ou suivant).');
     body.append(h('p', { class: 'muted' }, why));
     dialog.append(h('footer', { class: 'dlg-foot' }, h('button', { type: 'button', class: 'btn', onclick: close }, t('Close', 'Fermer'))));
   } else {
-    const select = h('select', { id: 'assist-bastion' }, ...usable.map((x, i) => h('option', { value: String(i) }, x.b.name))) as HTMLSelectElement;
+    const select = h('select', { id: 'assist-gate' }, ...usable.map((x, i) => h('option', { value: String(i) }, x.b.name))) as HTMLSelectElement;
     const say = h('p', { class: 'assist-say' });
     const absent = h('p', { class: 'form-error' });
     const update = () => {
       const { s } = usable[Number(select.value)];
-      const page = s.adresse || t('(the bastion\'s web portal address is not set: Administer › Web portal)', '(adresse du portail web de la Gate non réglée : Administrer › Portail web)');
+      const page = s.adresse || t('(the gate\'s web portal address is not set: Administer › Web portal)', '(adresse du portail web de la Gate non réglée : Administrer › Portail web)');
       say.replaceChildren(
         h('span', { class: 'label' }, t('To say on the phone', 'À dire au téléphone')),
         h('span', {}, t('« Go to ', '« Va sur '), h('b', {}, page), t(', click the big button, open the downloaded file and read me the digits. »', ', clique sur le gros bouton, ouvre le fichier téléchargé et lis-moi les chiffres. »')));

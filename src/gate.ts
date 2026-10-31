@@ -1,13 +1,13 @@
-// Extension Heimdia : bastions dans la barre latérale, connexion (avec première connexion
-// et enrôlement du code), ouverture des serveurs et administration du bastion.
-import { Bastion, BastionLoginAnswer, bastions, BastionServer, errorText, Manifest, Session } from './api';
+// Extension Portunia Gate : Gates dans la barre latérale, connexion (avec première connexion
+// et enrôlement du code), ouverture des serveurs et administration de la Gate.
+import { Gate, GateLoginAnswer, gates, GateServer, errorText, Manifest, Session } from './api';
 import { h, icon } from './dom';
 import { MenuItem, showMenu } from './menu';
 import { LOCALE, t } from './i18n';
 
-/** Heimdia apparaît dans la page Extensions comme les protocoles. */
-export const HEIMDIA_EXTENSION: Manifest = {
-  id: 'heimdia',
+/** Portunia Gate apparaît dans la page Extensions comme les protocoles. */
+export const GATE_EXTENSION: Manifest = {
+  id: 'gate',
   name: 'Portunia Gate',
   version: '1.0.0',
   description: t('Servers protected by a Gate: sign-in with a code, servers in the sidebar, sessions recorded by the Gate, administration.', 'Serveurs protégés par une Gate : connexion avec code, serveurs dans la barre latérale, sessions enregistrées par la Gate, administration.'),
@@ -18,26 +18,26 @@ export const HEIMDIA_EXTENSION: Manifest = {
   fields: [],
 };
 
-export interface BastionHost {
+export interface GateHost {
   toast(message: string, kind?: 'info' | 'error'): void;
-  openServer(b: Bastion, s: BastionServer): void;
+  openServer(b: Gate, s: GateServer): void;
   sessions(): Session[];
   removeSessions(ids: string[]): Promise<void>;
-  openAdmin(b: Bastion): void;
-  openAudit(b: Bastion): void;
+  openAdmin(b: Gate): void;
+  openAudit(b: Gate): void;
   allowsAdmin(): boolean;
   /** Extension de protocole activée (Bureau à distance pour les serveurs RDP). */
   protocolEnabled(id: string): boolean;
   filter(): string;
 }
 
-const MODE_LABEL: Record<BastionServer['mode'], string> = { coffre: t('Vault', 'Coffre'), enregistre: t('Recorded', 'Enregistré'), rebond: t('Jump', 'Rebond') };
-const MODE_TITLE: Record<BastionServer['mode'], string> = {
+const MODE_LABEL: Record<GateServer['mode'], string> = { coffre: t('Vault', 'Coffre'), enregistre: t('Recorded', 'Enregistré'), rebond: t('Jump', 'Rebond') };
+const MODE_TITLE: Record<GateServer['mode'], string> = {
   coffre: t('Account provided by the Gate, session recorded', 'Compte fourni par la Gate, session enregistrée'),
   enregistre: t('Session recorded by the Gate; your credentials are asked in the terminal', 'Session enregistrée par la Gate ; vos identifiants sont demandés dans le terminal'),
   rebond: t('End-to-end relay through the Gate: nothing is recorded', 'Relais de bout en bout par la Gate : rien n\'est enregistré'),
 };
-const COLLAPSED_KEY = 'portunia.bastions.replis';
+const COLLAPSED_KEY = 'portunia.gates.replis';
 
 function remaining(expires: string): string {
   const ms = Date.parse(expires) - Date.now();
@@ -46,9 +46,9 @@ function remaining(expires: string): string {
   return m >= 60 ? t(`expires in ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`, `expire dans ${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`) : t(`expires in ${m} min`, `expire dans ${m} min`);
 }
 
-/** Sessions Portunia qui vont directement sur un serveur protégé par ce bastion. */
-export function bypassing(b: Bastion, sessions: Session[]): { session: Session; server: BastionServer }[] {
-  const out: { session: Session; server: BastionServer }[] = [];
+/** Sessions Portunia qui vont directement sur un serveur protégé par cette Gate. */
+export function bypassing(b: Gate, sessions: Session[]): { session: Session; server: GateServer }[] {
+  const out: { session: Session; server: GateServer }[] = [];
   for (const s of sessions) {
     if (s.protocol !== 'ssh') continue;
     const host = String(s.values.host ?? '').trim().toLowerCase();
@@ -61,12 +61,12 @@ export function bypassing(b: Bastion, sessions: Session[]): { session: Session; 
 
 // ---------- Barre latérale ----------
 
-export class BastionPanel {
-  list: Bastion[] = [];
+export class GatePanel {
+  list: Gate[] = [];
   private collapsed: Set<string>;
   private timer = 0;
 
-  constructor(private root: HTMLElement, readonly host: BastionHost) {
+  constructor(private root: HTMLElement, readonly host: GateHost) {
     let saved: string[] = [];
     try { saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]'); } catch { /* ignoré */ }
     this.collapsed = new Set(saved);
@@ -74,11 +74,11 @@ export class BastionPanel {
 
   async load(refresh = false) {
     try {
-      this.list = await bastions.list();
+      this.list = await gates.list();
       if (refresh) {
-        // Liste des serveurs à jour pour chaque bastion connecté (en parallèle, sans bloquer).
+        // Liste des serveurs à jour pour chaque Gate connecté (en parallèle, sans bloquer).
         await Promise.all(this.list.filter((b) => b.connected).map((b) => this.refresh(b.id, true)));
-        this.list = await bastions.list();
+        this.list = await gates.list();
       }
     } catch (e) {
       this.host.toast(errorText(e), 'error');
@@ -98,7 +98,7 @@ export class BastionPanel {
 
   async refresh(id: string, quiet = false) {
     try {
-      const b = await bastions.servers(id);
+      const b = await gates.servers(id);
       this.list = this.list.map((x) => (x.id === id ? b : x));
     } catch (e) {
       const text = errorText(e);
@@ -111,13 +111,13 @@ export class BastionPanel {
   /** Reconnexion (session expirée) ; vrai si l'utilisateur s'est reconnecté. */
   async reconnect(id: string): Promise<boolean> {
     const b = this.list.find((x) => x.id === id);
-    const done = await openBastionLogin(this.host, b);
+    const done = await openGateLogin(this.host, b);
     if (done) await this.load();
     return !!done;
   }
 
   async add() {
-    const b = await openBastionLogin(this.host);
+    const b = await openGateLogin(this.host);
     if (b) {
       this.host.toast(t(`Gate « ${b.name} » added`, `Gate « ${b.name} » ajouté`));
       await this.load();
@@ -130,17 +130,17 @@ export class BastionPanel {
       h('span', { class: 'label' }, 'Gates'),
       h('div', { class: 'head-actions' },
         h('button', { class: 'icon-btn', 'aria-label': t('Add a Gate', 'Ajouter une Gate'), title: t('Add a Gate', 'Ajouter une Gate'), onclick: () => this.add() }, icon('plus'))));
-    const body = h('div', { class: 'bastion-list' });
+    const body = h('div', { class: 'gate-list' });
     if (!this.list.length) {
       body.append(h('div', { class: 'empty-tree' },
         h('span', { class: 'small' }, t('No Gate. A Gate protects access to your servers.', 'Aucune Gate. Une Gate protège l\'accès à vos serveurs.')),
         h('button', { class: 'btn', onclick: () => this.add() }, t('Add a Gate', 'Ajouter une Gate'))));
     }
-    for (const b of this.list) body.append(...this.renderBastion(b, filter));
+    for (const b of this.list) body.append(...this.renderGate(b, filter));
     this.root.replaceChildren(head, body);
   }
 
-  private menu(b: Bastion): (MenuItem | 'separator')[] {
+  private menu(b: Gate): (MenuItem | 'separator')[] {
     return [
       b.connected
         ? { label: t('Refresh the list', 'Actualiser la liste'), icon: 'refresh', action: () => this.refresh(b.id) }
@@ -150,28 +150,28 @@ export class BastionPanel {
         ? [{ label: b.role === 'user' ? t('My sessions', 'Mes sessions') : 'Audit', icon: 'play', action: () => this.host.openAudit(b) }] : []),
       { label: t(`Copy the certificate fingerprint`, `Copier l'empreinte du certificat`), icon: 'copy', action: () => navigator.clipboard.writeText(b.apiFingerprint) },
       'separator',
-      ...(b.connected ? [{ label: t('Sign out', 'Se déconnecter'), icon: 'power', action: async () => { await bastions.logout(b.id).catch(() => {}); this.load(); } }] : []),
+      ...(b.connected ? [{ label: t('Sign out', 'Se déconnecter'), icon: 'power', action: async () => { await gates.logout(b.id).catch(() => {}); this.load(); } }] : []),
       {
         label: t('Remove this Gate', 'Retirer cette Gate'), icon: 'trash', danger: true, action: async () => {
           if (!confirm(t(`Remove the Gate « ${b.name} » from Portunia? Its token and server list will be erased from this PC.`, `Retirer la Gate « ${b.name} » de Portunia ? Son jeton et sa liste de serveurs seront effacés de ce PC.`))) return;
-          await bastions.remove(b.id).catch((e) => this.host.toast(errorText(e), 'error'));
+          await gates.remove(b.id).catch((e) => this.host.toast(errorText(e), 'error'));
           this.load();
         },
       },
     ];
   }
 
-  private renderBastion(b: Bastion, filter: string): HTMLElement[] {
+  private renderGate(b: Gate, filter: string): HTMLElement[] {
     const state = b.connected ? 'on' : 'off';
-    const card = h('div', { class: `bastion-card ${state}` },
+    const card = h('div', { class: `gate-card ${state}` },
       h('button', {
-        class: 'bastion-main', title: b.connected ? `${b.host} · ${b.login} (${roleLabel(b.role)})` : t('Sign in again', 'Se reconnecter'),
+        class: 'gate-main', title: b.connected ? `${b.host} · ${b.login} (${roleLabel(b.role)})` : t('Sign in again', 'Se reconnecter'),
         onclick: () => (b.connected ? this.toggle(b.id) : this.reconnect(b.id)),
       },
         h('span', { class: `led ${state}` }),
         h('span', { class: 'grow' },
-          h('span', { class: 'bastion-name ellipsis' }, b.name),
-          h('span', { class: 'bastion-sub ellipsis' }, b.connected ? `${b.login} · ${remaining(b.expires)}` : t('session expired · click to sign in again', 'session expirée · cliquer pour se reconnecter')))),
+          h('span', { class: 'gate-name ellipsis' }, b.name),
+          h('span', { class: 'gate-sub ellipsis' }, b.connected ? `${b.login} · ${remaining(b.expires)}` : t('session expired · click to sign in again', 'session expirée · cliquer pour se reconnecter')))),
       h('button', { class: 'icon-btn sm', 'aria-label': t(`Actions for Gate ${b.name}`, `Actions de la Gate ${b.name}`), title: t('More actions', 'Plus d\'actions'), onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, this.menu(b)) }, icon('more', 14)));
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, this.menu(b)); });
     const out: HTMLElement[] = [card];
@@ -179,21 +179,21 @@ export class BastionPanel {
 
     const bypass = b.connected ? bypassing(b, this.host.sessions()) : [];
     if (bypass.length) {
-      out.push(h('button', { class: 'bastion-warn', onclick: () => openBypass(this.host, b, bypass) },
+      out.push(h('button', { class: 'gate-warn', onclick: () => openBypass(this.host, b, bypass) },
         t(`${bypass.length} session(s) go directly to servers of this Gate`, `${bypass.length} session(s) vont directement sur des serveurs de cette Gate`)));
     }
     const servers = b.servers.filter((s) => !filter || s.nom.toLowerCase().includes(filter) || s.dossier.toLowerCase().includes(filter));
-    const groups = new Map<string, BastionServer[]>();
+    const groups = new Map<string, GateServer[]>();
     for (const s of servers) groups.set(s.dossier, [...(groups.get(s.dossier) ?? []), s]);
     for (const [folder, list] of [...groups].sort((a, b) => a[0].localeCompare(b[0]))) {
-      if (folder) out.push(h('div', { class: 'tree-row' }, h('span', { class: 'tree-item group-head bastion-folder' }, icon('folder', 14), h('span', { class: 'grow ellipsis' }, folder), h('span', { class: 'count' }, String(list.length)))));
+      if (folder) out.push(h('div', { class: 'tree-row' }, h('span', { class: 'tree-item group-head gate-folder' }, icon('folder', 14), h('span', { class: 'grow ellipsis' }, folder), h('span', { class: 'count' }, String(list.length)))));
       for (const s of list) out.push(this.renderServer(b, s, folder ? 1 : 0));
     }
-    if (b.connected && !b.servers.length) out.push(h('p', { class: 'muted small bastion-empty' }, t('No server is allowed for you at the moment.', 'Aucun serveur ne vous est autorisé en ce moment.')));
+    if (b.connected && !b.servers.length) out.push(h('p', { class: 'muted small gate-empty' }, t('No server is allowed for you at the moment.', 'Aucun serveur ne vous est autorisé en ce moment.')));
     return out;
   }
 
-  private renderServer(b: Bastion, s: BastionServer, depth: number): HTMLElement {
+  private renderServer(b: Gate, s: GateServer, depth: number): HTMLElement {
     const rdp = s.protocole === 'rdp';
     // Sans l'extension Bureau à distance, le serveur reste visible mais ne s'ouvre pas.
     const missing = rdp && !this.host.protocolEnabled('rdp');
@@ -254,19 +254,19 @@ function input(attrs: Record<string, unknown>) {
 }
 
 /**
- * Ajout d'un bastion, ou reconnexion d'un bastion existant. Gère les étapes demandées par
- * le bastion : code, changement du mot de passe provisoire, enrôlement du code.
+ * Ajout d'une Gate, ou reconnexion d'une Gate existant. Gère les étapes demandées par
+ * la Gate : code, changement du mot de passe provisoire, enrôlement du code.
  */
-export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promise<Bastion | null> {
+export function openGateLogin(_host: GateHost, existing?: Gate): Promise<Gate | null> {
   return new Promise((resolve) => {
     let target = existing ? { host: existing.host, apiPort: existing.apiPort, fingerprint: existing.apiFingerprint } : null;
     let rememberAllowed = existing?.rememberAllowed ?? false;
-    let result: Bastion | null = null;
+    let result: Gate | null = null;
 
     const address = input({ id: 'b-address', placeholder: t('gate.example.com or 192.168.1.10:8443', 'gate.exemple.fr ou 192.168.1.10:8443'), value: existing ? `${existing.host}:${existing.apiPort}` : '' });
     const fingerprintBox = h('div', { class: 'fp', hidden: !existing }, existing?.apiFingerprint ?? '');
     const fingerprintField = h('div', { class: 'fld', hidden: true },
-      h('span', {}, t('Certificate fingerprint', 'Empreinte du certificat'), h('span', { class: 'muted small' }, t(' to compare with the one given at install (or « sudo heimdia info » on the Gate)', ' à comparer avec celle donnée à l\'installation (ou « sudo heimdia info » sur la Gate)'))), fingerprintBox);
+      h('span', {}, t('Certificate fingerprint', 'Empreinte du certificat'), h('span', { class: 'muted small' }, t(' to compare with the one given at install (or « sudo portunia-gate info » on the Gate)', ' à comparer avec celle donnée à l\'installation (ou « sudo portunia-gate info » sur la Gate)'))), fingerprintBox);
     const login = input({ id: 'b-login', value: existing?.login ?? '', autocomplete: 'username' });
     const password = input({ id: 'b-password', type: 'password', autocomplete: 'current-password', placeholder: existing?.passwordSaved ? t('Remembered: leave empty', 'Mémorisé : laisser vide') : '' });
     const code = input({ id: 'b-code', inputmode: 'numeric', placeholder: '6 chiffres', maxlength: 7 });
@@ -305,7 +305,7 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
       try {
         // Étape 1 : adresse → empreinte du certificat à vérifier.
         if (!target) {
-          const probe = await bastions.probe(address.value);
+          const probe = await gates.probe(address.value);
           target = { host: probe.host, apiPort: probe.apiPort, fingerprint: probe.fingerprint };
           rememberAllowed = probe.info.memo_mot_de_passe;
           fingerprintBox.textContent = probe.fingerprint;
@@ -321,13 +321,13 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
           return;
         }
         if (!newFields.hidden && newPassword.value !== confirmPassword.value) throw new Error(t('The two new passwords differ', 'Les deux nouveaux mots de passe diffèrent'));
-        const answer: BastionLoginAnswer = await bastions.login({
+        const answer: GateLoginAnswer = await gates.login({
           id: existing?.id, host: target.host, apiPort: target.apiPort, fingerprint: target.fingerprint,
           login: login.value.trim(), password: password.value || undefined, code: code.value.replace(/\s/g, '') || undefined,
           newPassword: newFields.hidden ? undefined : newPassword.value, remember: remember.checked,
         });
         if (answer.etat === 'ok') {
-          result = answer.bastion;
+          result = answer.gate;
           dialog.close();
           return;
         }
@@ -342,7 +342,7 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
           if (!newFields.hidden) { password.value = newPassword.value; newFields.hidden = true; }
           enrolBox.hidden = false;
           secretText.textContent = answer.secret.replace(/(.{4})/g, '$1 ').trim();
-          qr.innerHTML = await bastions.qr(answer.uri);
+          qr.innerHTML = await gates.qr(answer.uri);
           code.value = '';
           code.focus();
         }
@@ -360,8 +360,8 @@ export function openBastionLogin(_host: BastionHost, existing?: Bastion): Promis
   });
 }
 
-/** Sessions qui contournent le bastion : proposer de les supprimer. */
-function openBypass(host: BastionHost, b: Bastion, list: { session: Session; server: BastionServer }[]) {
+/** Sessions qui contournent la Gate : proposer de les supprimer. */
+function openBypass(host: GateHost, b: Gate, list: { session: Session; server: GateServer }[]) {
   const checks = list.map(({ session, server }) => {
     const box = h('input', { type: 'checkbox', checked: true, id: `bp-${session.id}` }) as HTMLInputElement;
     return { box, session, row: h('label', { class: 'check-row' }, box, h('span', {}, h('strong', {}, session.name), ` → ${server.nom} (${MODE_LABEL[server.mode]})`)) };
@@ -408,14 +408,14 @@ const POLICIES: [string, string][] = [
   ['key', t('SSH key only', 'Clé SSH seule')],
 ];
 
-/** Page d'administration d'un bastion (onglet). */
-export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
+/** Page d'administration d'une Gate (onglet). */
+export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
   const isAdmin = b.role === 'admin';
   const sections = SECTIONS.filter((s) => isAdmin || !s.admin);
   let current: Section = sections[0].id;
   const nav = h('div', { class: 'seg admin-nav', role: 'tablist' });
   const content = h('div', { class: 'admin-content' });
-  const call = <T = any>(method: string, path: string, body?: unknown) => bastions.admin<T>(b.id, method, path, body);
+  const call = <T = any>(method: string, path: string, body?: unknown) => gates.admin<T>(b.id, method, path, body);
   const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
 
   const show = async (id: Section) => {
@@ -431,7 +431,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
   };
   const reload = () => show(current);
 
-  // Formulaire générique en fenêtre : les erreurs du bastion s'affichent dans la fenêtre.
+  // Formulaire générique en fenêtre : les erreurs de la Gate s'affichent dans la fenêtre.
   const formDialog = (title: string, body: HTMLElement[], submitLabel: string, onSubmit: () => Promise<unknown>) => {
     const submit = h('button', { type: 'submit', class: 'btn primary' }, submitLabel);
     const cancel = h('button', { type: 'button', class: 'btn' }, t('Cancel', 'Annuler'));
@@ -548,7 +548,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       const { cibles } = await call<{ cibles: any[] }>('GET', '/admin/cibles');
       const rows = cibles.map((tg) => h('tr', {},
         h('td', {}, h('strong', {}, tg.nom)), h('td', {}, tg.dossier), h('td', {}, h('code', {}, `${tg.hote}:${tg.port}`)),
-        h('td', {}, tg.protocole === 'rdp' ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null, h('span', { class: `badge mode-${tg.mode}` }, MODE_LABEL[tg.mode as BastionServer['mode']])), h('td', {}, tg.compte ?? '—'),
+        h('td', {}, tg.protocole === 'rdp' ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null, h('span', { class: `badge mode-${tg.mode}` }, MODE_LABEL[tg.mode as GateServer['mode']])), h('td', {}, tg.compte ?? '—'),
         h('td', {}, tg.secret === 'key' ? t('SSH key', 'Clé SSH') : tg.secret === 'password' ? t('Password', 'Mot de passe') : '—'),
         h('td', { title: tg.empreinte ?? '' }, tg.empreinte ? t('known', 'connue') : t('at first connection', 'à la 1ʳᵉ connexion')),
         actions(small(t('Edit', 'Modifier'), () => targetDialog(tg)),
@@ -696,7 +696,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       try {
         p = await call<any>('GET', '/admin/portail');
       } catch (e) {
-        // Bastion antérieur à la 0.7 : pas de portail.
+        // Gate antérieur à la 0.7 : pas de portail.
         if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('The web portal needs Portunia Gate 0.7 or later: update the Gate (sudo bash installer.sh update).', 'Le portail web demande Portunia Gate 0.7 ou plus récent : mettez la Gate à jour (sudo bash installer.sh mise-a-jour).')));
         throw e;
       }
@@ -761,7 +761,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       try {
         a = await call<any>('GET', '/admin/assistance');
       } catch (e) {
-        // Bastion antérieur à la 0.11 : pas de relais d'assistance.
+        // Gate antérieur à la 0.11 : pas de relais d'assistance.
         if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('Remote assistance needs Portunia Gate 0.11 or later: update the Gate (sudo bash installer.sh update).', 'L\'assistance à distance demande Portunia Gate 0.11 ou plus récent : mettez la Gate à jour (sudo bash installer.sh mise-a-jour).')));
         throw e;
       }
@@ -804,9 +804,9 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
       const policy = select('s-policy', POLICIES.slice(1).some(([v]) => v === r.politique) ? POLICIES.slice(1) : [...POLICIES.slice(1), [r.politique, r.politique]], r.politique);
       const hours = input({ id: 's-hours', type: 'number', min: 1, max: 168, value: r.duree_session_h });
       const memo = checkbox('s-memo', t('Allow Portunia to remember the password (the code is still asked)', 'Autoriser Portunia à mémoriser le mot de passe (le code reste demandé)'), r.memo_mot_de_passe);
-      const own = checkbox('s-own', t('Each account can replay its own sessions (bastion\'s « My sessions » menu)', 'Chaque compte peut relire ses propres sessions (menu « Mes sessions » de la Gate)'), !!r.relecture_propres);
+      const own = checkbox('s-own', t('Each account can replay its own sessions (gate\'s « My sessions » menu)', 'Chaque compte peut relire ses propres sessions (menu « Mes sessions » de la Gate)'), !!r.relecture_propres);
       const sensitive = h('textarea', { id: 's-sensitive', class: 'input', rows: 4, spellcheck: 'false' }, (r.commandes_sensibles ?? []).join('\n')) as HTMLTextAreaElement;
-      // Langue du bastion (Heimdia 0.9 et suivants) : menu SSH, bannière par défaut, journaux.
+      // Langue de la Gate (Portunia Gate 0.9 et suivants) : menu SSH, bannière par défaut, journaux.
       const langue = r.langue === undefined ? null : select('s-langue', [['', t('System language', 'Langue du système')], ['en', 'English'], ['fr', 'Français']], r.langue);
       const saveBtn = h('button', { class: 'btn primary', onclick: async () => {
         try {
@@ -833,7 +833,7 @@ export function renderBastionAdmin(b: Bastion, host: BastionHost): HTMLElement {
   };
 
   show(current);
-  return h('div', { class: 'ext-page bastion-admin' },
+  return h('div', { class: 'ext-page gate-admin' },
     h('header', {}, h('h2', {}, `Administration · ${b.name}`), h('p', { class: 'muted' }, t(`${b.host} · signed in as ${b.login} (${roleLabel(b.role)})`, `${b.host} · connecté en tant que ${b.login} (${roleLabel(b.role)})`))),
     nav, content);
 }

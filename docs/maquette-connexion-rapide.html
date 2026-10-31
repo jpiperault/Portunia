@@ -148,7 +148,7 @@ details[open] summary::after { content: "▴"; }
   <div class="legend">
     <div><h4>Seule l'adresse est demandée</h4><p>IP, nom ou hôte:port. Entrée ouvre l'onglet SSH aussitôt, sans fenêtre.</p></div>
     <div><h4>Identifiants dans le terminal</h4><p>« login as: » puis « mot de passe : » masqué. Rien n'est enregistré. Clé SSH ou agent essayés d'abord, en silence.</p></div>
-    <div><h4>Options facultatives</h4><p>Protocole, port, identifiant, mot de passe, clé, bastion : dans la fenêtre « Connexion rapide », repliées par défaut.</p></div>
+    <div><h4>Options facultatives</h4><p>Protocole, port, identifiant, mot de passe, clé, Gate : dans la fenêtre « Connexion rapide », repliées par défaut.</p></div>
   </div>
 </div>
 
@@ -258,7 +258,7 @@ function openDialog(prefill = '') {
           </div>
           <label class="fld">Mot de passe <span class="opt">facultatif</span><input id="d-pass" type="password" autocomplete="off" placeholder="demandé à la connexion"></label>
           <label class="fld">Clé privée <span class="opt">facultatif</span><input placeholder="Vide = ~/.ssh/id_ed25519 ou agent"></label>
-          <label class="fld">Serveur de rebond <span class="opt">facultatif</span><input placeholder="Session SSH ou user@bastion"></label>
+          <label class="fld">Serveur de rebond <span class="opt">facultatif</span><input placeholder="Session SSH ou user@Gate"></label>
         </div>
       </details>
     </div>

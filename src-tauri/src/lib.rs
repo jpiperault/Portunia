@@ -1,6 +1,6 @@
 #[macro_use]
 mod lang;
-mod bastion;
+mod gate;
 mod commands;
 mod connector;
 mod connectors;
@@ -103,22 +103,22 @@ pub fn run() {
             commands::delete_session,
             commands::connect,
             commands::connect_quick,
-            bastion::bastion_list,
-            bastion::bastion_probe,
-            bastion::bastion_login,
-            bastion::bastion_logout,
-            bastion::bastion_remove,
-            bastion::bastion_servers,
-            bastion::bastion_admin,
-            bastion::bastion_journal_csv,
-            bastion::bastion_export,
-            bastion::bastion_rdp_replay,
-            bastion::bastion_assist,
-            bastion::bastion_assist_status,
-            bastion::bastion_rdp_replay_seek,
-            bastion::bastion_rdp_replay_close,
-            bastion::bastion_connect,
-            bastion::qr_svg,
+            gate::gate_list,
+            gate::gate_probe,
+            gate::gate_login,
+            gate::gate_logout,
+            gate::gate_remove,
+            gate::gate_servers,
+            gate::gate_admin,
+            gate::gate_journal_csv,
+            gate::gate_export,
+            gate::gate_rdp_replay,
+            gate::gate_assist,
+            gate::gate_assist_status,
+            gate::gate_rdp_replay_seek,
+            gate::gate_rdp_replay_close,
+            gate::gate_connect,
+            gate::qr_svg,
             commands::term_write,
             commands::term_resize,
             commands::disconnect,

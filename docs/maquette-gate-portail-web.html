@@ -1,4 +1,4 @@
-<title>Portail web Heimdia</title>
+<title>Portail web Portunia Gate</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Maquette : le portail web public (navigateur) et son réglage dans Portunia, + questionnaire.
@@ -209,7 +209,7 @@ p { margin: 0; }
 
 <div class="wrap">
   <div class="intro">
-    <p class="label">Maquette · Heimdia, portail web</p>
+    <p class="label">Maquette · Portunia Gate, portail web</p>
     <h1>Accéder à ses serveurs depuis un navigateur, sans client installé</h1>
     <p>Une page publique, derrière Cloudflare, qui ne fait qu'une chose : se connecter puis ouvrir les serveurs autorisés, dans le navigateur. Pas d'administration sur cette page. L'administrateur l'active ou la coupe d'un clic dans Portunia. Les écrans se parcourent avec les boutons ; l'onglet Questions rassemble les choix à faire avant de coder, et les réponses s'enregistrent toutes seules.</p>
   </div>
@@ -235,7 +235,7 @@ p { margin: 0; }
     <!-- Fonctionnement -->
     <div data-screen="how" class="wrap" style="max-width:none;gap:12px">
       <div class="svgwrap">
-        <svg viewBox="0 0 980 230" width="100%" style="min-width:760px" role="img" aria-label="Le navigateur passe par Cloudflare, puis par un tunnel sortant jusqu'au portail de Heimdia, qui ouvre les serveurs">
+        <svg viewBox="0 0 980 230" width="100%" style="min-width:760px" role="img" aria-label="Le navigateur passe par Cloudflare, puis par un tunnel sortant jusqu'au portail de Portunia Gate, qui ouvre les serveurs">
           <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker></defs>
           <rect x="10" y="70" width="170" height="100" rx="10" fill="var(--work)" stroke="var(--line-strong)"/>
           <text x="95" y="102" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Navigateur</text>
@@ -249,7 +249,7 @@ p { margin: 0; }
           <text x="350" y="150" text-anchor="middle" fill="var(--text-2)" font-size="12">compte de l'entreprise</text>
           <text x="350" y="180" text-anchor="middle" fill="var(--muted)" font-size="11">acces.acme.fr</text>
           <rect x="530" y="40" width="220" height="160" rx="10" fill="var(--work)" stroke="var(--accent)"/>
-          <text x="640" y="68" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Heimdia</text>
+          <text x="640" y="68" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="600">Portunia Gate</text>
           <text x="640" y="92" text-anchor="middle" fill="var(--muted)" font-size="12">portail web (port local 8445)</text>
           <text x="640" y="116" text-anchor="middle" fill="var(--text-2)" font-size="12">mot de passe + code</text>
           <text x="640" y="136" text-anchor="middle" fill="var(--text-2)" font-size="12">mêmes règles, même coffre</text>
@@ -267,8 +267,8 @@ p { margin: 0; }
         </svg>
       </div>
       <div class="flow">
-        <div><b>Aucun port entrant</b>Le service Cloudflare Tunnel (cloudflared), installé sur le bastion, ouvre une connexion sortante vers Cloudflare. Le portail n'écoute que sur le bastion lui-même : rien n'est exposé directement à Internet.</div>
-        <div><b>Deux portes à franchir</b>Cloudflare filtre les robots et les attaques ; Cloudflare Access peut exiger en plus le compte de l'entreprise (Microsoft, Google…). Puis Heimdia demande son mot de passe et son code, comme dans Portunia.</div>
+        <div><b>Aucun port entrant</b>Le service Cloudflare Tunnel (cloudflared), installé sur la Gate, ouvre une connexion sortante vers Cloudflare. Le portail n'écoute que sur la Gate lui-même : rien n'est exposé directement à Internet.</div>
+        <div><b>Deux portes à franchir</b>Cloudflare filtre les robots et les attaques ; Cloudflare Access peut exiger en plus le compte de l'entreprise (Microsoft, Google…). Puis Portunia Gate demande son mot de passe et son code, comme dans Portunia.</div>
         <div><b>Les mêmes règles</b>Le portail n'est qu'un autre client : mêmes comptes, mêmes règles d'accès, même coffre, même enregistrement signé, même journal. Une session web se relit dans l'audit comme une autre.</div>
         <div><b>Rien à administrer ici</b>Le portail ne montre que les serveurs du compte connecté. Toute l'administration reste dans Portunia (et la ligne de commande).</div>
       </div>
@@ -289,7 +289,7 @@ p { margin: 0; }
             <label class="pf">Code de l'application d'authentification<input class="pin code" id="l-code" value="482 913" inputmode="numeric"></label>
             <div class="turnstile"><i>✓</i><span>Vérification réussie</span><span>Cloudflare</span></div>
             <button class="pg-btn primary" id="go-home">Se connecter</button>
-            <p class="foot">Première connexion ou code perdu : adressez-vous à votre administrateur.<br>Heimdia · aucun logiciel à installer</p>
+            <p class="foot">Première connexion ou code perdu : adressez-vous à votre administrateur.<br>Portunia Gate · aucun logiciel à installer</p>
           </div>
         </div>
         <!-- 2. Mes serveurs -->
@@ -312,7 +312,7 @@ p { margin: 0; }
         <!-- 3. SSH -->
         <div data-sub="ssh" class="sess" hidden>
           <div class="sbar"><b>srv-web-01</b><span class="proto ssh">SSH</span><span class="recpill"><i></i>Enregistré</span><span style="color:var(--pg-muted)">compte admin (coffre)</span><span class="sp"></span><button class="pg-btn">Copier</button><button class="pg-btn">Coller</button><button class="pg-btn">← Mes serveurs</button><button class="pg-btn">Fermer</button></div>
-          <div class="term"><span class="d">Heimdia : session enregistrée.</span>
+          <div class="term"><span class="d">Portunia Gate : session enregistrée.</span>
 Linux srv-web-01 6.12.0-amd64 Debian GNU/Linux 13
 <span class="p">admin@srv-web-01:~$</span> systemctl status nginx --no-pager
 ● nginx.service - A high performance web server
@@ -364,7 +364,7 @@ Linux srv-web-01 6.12.0-amd64 Debian GNU/Linux 13
           <div class="form">
             <label class="fld">Adresse publique<input class="input" id="a-url" value="https://acces.acme.fr"><span class="h">affichée aux utilisateurs ; certificat géré par Cloudflare</span></label>
             <label class="fld">Exposition<div class="seg"><span class="on">Cloudflare Tunnel</span><span>Proxy Cloudflare</span></div><span class="h">Tunnel : aucun port ouvert. Proxy : le port 8445 n'accepte que les adresses de Cloudflare.</span></label>
-            <label class="fld">Jeton du tunnel<input class="input" id="a-tok" type="password" value="xxxxxxxxxxxxxxxxxxxx"><span class="h">donné par Cloudflare Zero Trust › Tunnels ; gardé dans le coffre du bastion</span></label>
+            <label class="fld">Jeton du tunnel<input class="input" id="a-tok" type="password" value="xxxxxxxxxxxxxxxxxxxx"><span class="h">donné par Cloudflare Zero Trust › Tunnels ; gardé dans le coffre de la Gate</span></label>
           </div>
           <div class="cf">Cloudflare Access (facultatif, conseillé) : exige le compte de l'entreprise avant même d'afficher la page de connexion. Se règle dans Cloudflare, rien à faire ici.</div>
         </div>
@@ -413,13 +413,13 @@ Linux srv-web-01 6.12.0-amd64 Debian GNU/Linux 13
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
 const TEXT = {
-  how: { t: 'Fonctionnement', p: ['Le navigateur passe par Cloudflare, puis par un tunnel sortant jusqu\'au portail de Heimdia.', 'Le portail est un client de plus du bastion : mêmes comptes, règles, coffre, enregistrement et journal.', 'Aucune administration sur le portail.'], s: ['Côté technique : terminal xterm.js et client RDP web d\'IronRDP, reliés au bastion par WebSocket (Cloudflare les relaie).', 'L\'adresse réelle de l\'utilisateur vient de l\'en-tête de Cloudflare, accepté seulement quand la requête arrive par le tunnel.'] },
-  login: { t: 'Connexion', p: ['Identifiant, mot de passe et code, dans la même page (pas d\'enrôlement ici : il se fait dans Portunia ou avec l\'administrateur).', 'Bannière légale du bastion affichée avant la connexion.', 'Vérification anti-robots de Cloudflare (Turnstile), puis limite d\'essais par compte et par adresse.'], s: ['Cookie de session « HttpOnly », « Secure », « SameSite=Strict », durée courte ; aucune information dans l\'adresse.', 'Politique de contenu stricte : la page ne charge rien d\'extérieur.'] },
+  how: { t: 'Fonctionnement', p: ['Le navigateur passe par Cloudflare, puis par un tunnel sortant jusqu\'au portail de Portunia Gate.', 'Le portail est un client de plus de la Gate : mêmes comptes, règles, coffre, enregistrement et journal.', 'Aucune administration sur le portail.'], s: ['Côté technique : terminal xterm.js et client RDP web d\'IronRDP, reliés à la Gate par WebSocket (Cloudflare les relaie).', 'L\'adresse réelle de l\'utilisateur vient de l\'en-tête de Cloudflare, accepté seulement quand la requête arrive par le tunnel.'] },
+  login: { t: 'Connexion', p: ['Identifiant, mot de passe et code, dans la même page (pas d\'enrôlement ici : il se fait dans Portunia ou avec l\'administrateur).', 'Bannière légale de la Gate affichée avant la connexion.', 'Vérification anti-robots de Cloudflare (Turnstile), puis limite d\'essais par compte et par adresse.'], s: ['Cookie de session « HttpOnly », « Secure », « SameSite=Strict », durée courte ; aucune information dans l\'adresse.', 'Politique de contenu stricte : la page ne charge rien d\'extérieur.'] },
   home: { t: 'Mes serveurs', p: ['Seulement les serveurs que les règles autorisent maintenant, par dossier, avec recherche.', 'Chaque serveur s\'ouvre dans un nouvel onglet du navigateur.', 'Les serveurs en mode rebond restent visibles mais grisés : de bout en bout, ils ont besoin de Portunia.'], s: ['Temps de session restant affiché ; déconnexion automatique.'] },
-  ssh: { t: 'Session SSH', p: ['Terminal dans la page, connecté par le bastion comme depuis Portunia (coffre ou identifiants demandés dans le terminal).', 'Bandeau « Enregistré » et compte utilisé.', 'Après une inactivité, avertissement puis fermeture.'], s: ['Copier-coller selon le réglage ; pas de transfert de fichiers par défaut.'] },
-  rdp: { t: 'Session Bureau à distance', p: ['Bureau Windows dans la page, avec le client web d\'IronRDP.', 'Le bastion ouvre la session Windows avec le compte du coffre : rien à taper.'], s: ['Dépend du mode coffre RDP (étape 2 du Bureau à distance).'] },
+  ssh: { t: 'Session SSH', p: ['Terminal dans la page, connecté par la Gate comme depuis Portunia (coffre ou identifiants demandés dans le terminal).', 'Bandeau « Enregistré » et compte utilisé.', 'Après une inactivité, avertissement puis fermeture.'], s: ['Copier-coller selon le réglage ; pas de transfert de fichiers par défaut.'] },
+  rdp: { t: 'Session Bureau à distance', p: ['Bureau Windows dans la page, avec le client web d\'IronRDP.', 'La Gate ouvre la session Windows avec le compte du coffre : rien à taper.'], s: ['Dépend du mode coffre RDP (étape 2 du Bureau à distance).'] },
   off: { t: 'Portail coupé', p: ['Désactivé depuis Portunia : la page affiche « Portail fermé » et ne demande plus d\'identifiants.', 'Les sessions web en cours sont fermées.'], s: ['La désactivation est immédiate et inscrite au journal (« portail.desactive »).'] },
-  admin: { t: 'Activer le portail dans Portunia', p: ['Administrer › Réglages › Portail web : un interrupteur, et les réglages.', 'Adresse publique, exposition par Cloudflare Tunnel (conseillée) ou par le proxy Cloudflare.', 'Qui peut l\'utiliser, quels protocoles, durées de session et d\'inactivité.', 'État en direct : sessions web en cours, connexions et échecs du jour, liaison du tunnel.'], s: ['Activation et désactivation inscrites au journal du bastion.', 'Aussi en ligne de commande : sudo heimdia setting portail on|off.'] },
+  admin: { t: 'Activer le portail dans Portunia', p: ['Administrer › Réglages › Portail web : un interrupteur, et les réglages.', 'Adresse publique, exposition par Cloudflare Tunnel (conseillée) ou par le proxy Cloudflare.', 'Qui peut l\'utiliser, quels protocoles, durées de session et d\'inactivité.', 'État en direct : sessions web en cours, connexions et échecs du jour, liaison du tunnel.'], s: ['Activation et désactivation inscrites au journal de la Gate.', 'Aussi en ligne de commande : sudo portunia-gate setting portail on|off.'] },
 };
 const explain = document.getElementById('explain');
 const URLS = { login: 'acces.acme.fr', home: 'acces.acme.fr/serveurs', ssh: 'acces.acme.fr/session/srv-web-01', rdp: 'acces.acme.fr/session/srv-ad-01', off: 'acces.acme.fr' };
@@ -462,7 +462,7 @@ if (location.hash === '#questions') tab('q');
 // ---------- Questions ----------
 const SECTIONS = [
   { title: 'Exposition', qs: [
-    { id: 'expo', t: 'Comment le portail est-il exposé à Internet ?', why: 'Cloudflare Tunnel : le bastion ouvre une connexion sortante, aucun port entrant. Proxy Cloudflare : un port ouvert, filtré sur les adresses de Cloudflare ; plus simple si l\'entreprise a déjà ce montage.', type: 'one', o: ['Cloudflare Tunnel (cloudflared installé avec le bastion)', 'Proxy Cloudflare, port filtré', 'Les deux au choix', 'Aussi sans Cloudflare (autre proxy, réseau interne)'], rec: 2 },
+    { id: 'expo', t: 'Comment le portail est-il exposé à Internet ?', why: 'Cloudflare Tunnel : la Gate ouvre une connexion sortante, aucun port entrant. Proxy Cloudflare : un port ouvert, filtré sur les adresses de Cloudflare ; plus simple si l\'entreprise a déjà ce montage.', type: 'one', o: ['Cloudflare Tunnel (cloudflared installé avec la Gate)', 'Proxy Cloudflare, port filtré', 'Les deux au choix', 'Aussi sans Cloudflare (autre proxy, réseau interne)'], rec: 2 },
     { id: 'access', t: 'Cloudflare Access (compte de l\'entreprise avant la page) ?', why: 'Une barrière de plus, gérée par Cloudflare (Microsoft 365, Google, code par e-mail…) : la page de connexion n\'est même pas visible des inconnus.', type: 'one', o: ['Conseillé dans la documentation, facultatif', 'Obligatoire : le portail refuse sans en-tête Access valide', 'Pas abordé'], rec: 0 },
     { id: 'turnstile', t: 'Anti-robots sur la page de connexion', why: 'Turnstile (Cloudflare) arrête les essais automatiques de mots de passe, sans puzzle pour l\'utilisateur.', type: 'one', o: ['Turnstile, plus limite d\'essais par compte et par adresse', 'Limite d\'essais seulement'], rec: 0 },
   ]},
@@ -482,10 +482,10 @@ const SECTIONS = [
     { id: 'duree', t: 'Durée d\'une session web par défaut', why: 'Plus court que dans Portunia : le poste n\'est pas forcément celui de l\'utilisateur.', type: 'one', o: ['1 heure', '4 heures', '8 heures'], rec: 0 },
     { id: 'idle', t: 'Fermeture après inactivité', why: 'Avertissement 90 s avant, puis fermeture de la session et de la connexion au portail.', type: 'one', o: ['15 minutes', '30 minutes', 'Réglable seulement'], rec: 0 },
     { id: 'coupe', t: 'Quand le portail est désactivé', why: 'Couper le portail doit-il fermer les sessions web en cours ?', type: 'one', o: ['Fermer tout de suite les sessions web', 'Les laisser finir, refuser les nouvelles'], rec: 0 },
-    { id: 'marque', t: 'Personnalisation de la page', why: 'Nom et logo de l\'entreprise rassurent l\'utilisateur et aident à repérer une fausse page.', type: 'one', o: ['Nom du bastion et logo', 'Nom seulement', 'Plus tard'], rec: 0 },
+    { id: 'marque', t: 'Personnalisation de la page', why: 'Nom et logo de l\'entreprise rassurent l\'utilisateur et aident à repérer une fausse page.', type: 'one', o: ['Nom de la Gate et logo', 'Nom seulement', 'Plus tard'], rec: 0 },
   ]},
   { title: 'Offre', qs: [
-    { id: 'offre', t: 'Le portail web dans quelle offre de Heimdia ?', why: 'Fonction recherchée (prestataires, astreinte, postes non maîtrisés) : argument pour une offre supérieure.', type: 'one', o: ['Dans toutes les offres', 'Offre supérieure seulement', 'À décider plus tard'], rec: 2 },
+    { id: 'offre', t: 'Le portail web dans quelle offre de Portunia Gate ?', why: 'Fonction recherchée (prestataires, astreinte, postes non maîtrisés) : argument pour une offre supérieure.', type: 'one', o: ['Dans toutes les offres', 'Offre supérieure seulement', 'À décider plus tard'], rec: 2 },
   ]},
 ];
 const ALL = SECTIONS.flatMap((s) => s.qs);
@@ -539,7 +539,7 @@ function progress() {
 }
 function changed() {
   progress();
-  try { localStorage.setItem('heimdia-portail', JSON.stringify(answers)); } catch {}
+  try { localStorage.setItem('portunia-gate-portail', JSON.stringify(answers)); } catch {}
   clearTimeout(saveTimer);
   if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
   setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
@@ -549,7 +549,7 @@ async function save() {
   catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
 }
 function summary() {
-  const lines = ['Réponses Heimdia : portail web']; let n = 0;
+  const lines = ['Réponses Portunia Gate : portail web']; let n = 0;
   for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(par défaut)') + (a.note ? ' — ' + a.note : '')); } }
   return lines.join('\n');
 }
@@ -558,7 +558,7 @@ document.getElementById('copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
   catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
 });
-try { answers = JSON.parse(localStorage.getItem('heimdia-portail') || '{}') || {}; } catch { answers = {}; }
+try { answers = JSON.parse(localStorage.getItem('portunia-gate-portail') || '{}') || {}; } catch { answers = {}; }
 render();
 (async () => {
   const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;

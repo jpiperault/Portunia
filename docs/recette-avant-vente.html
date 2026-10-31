@@ -128,7 +128,7 @@ const SECTIONS = [
     ['ssh-4', 'bloquant', 'Nouveau serveur', 'Premier contact avec un serveur inconnu, puis avec un serveur déjà présent dans <code>~/.ssh/known_hosts</code>.', 'Empreinte demandée la première fois ; serveur connu d’OpenSSH accepté sans question.'],
     ['ssh-5', 'bloquant', 'Clé de serveur changée', 'Réinstaller la clé d’hôte d’un serveur de test (ou se connecter à une autre machine sous la même adresse).', 'Connexion refusée avec un message clair.'],
     ['ssh-6', 'important', 'Ancien équipement', 'Switch, routeur ou vieux Linux, avec « Compatibilité anciens équipements ».', 'Connexion, avec l’avertissement sur les algorithmes faibles.'],
-    ['ssh-7', 'bloquant', 'Gate', 'Session passant par une Gate, puis par deux Gates (<code>bastion1,bastion2</code>).', 'Connexion au serveur final, fichiers SFTP compris.'],
+    ['ssh-7', 'bloquant', 'Gate', 'Session passant par une Gate, puis par deux Gates (<code>gate1,gate2</code>).', 'Connexion au serveur final, fichiers SFTP compris.'],
     ['ssh-8', 'important', 'Coupure et veille', 'Couper le Wi-Fi 30 s pendant une session, puis mettre le PC en veille.', 'Reconnexion automatique.'],
     ['ssh-9', 'bloquant', 'Assistant de clé', 'Depuis une session par mot de passe : « Clé SSH », créer une clé, l’installer, accepter « utiliser cette clé ».', 'Reconnexion suivante sans mot de passe.'],
     ['ssh-10', 'important', 'Identifiants partagés', 'Un identifiant utilisé par deux sessions ; changer son mot de passe.', 'Les deux sessions se connectent avec le nouveau.'],

@@ -87,7 +87,7 @@ fn split_user(raw: &str) -> (String, String) {
 fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     let host = ctx.require("host", t!("Host", "Hôte"))?;
     let port = ctx.port(3389)?;
-    // Serveur derrière un bastion Heimdia (rebond) : le moteur passe par un tunnel SSH local,
+    // Serveur derrière une Gate (rebond) : le moteur passe par un tunnel SSH local,
     // l'authentification Windows reste de bout en bout.
     let (host, port) = match ctx.values.get("jumpHost") {
         Some(Value::Object(_)) => ("127.0.0.1".to_string(), super::ssh::local_tunnel(ctx, &host, port)?),
@@ -116,7 +116,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
         "host": host, "port": port, "username": username, "domain": domain, "password": password,
         "width": ctx.cols, "height": ctx.rows,
     });
-    // Bastion Heimdia, mode enregistré : passage RDCleanPath avec un jeton à usage unique.
+    // Gate, mode enregistré : passage RDCleanPath avec un jeton à usage unique.
     if let (Some(url), Some(token)) = (ctx.str("rdcleanpathUrl"), ctx.raw("rdcleanpathToken")) {
         settings["rdcleanpath"] = json!({ "url": url, "token": token });
     }

@@ -1,8 +1,8 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, Bastion, bastions, BastionServer, connectAssist, connectBastion, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, Gate, gates, GateServer, connectAssist, connectGate, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { save } from '@tauri-apps/plugin-dialog';
-import { BastionPanel, HEIMDIA_EXTENSION, renderBastionAdmin } from './bastion';
+import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
 import { ASSIST_EXTENSION, openAssistDialog } from './assist';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
@@ -65,7 +65,7 @@ interface Tab {
   notes?: NotesPanel;
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
-  /** Relecture d'une session de bastion (onglet « replay »). */
+  /** Relecture d'une session de Gate (onglet « replay »). */
   auditPlayer?: AuditPlayer | RdpPlayer;
   /** Outils réseau (onglet « tools »). */
   netTools?: NetToolsView;
@@ -184,11 +184,11 @@ const sessionTree = new SessionTree(tree, {
 });
 tree.addEventListener('tree-change', () => renderTree());
 
-// ---------- Extension Heimdia (bastions) ----------
+// ---------- Extension Portunia Gate (Gates) ----------
 
-const bastionPanel = new BastionPanel($('bastions'), {
+const gatePanel = new GatePanel($('gates'), {
   toast,
-  openServer: (b, s) => openBastionServer(b, s),
+  openServer: (b, s) => openGateServer(b, s),
   sessions: () => state.sessions,
   removeSessions: async (ids) => {
     for (const id of ids) {
@@ -197,16 +197,16 @@ const bastionPanel = new BastionPanel($('bastions'), {
     }
     await reload();
   },
-  openAdmin: (b) => openBastionAdmin(b),
-  openAudit: (b) => openBastionAudit(b),
+  openAdmin: (b) => openGateAdmin(b),
+  openAudit: (b) => openGateAudit(b),
   protocolEnabled: (id) => extensionEnabled(id),
-  allowsAdmin: () => allows('bastionAdmin'),
+  allowsAdmin: () => allows('gateAdmin'),
   filter: () => state.filter,
 });
 
-/** Serveur d'un bastion : session SSH par le bastion, avec un jeton à usage unique par connexion. */
-function openBastionServer(b: Bastion, s: BastionServer) {
-  if (s.protocole === 'rdp') return openBastionDesktop(b, s);
+/** Serveur d'une Gate : session SSH par la Gate, avec un jeton à usage unique par connexion. */
+function openGateServer(b: Gate, s: GateServer) {
+  if (s.protocole === 'rdp') return openGateDesktop(b, s);
   const rebond = s.mode === 'rebond';
   const session: Session = {
     id: '', name: `${s.nom} · ${b.name}`, folder: '', protocol: 'ssh', tags: [], secretKeys: [],
@@ -215,10 +215,10 @@ function openBastionServer(b: Bastion, s: BastionServer) {
   };
   const connect = async (typed: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
     try {
-      return await connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+      return await connectGate(b.id, s.nom, typed, cols, rows, onEvent);
     } catch (e) {
       if (errorText(e) !== 'SESSION_EXPIREE') throw e;
-      if (await bastionPanel.reconnect(b.id)) return connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+      if (await gatePanel.reconnect(b.id)) return connectGate(b.id, s.nom, typed, cols, rows, onEvent);
       throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
     }
   };
@@ -226,11 +226,11 @@ function openBastionServer(b: Bastion, s: BastionServer) {
 }
 
 /**
- * Serveur Bureau à distance d'un bastion (mode rebond) : onglet RDP habituel, à travers un
- * tunnel par le bastion. Le serveur Windows authentifie lui-même : identifiants demandés à
+ * Serveur Bureau à distance d'une Gate (mode rebond) : onglet RDP habituel, à travers un
+ * tunnel par la Gate. Le serveur Windows authentifie lui-même : identifiants demandés à
  * chaque ouverture, jamais enregistrés.
  */
-async function openBastionDesktop(b: Bastion, s: BastionServer) {
+async function openGateDesktop(b: Gate, s: GateServer) {
   const cred = await askCredentials(
     { protocol: 'rdp', name: s.nom, values: { host: s.nom, username: s.compte ?? '' } } as QuickTarget,
     s.mode === 'enregistre'
@@ -245,10 +245,10 @@ async function openBastionDesktop(b: Bastion, s: BastionServer) {
   const typed = { username: cred.username, password: cred.password };
   const connect = async (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
     try {
-      return await connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+      return await connectGate(b.id, s.nom, typed, cols, rows, onEvent);
     } catch (e) {
       if (errorText(e) !== 'SESSION_EXPIREE') throw e;
-      if (await bastionPanel.reconnect(b.id)) return connectBastion(b.id, s.nom, typed, cols, rows, onEvent);
+      if (await gatePanel.reconnect(b.id)) return connectGate(b.id, s.nom, typed, cols, rows, onEvent);
       throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
     }
   };
@@ -257,9 +257,9 @@ async function openBastionDesktop(b: Bastion, s: BastionServer) {
 
 /**
  * Assistance à distance : écran de la personne aidée dans un onglet Bureau à distance, à travers
- * le relais du bastion (chiffré de bout en bout par le code qu'elle a lu).
+ * le relais de la Gate (chiffré de bout en bout par le code qu'elle a lu).
  */
-function openAssist(b: Bastion, code: string) {
+function openAssist(b: Gate, code: string) {
   const session: Session = {
     id: '', name: tr(`Assistance · ${code}`, `Assistance · ${code}`), folder: '', protocol: 'rdp', tags: [], secretKeys: [],
     values: { host: b.host, port: b.apiPort, username: '', client: 'tab' },
@@ -269,7 +269,7 @@ function openAssist(b: Bastion, code: string) {
       return await connectAssist(b.id, code, cols, rows, onEvent);
     } catch (e) {
       if (errorText(e) !== 'SESSION_EXPIREE') throw e;
-      if (await bastionPanel.reconnect(b.id)) return connectAssist(b.id, code, cols, rows, onEvent);
+      if (await gatePanel.reconnect(b.id)) return connectAssist(b.id, code, cols, rows, onEvent);
       throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
     }
   };
@@ -278,43 +278,43 @@ function openAssist(b: Bastion, code: string) {
 
 /** Le bouton « Assistance à distance » de la barre latérale suit les deux extensions. */
 function showAssist() {
-  $('open-assist').hidden = !(extensionEnabled('assistance') && extensionEnabled('heimdia'));
+  $('open-assist').hidden = !(extensionEnabled('assistance') && extensionEnabled('gate'));
 }
 
-function openBastionAdmin(b: Bastion) {
-  if (!allows('bastionAdmin')) return toast(tr('Gate administration is part of Portunia Teams (Settings › Licence)', 'L’administration des Gates fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
+function openGateAdmin(b: Gate) {
+  if (!allows('gateAdmin')) return toast(tr('Gate administration is part of Portunia Teams (Settings › Licence)', 'L’administration des Gates fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
   const title = `Admin · ${b.name}`;
   const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
   if (existing) return activate(existing.id);
-  const view = h('div', { class: 'page-view' }, renderBastionAdmin(b, bastionPanel.host));
+  const view = h('div', { class: 'page-view' }, renderGateAdmin(b, gatePanel.host));
   views.append(view);
   const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
   state.tabs.push(tab);
   activate(tab.id);
 }
 
-/** Audit du bastion (sessions et journal), chargé à la demande. */
-async function openBastionAudit(b: Bastion) {
-  if (!allows('bastionAdmin')) return toast(tr('Gate audit is part of Portunia Teams (Settings › Licence)', 'L’audit des Gates fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
+/** Audit de la Gate (sessions et journal), chargé à la demande. */
+async function openGateAudit(b: Gate) {
+  if (!allows('gateAdmin')) return toast(tr('Gate audit is part of Portunia Teams (Settings › Licence)', 'L’audit des Gates fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
   const title = `Audit · ${b.name}`;
   const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
   if (existing) return activate(existing.id);
-  const { renderBastionAudit } = await import('./audit');
-  const view = h('div', { class: 'page-view' }, renderBastionAudit(b, { toast, openRecording: (bb, s, start) => openAuditReplay(bb, s, start) }));
+  const { renderGateAudit } = await import('./audit');
+  const view = h('div', { class: 'page-view' }, renderGateAudit(b, { toast, openRecording: (bb, s, start) => openAuditReplay(bb, s, start) }));
   views.append(view);
   const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
   state.tabs.push(tab);
   activate(tab.id);
 }
 
-/** Relecture d'une session du bastion dans un onglet. `reveal` : saisies masquées en clair (administrateur). */
-async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal = false, replace?: Tab) {
+/** Relecture d'une session de la Gate dans un onglet. `reveal` : saisies masquées en clair (administrateur). */
+async function openAuditReplay(b: Gate, s: AuditRow, start?: number, reveal = false, replace?: Tab) {
   const title = `▶ ${s.serveur} · ${new Date(s.debut).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' })}`;
   const existing = !replace && start == null && state.tabs.find((t) => t.kind === 'replay' && t.title === title);
   if (existing) return activate(existing.id);
   let rec: AuditRecording;
   try {
-    rec = await bastions.admin<AuditRecording>(b.id, 'GET', `/audit/sessions/${s.id}/enregistrement${reveal ? '?reveler=true' : ''}`);
+    rec = await gates.admin<AuditRecording>(b.id, 'GET', `/audit/sessions/${s.id}/enregistrement${reveal ? '?reveler=true' : ''}`);
   } catch (e) {
     return toast(errorText(e) === 'SESSION_EXPIREE' ? tr('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
   }
@@ -323,7 +323,7 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
   const exportFile = async (name: string, ext: string, content: string, done: string) => {
     const dest = await save({ defaultPath: `${s.serveur}-${s.compte}-${stamp}${name}.${ext}`, filters: [{ name: ext === 'cast' ? tr('asciicast recording', 'Enregistrement asciicast') : tr('Text', 'Texte'), extensions: [ext] }] });
     if (!dest) return;
-    try { await bastions.exportFile(dest, content); toast(`${done} : ${dest}`); } catch (e) { toast(errorText(e), 'error'); }
+    try { await gates.exportFile(dest, content); toast(`${done} : ${dest}`); } catch (e) { toast(errorText(e), 'error'); }
   };
   let player: AuditPlayer | RdpPlayer;
   // Onglet qui affiche ce lecteur (remplacé par la version révélée).
@@ -336,11 +336,11 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
       start,
       canReveal: b.role === 'admin',
       reveal: () => {
-        if (!confirm(tr('Show the copied-pasted text in clear? This replay will be written to the bastion\'s log.', 'Afficher en clair le texte copié-collé ? Cette relecture sera inscrite au journal de la Gate.'))) return;
+        if (!confirm(tr('Show the copied-pasted text in clear? This replay will be written to the gate\'s log.', 'Afficher en clair le texte copié-collé ? Cette relecture sera inscrite au journal de la Gate.'))) return;
         openAuditReplay(b, s, undefined, true, owner);
       },
       exportText: () => exportFile('-transcription', 'txt', rdp.transcript(), tr('Transcript exported', 'Transcription exportée')),
-      open: (onMessage) => bastions.rdpReplay(b.id, s.id, onMessage),
+      open: (onMessage) => gates.rdpReplay(b.id, s.id, onMessage),
     });
     player = rdp;
   } else try {
@@ -350,7 +350,7 @@ async function openAuditReplay(b: Bastion, s: AuditRow, start?: number, reveal =
       start,
       canReveal: b.role === 'admin',
       reveal: () => {
-        if (!confirm(tr('Show input typed without echo (usually passwords) in clear? This replay will be written to the bastion\'s log.', 'Afficher en clair les saisies sans écho (le plus souvent des mots de passe) ? Cette relecture sera inscrite au journal de la Gate.'))) return;
+        if (!confirm(tr('Show input typed without echo (usually passwords) in clear? This replay will be written to the gate\'s log.', 'Afficher en clair les saisies sans écho (le plus souvent des mots de passe) ? Cette relecture sera inscrite au journal de la Gate.'))) return;
         openAuditReplay(b, s, undefined, true, owner);
       },
       exportCast: () => exportFile(rec.revele ? '' : '-masque', 'cast', rec.cast, rec.revele ? tr('Signed recording exported', 'Enregistrement signé exporté') : tr('Masked copy exported (not signed)', 'Copie masquée exportée (non signée)')),
@@ -394,7 +394,7 @@ async function act(action: () => Promise<unknown>) {
 
 function renderTree() {
   sessionTree.render(state.folders, state.sessions, state.filter);
-  if (extensionEnabled('heimdia')) bastionPanel.render();
+  if (extensionEnabled('gate')) gatePanel.render();
 }
 
 // ---------- Onglets ----------
@@ -849,7 +849,7 @@ async function sshLogin(tab: Tab, session: Session, typed: Record<string, unknow
   }
 }
 
-/** Ouverture fournie par une extension (bastion) : connexion et saisie éventuelle dans le terminal. */
+/** Ouverture fournie par une extension (Gate) : connexion et saisie éventuelle dans le terminal. */
 interface CustomOpen {
   connect: (typed: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => Promise<ConnectResponse>;
   typing: boolean;
@@ -1038,9 +1038,9 @@ async function removeSession(session: Session) {
 function extensionsPage(): HTMLElement {
   const usage: Record<string, number> = {};
   for (const s of state.sessions) usage[s.protocol] = (usage[s.protocol] ?? 0) + 1;
-  usage.heimdia = bastionPanel.list.length;
-  const nameOf = (id: string) => protocolOf(id)?.name ?? (id === 'heimdia' ? HEIMDIA_EXTENSION.name : id === 'assistance' ? ASSIST_EXTENSION.name : id);
-  return renderExtensions([...state.protocols, HEIMDIA_EXTENSION, ASSIST_EXTENSION], usage, extensionEnabled, (id, on) => {
+  usage.gate = gatePanel.list.length;
+  const nameOf = (id: string) => protocolOf(id)?.name ?? (id === 'gate' ? GATE_EXTENSION.name : id === 'assistance' ? ASSIST_EXTENSION.name : id);
+  return renderExtensions([...state.protocols, GATE_EXTENSION, ASSIST_EXTENSION], usage, extensionEnabled, (id, on) => {
     setExtension(id, on);
     toast(tr(`Extension « ${nameOf(id)} » ${on ? 'enabled' : 'disabled'}`, `Extension « ${nameOf(id)} » ${on ? 'activée' : 'désactivée'}`));
   });
@@ -1137,7 +1137,7 @@ onSettingsChange((s) => {
   const key = s.disabledExtensions.join(',');
   if (key === extensionsKey) return;
   extensionsKey = key;
-  bastionPanel.show(extensionEnabled('heimdia'));
+  gatePanel.show(extensionEnabled('gate'));
   showAssist();
   state.tabs.find((t) => t.kind === 'extensions')?.view.replaceChildren(extensionsPage());
   renderAll();
@@ -1152,8 +1152,8 @@ onSettingsChange((s) => {
   if (key !== monitorKey) { monitorKey = key; monitor.start(); renderAll(); }
 });
 monitorKey = `${settings().monitoring}|${settings().monitorInterval}`;
-initLock(() => { reload(); bastionPanel.show(extensionEnabled('heimdia')); });
-bastionPanel.show(extensionEnabled('heimdia'));
+initLock(() => { reload(); gatePanel.show(extensionEnabled('gate')); });
+gatePanel.show(extensionEnabled('gate'));
 
 /** Nom du dossier coloré le plus proche (affiché en étiquette dans la barre d'outils). */
 function envFolder(folder: string): string {

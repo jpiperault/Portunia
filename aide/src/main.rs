@@ -2,9 +2,9 @@
 //! Portunia Assist : le programme de la personne aidée.
 //!
 //! Sans option : fenêtre, relais trouvé dans le nom du fichier téléchargé.
-//!   portunia-assist --relais wss://acces.exemple.fr/assistance/relais   relais donné
-//!   portunia-assist --console --relais URL [--accord-auto]              essai sans fenêtre
-//!   portunia-assist --ecoute 127.0.0.1:13390                            essai : serveur RDP local direct
+//!   portunia-assistance --relais wss://acces.exemple.fr/assistance/relais   relais donné
+//!   portunia-assistance --console --relais URL [--accord-auto]              essai sans fenêtre
+//!   portunia-assistance --ecoute 127.0.0.1:13390                            essai : serveur RDP local direct
 //! Options d'essai : --mire (mire au lieu de l'écran), --saisie-notee (souris et clavier notés,
 //! pas rejoués).
 
@@ -32,7 +32,7 @@ pub type Server = RdpServer;
 /// Certificat TLS jetable, créé à chaque lancement (la session est en plus chiffrée de bout en
 /// bout par le code quand elle passe par le relais).
 fn tls() -> Result<TlsAcceptor> {
-    let cert = rcgen::generate_simple_self_signed(vec!["portunia-assist".into()])?;
+    let cert = rcgen::generate_simple_self_signed(vec!["portunia-assistance".into()])?;
     let der = CertificateDer::from(cert.cert.der().to_vec());
     let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()));
     let config = rustls::ServerConfig::builder().with_no_client_auth().with_single_cert(vec![der], key)?;
@@ -89,7 +89,7 @@ pub fn t(en: &'static str, fr: &'static str) -> &'static str {
 }
 
 /// Adresse du relais : donnée en option, sinon lue dans le nom du fichier téléchargé
-/// (« Portunia Assist (acces.exemple.fr).exe », posé par la page du bastion), sinon dans la
+/// (« Portunia Assist (acces.exemple.fr).exe », posé par la page de la Gate), sinon dans la
 /// note de téléchargement que Windows garde sur le fichier (adresse d'origine).
 fn relay_url(explicit: Option<String>) -> Option<String> {
     if explicit.is_some() {

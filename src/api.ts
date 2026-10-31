@@ -306,13 +306,13 @@ export function connectQuick(protocol: string, name: string, values: Record<stri
   return invoke<ConnectResponse>('connect_quick', { protocol, name, values, cols, rows, onEvent: channel });
 }
 
-// ---------- Bastions Heimdia ----------
+// ---------- Gates ----------
 
-export interface BastionServer {
+export interface GateServer {
   nom: string;
   dossier: string;
   mode: 'coffre' | 'enregistre' | 'rebond';
-  /** Absent sur un bastion antérieur à la 0.6 : SSH. */
+  /** Absent sur une Gate antérieur à la 0.6 : SSH. */
   protocole?: 'ssh' | 'rdp';
   hote: string;
   port: number;
@@ -321,7 +321,7 @@ export interface BastionServer {
   tunnels: boolean;
 }
 
-export interface Bastion {
+export interface Gate {
   id: string;
   name: string;
   host: string;
@@ -334,12 +334,12 @@ export interface Bastion {
   expires: string;
   rememberAllowed: boolean;
   ownReplay: boolean;
-  servers: BastionServer[];
+  servers: GateServer[];
   connected: boolean;
   passwordSaved: boolean;
 }
 
-export interface BastionLogin {
+export interface GateLogin {
   id?: string;
   host: string;
   apiPort: number;
@@ -351,34 +351,34 @@ export interface BastionLogin {
   remember: boolean;
 }
 
-/** Réponse de connexion : « ok » ou l'étape suivante demandée par le bastion. */
-export type BastionLoginAnswer =
-  | { etat: 'ok'; bastion: Bastion }
+/** Réponse de connexion : « ok » ou l'étape suivante demandée par la Gate. */
+export type GateLoginAnswer =
+  | { etat: 'ok'; gate: Gate }
   | { etat: 'code_requis' }
   | { etat: 'changer_mot_de_passe' }
   | { etat: 'enrolement'; secret: string; uri: string };
 
-export const bastions = {
-  list: () => invoke<Bastion[]>('bastion_list'),
-  /** Relais d'assistance du bastion : actif, autorisé pour moi, adresse à donner. */
-  assistStatus: (id: string) => invoke<import('./assist').AssistStatus>('bastion_assist_status', { id }),
-  probe: (address: string) => invoke<{ host: string; apiPort: number; fingerprint: string; info: { nom: string; version: string; memo_mot_de_passe: boolean } }>('bastion_probe', { address }),
-  login: (request: BastionLogin) => invoke<BastionLoginAnswer>('bastion_login', { request }),
-  logout: (id: string) => invoke<void>('bastion_logout', { id }),
-  remove: (id: string) => invoke<void>('bastion_remove', { id }),
-  servers: (id: string) => invoke<Bastion>('bastion_servers', { id }),
-  admin: <T = any>(id: string, method: string, path: string, body?: unknown) => invoke<T>('bastion_admin', { id, method, path, body: body ?? null }),
-  journalCsv: (id: string, query: string, dest: string) => invoke<void>('bastion_journal_csv', { id, query, dest }),
+export const gates = {
+  list: () => invoke<Gate[]>('gate_list'),
+  /** Relais d'assistance de la Gate : actif, autorisé pour moi, adresse à donner. */
+  assistStatus: (id: string) => invoke<import('./assist').AssistStatus>('gate_assist_status', { id }),
+  probe: (address: string) => invoke<{ host: string; apiPort: number; fingerprint: string; info: { nom: string; version: string; memo_mot_de_passe: boolean } }>('gate_probe', { address }),
+  login: (request: GateLogin) => invoke<GateLoginAnswer>('gate_login', { request }),
+  logout: (id: string) => invoke<void>('gate_logout', { id }),
+  remove: (id: string) => invoke<void>('gate_remove', { id }),
+  servers: (id: string) => invoke<Gate>('gate_servers', { id }),
+  admin: <T = any>(id: string, method: string, path: string, body?: unknown) => invoke<T>('gate_admin', { id, method, path, body: body ?? null }),
+  journalCsv: (id: string, query: string, dest: string) => invoke<void>('gate_journal_csv', { id, query, dest }),
   /** Écrit un export de l'audit (enregistrement, transcription) dans le fichier choisi. */
-  exportFile: (dest: string, content: string) => invoke<void>('bastion_export', { dest, content }),
+  exportFile: (dest: string, content: string) => invoke<void>('gate_export', { dest, content }),
   /** Relecture d'une session Bureau à distance : le moteur RDP décode l'image enregistrée. */
   rdpReplay: async (id: string, session: string, onMessage: (m: any) => void) => {
     const channel = new Channel<any>();
     channel.onmessage = onMessage;
-    const replay = await invoke<string>('bastion_rdp_replay', { id, session, onEvent: channel });
+    const replay = await invoke<string>('gate_rdp_replay', { id, session, onEvent: channel });
     return {
-      seek: (t: number) => { invoke('bastion_rdp_replay_seek', { replay, t }).catch(() => {}); },
-      close: () => { invoke('bastion_rdp_replay_close', { replay }).catch(() => {}); },
+      seek: (t: number) => { invoke('gate_rdp_replay_seek', { replay, t }).catch(() => {}); },
+      close: () => { invoke('gate_rdp_replay_close', { replay }).catch(() => {}); },
     };
   },
   qr: (text: string) => invoke<string>('qr_svg', { text }),
@@ -388,13 +388,13 @@ export const bastions = {
 export function connectAssist(id: string, code: string, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
   const channel = new Channel<TermEvent>();
   channel.onmessage = onEvent;
-  return invoke<ConnectResponse>('bastion_assist', { id, code, cols, rows, onEvent: channel });
+  return invoke<ConnectResponse>('gate_assist', { id, code, cols, rows, onEvent: channel });
 }
 
-export function connectBastion(id: string, server: string, extra: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+export function connectGate(id: string, server: string, extra: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
   const channel = new Channel<TermEvent>();
   channel.onmessage = onEvent;
-  return invoke<ConnectResponse>('bastion_connect', { id, server, extra, cols, rows, onEvent: channel });
+  return invoke<ConnectResponse>('gate_connect', { id, server, extra, cols, rows, onEvent: channel });
 }
 
 // ---------- Clés SSH ----------

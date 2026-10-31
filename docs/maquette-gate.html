@@ -1,4 +1,4 @@
-<title>Termoria Bastion</title>
+<title>Termoria Gate</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Maquette fidèle à l'application : tokens repris de src/styles.css (sombre par défaut, clair en option).
@@ -61,8 +61,8 @@ p { margin: 0; }
 .side { background: var(--bg); border-right: 1px solid var(--line); padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .search { width: 100%; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-strong); background: var(--field); font-size: 13px; color: var(--muted); }
 .sec { display: flex; align-items: center; gap: 6px; padding: 8px 4px 2px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.bastion-card { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--panel); }
-.bastion-card .top { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+.Gate-card { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; background: var(--panel); }
+.Gate-card .top { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
 .led { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
 .tree-row { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 6px; font-size: 13px; color: var(--text-2); min-width: 0; }
 .tree-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -188,14 +188,14 @@ td .actions { display: flex; gap: 6px; }
 
 <div class="wrap">
   <div class="intro">
-    <p class="label">Maquette · Termoria Bastion V1 (SSH)</p>
-    <h1>Le bastion vu depuis Termoria : côté utilisateur, puis côté administrateur</h1>
+    <p class="label">Maquette · Termoria Gate V1 (SSH)</p>
+    <h1>La Gate vu depuis Termoria : côté utilisateur, puis côté administrateur</h1>
     <p class="example">Les noms de serveurs, de personnes et les chiffres sont des exemples.</p>
   </div>
 
   <div class="steps" role="group" aria-label="Écrans">
     <span class="grp">Utilisateur</span>
-    <button data-s="tree" aria-pressed="true">1. Serveurs du bastion</button>
+    <button data-s="tree" aria-pressed="true">1. Serveurs de la Gate</button>
     <button data-s="session" aria-pressed="false">2. Session enregistrée</button>
     <button data-s="approve" aria-pressed="false">3. Validation d'accès</button>
     <span class="grp">Administrateur</span>
@@ -212,13 +212,13 @@ td .actions { display: flex; gap: 6px; }
       <div class="sec">Mes sessions</div>
       <div class="tree-row"><span class="name">Raspberry maison</span><span class="tags"><span class="proto">SSH</span></span></div>
       <div class="tree-row"><span class="name">NAS bureau</span><span class="tags"><span class="proto">SSH</span></span></div>
-      <div class="sec">Bastion</div>
-      <div class="bastion-card">
-        <div class="top"><span class="led"></span>bastion.acme.local</div>
+      <div class="sec">Gate</div>
+      <div class="Gate-card">
+        <div class="top"><span class="led"></span>Gate.acme.local</div>
         <div class="small muted">julien · MFA validé · expire dans 7 h 52</div>
       </div>
       <div class="tree-row folder">▾ Production</div>
-      <div class="tree-row" id="t-web"><span class="name">web-01</span><span class="tags"><span class="mode vault" title="Coffre : mot de passe fourni par le bastion">Coffre</span><span class="proto">SSH</span></span></div>
+      <div class="tree-row" id="t-web"><span class="name">web-01</span><span class="tags"><span class="mode vault" title="Coffre : mot de passe fourni par la Gate">Coffre</span><span class="proto">SSH</span></span></div>
       <div class="tree-row" id="t-db"><span class="name">db-01</span><span class="tags"><span class="mode vault">Coffre</span><span class="mode" title="Validation d'un responsable avant l'accès">Validation</span><span class="proto">SSH</span></span></div>
       <div class="tree-row folder">▾ Recette</div>
       <div class="tree-row"><span class="name">rec-app</span><span class="tags"><span class="mode rec">Enregistré</span><span class="proto">SSH</span></span></div>
@@ -230,9 +230,9 @@ td .actions { display: flex; gap: 6px; }
 
     <!-- Barre latérale administrateur -->
     <aside class="side" id="side-admin" hidden>
-      <div class="sec">Administration du bastion</div>
-      <div class="bastion-card">
-        <div class="top"><span class="led"></span>bastion.acme.local</div>
+      <div class="sec">Administration de la Gate</div>
+      <div class="Gate-card">
+        <div class="top"><span class="led"></span>Gate.acme.local</div>
         <div class="small muted">Rôle : administrateur · v1.0.0</div>
       </div>
       <div class="nav-row" data-nav="live">Sessions en direct<span class="count">7</span></div>
@@ -249,11 +249,11 @@ td .actions { display: flex; gap: 6px; }
       <div data-screen="tree" class="main">
         <div class="tabs"><div class="tab on">Accueil</div></div>
         <div class="content">
-          <div class="banner info"><span class="ico">i</span><div>Connecté au bastion <b>bastion.acme.local</b>. Les 5 serveurs auxquels vous avez droit apparaissent dans l'arbre. Double-cliquez pour ouvrir : pas de mot de passe à connaître pour les serveurs en mode Coffre.</div></div>
+          <div class="banner info"><span class="ico">i</span><div>Connecté à la Gate <b>Gate.acme.local</b>. Les 5 serveurs auxquels vous avez droit apparaissent dans l'arbre. Double-cliquez pour ouvrir : pas de mot de passe à connaître pour les serveurs en mode Coffre.</div></div>
           <div class="card">
-            <h3 style="font-size:14px">Se connecter à un bastion</h3>
+            <h3 style="font-size:14px">Se connecter à une Gate</h3>
             <div class="row">
-              <label class="fld">Adresse du bastion<input class="input" id="b-addr" value="bastion.acme.local"></label>
+              <label class="fld">Adresse de la Gate<input class="input" id="b-addr" value="Gate.acme.local"></label>
               <label class="fld">Identifiant<input class="input" id="b-user" value="julien"></label>
             </div>
             <div class="row">
@@ -262,18 +262,18 @@ td .actions { display: flex; gap: 6px; }
             </div>
             <div class="row" style="justify-content:flex-end"><button class="btn">Annuler</button><button class="btn primary">Se connecter</button></div>
           </div>
-          <p class="small muted">La liste se met à jour toute seule quand l'administrateur change vos droits. Hors connexion au bastion, la section Bastion est grisée.</p>
+          <p class="small muted">La liste se met à jour toute seule quand l'administrateur change vos droits. Hors connexion à la Gate, la section Gate est grisée.</p>
         </div>
-        <div class="status"><span>Bastion : <b>connecté</b></span><span>5 serveurs autorisés</span><span>v0.40.0</span></div>
+        <div class="status"><span>Gate : <b>connecté</b></span><span>5 serveurs autorisés</span><span>v0.40.0</span></div>
       </div>
 
       <!-- 2. Session -->
       <div data-screen="session" class="main" hidden>
         <div class="tabs"><div class="tab">Accueil</div><div class="tab on"><span class="rec-dot" aria-label="Enregistré"></span>web-01</div></div>
         <div class="content">
-          <div class="banner"><span class="ico">●</span><div>Session <b>enregistrée</b> par le bastion. Le mot de passe de <b>admin@web-01</b> est fourni par le coffre : vous ne le voyez pas.</div></div>
-<div class="term"><span class="dim">Connexion à web-01 via bastion.acme.local…</span>
-<span class="dim">Bastion : accès autorisé (groupe Admins Linux, lun-ven 7 h-20 h)</span>
+          <div class="banner"><span class="ico">●</span><div>Session <b>enregistrée</b> par la Gate. Le mot de passe de <b>admin@web-01</b> est fourni par le coffre : vous ne le voyez pas.</div></div>
+<div class="term"><span class="dim">Connexion à web-01 via Gate.acme.local…</span>
+<span class="dim">Gate : accès autorisé (groupe Admins Linux, lun-ven 7 h-20 h)</span>
 <span class="host">admin@web-01</span>:~$ sudo systemctl restart nginx
 <span class="host">admin@web-01</span>:~$ tail -n 2 /var/log/nginx/error.log
 2026/10/29 09:41:02 [notice] 812#812: signal process started
@@ -283,7 +283,7 @@ td .actions { display: flex; gap: 6px; }
 <span class="blk">  L'équipe Sécurité est prévenue.</span>
 <span class="host">admin@web-01</span>:~$ <span class="cursor"></span></div>
         </div>
-        <div class="status"><span>Via <b>bastion.acme.local</b></span><span>Mode : <b>Coffre</b> · enregistré</span><span>SFTP : autorisé</span><span>Tunnels : interdits</span></div>
+        <div class="status"><span>Via <b>Gate.acme.local</b></span><span>Mode : <b>Coffre</b> · enregistré</span><span>SFTP : autorisé</span><span>Tunnels : interdits</span></div>
       </div>
 
       <!-- 3. Validation -->
@@ -306,7 +306,7 @@ td .actions { display: flex; gap: 6px; }
             <div class="tl"><span class="pt">3</span><div><b>Session ouverte pour 1 heure</b><p class="small muted">Puis coupée automatiquement, avec un avertissement 5 minutes avant.</p></div></div>
           </div>
         </div>
-        <div class="status"><span>Via <b>bastion.acme.local</b></span><span>Validation : <b>en attente</b></span></div>
+        <div class="status"><span>Via <b>Gate.acme.local</b></span><span>Validation : <b>en attente</b></span></div>
       </div>
 
       <!-- 4. Sessions en direct -->
@@ -323,10 +323,10 @@ td .actions { display: flex; gap: 6px; }
           <div class="tbl-wrap"><table>
             <thead><tr><th>Utilisateur</th><th>Cible</th><th>Mode</th><th>Depuis</th><th>Nœud</th><th></th></tr></thead>
             <tbody>
-              <tr><td>julien</td><td>admin@web-01</td><td><span class="mode vault">Coffre</span></td><td>12 min</td><td>bastion-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
-              <tr><td>sophie.l</td><td>deploy@rec-app</td><td><span class="mode rec">Enregistré</span></td><td>48 min</td><td>bastion-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
-              <tr><td>presta.infog</td><td>root@web-02</td><td><span class="mode vault">Coffre</span></td><td>1 h 05</td><td>bastion-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
-              <tr><td>karim.b</td><td>netadmin@fw-edge</td><td><span class="mode">Rebond</span></td><td>3 min</td><td>bastion-1</td><td><div class="actions"><button class="btn sm" disabled title="Rebond : contenu non enregistré">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+              <tr><td>julien</td><td>admin@web-01</td><td><span class="mode vault">Coffre</span></td><td>12 min</td><td>Gate-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+              <tr><td>sophie.l</td><td>deploy@rec-app</td><td><span class="mode rec">Enregistré</span></td><td>48 min</td><td>Gate-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+              <tr><td>presta.infog</td><td>root@web-02</td><td><span class="mode vault">Coffre</span></td><td>1 h 05</td><td>Gate-1</td><td><div class="actions"><button class="btn sm">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
+              <tr><td>karim.b</td><td>netadmin@fw-edge</td><td><span class="mode">Rebond</span></td><td>3 min</td><td>Gate-1</td><td><div class="actions"><button class="btn sm" disabled title="Rebond : contenu non enregistré">Regarder</button><button class="btn sm danger">Couper</button></div></td></tr>
             </tbody>
           </table></div>
         </div>
@@ -359,7 +359,7 @@ td .actions { display: flex; gap: 6px; }
                 <div class="cmd blk"><span class="t">07:03</span><code>rm -rf /var/www (bloquée)</code></div>
                 <div class="cmd"><span class="t">09:20</span><code>exit</code></div>
               </div>
-              <div class="seal"><span>✓</span><div><b>Enregistrement intact.</b> Signature du bastion vérifiée, chaînage du journal continu.</div></div>
+              <div class="seal"><span>✓</span><div><b>Enregistrement intact.</b> Signature de la Gate vérifiée, chaînage du journal continu.</div></div>
               <button class="btn">Exporter pour un audit</button>
             </div>
           </div>
@@ -405,14 +405,14 @@ td .actions { display: flex; gap: 6px; }
           </div>
           <div class="topo">
             <div class="node">
-              <div class="top"><span class="led"></span>bastion-1</div>
+              <div class="top"><span class="led"></span>Gate-1</div>
               <div class="kv">Sessions<b>7</b></div>
               <div class="kv">CPU (2 vCPU)<b>6 %</b></div><div class="meter"><i style="width:6%"></i></div>
               <div class="kv">Mémoire (4 Go)<b>0,9 Go</b></div><div class="meter"><i style="width:22%"></i></div>
             </div>
             <div class="node">
               <div class="top"><span class="led"></span>Base PostgreSQL</div>
-              <div class="kv">Emplacement<b>locale (bastion-1)</b></div>
+              <div class="kv">Emplacement<b>locale (Gate-1)</b></div>
               <div class="kv">Sauvegarde<b>chaque nuit, 7 jours</b></div>
             </div>
             <div class="node">
@@ -433,7 +433,7 @@ td .actions { display: flex; gap: 6px; }
             </tbody>
           </table></div>
         </div>
-        <div class="status"><span>Taille : <b>Petite</b></span><span>Debian 12 · bastion v1.0.0</span></div>
+        <div class="status"><span>Taille : <b>Petite</b></span><span>Debian 12 · Gate v1.0.0</span></div>
       </div>
     </section>
   </div>
@@ -444,14 +444,14 @@ td .actions { display: flex; gap: 6px; }
 <script>
 const TEXT = {
   tree: {
-    t: 'Le bastion devient une section de l\'arbre',
-    p: ['On ajoute un bastion une fois (adresse, identifiant, code TOTP). Ses serveurs autorisés apparaissent sous vos sessions personnelles.',
+    t: 'La Gate devient une section de l\'arbre',
+    p: ['On ajoute une Gate une fois (adresse, identifiant, code TOTP). Ses serveurs autorisés apparaissent sous vos sessions personnelles.',
         'Chaque serveur affiche son mode : Rebond (journal seul), Enregistré, Coffre (mot de passe jamais montré), Validation.',
         'Les droits suivent l\'administrateur en direct : un accès retiré disparaît de l\'arbre.'],
-    d: ['Un seul bastion par Termoria, ou plusieurs (un par client pour les prestataires) ?',
+    d: ['Un seul Gate par Termoria, ou plusieurs (un par client pour les prestataires) ?',
         'Le Bureau à distance apparaît grisé avec « V2 » ou reste caché jusque-là ?'] },
   session: {
-    t: 'Une session ouverte par le bastion',
+    t: 'Une session ouverte par la Gate',
     p: ['Le point rouge dans l\'onglet et le bandeau rappellent que tout est enregistré.',
         'La commande bloquée est arrêtée avant d\'atteindre le serveur, avec le nom de la règle.',
         'La barre d\'état résume ce qui est permis : SFTP, tunnels.'],
@@ -481,13 +481,13 @@ const TEXT = {
     p: ['Une règle = un groupe, des cibles, un compte (du coffre ou le sien) et des conditions.',
         'Tout ce qui n\'est pas explicitement permis est refusé.',
         'Les accès de prestataires peuvent expirer à une date donnée.'],
-    d: ['Les groupes viennent-ils seulement du bastion en V1, l\'annuaire de l\'entreprise (Active Directory, Entra) arrivant en V3 ?'] },
+    d: ['Les groupes viennent-ils seulement de la Gate en V1, l\'annuaire de l\'entreprise (Active Directory, Entra) arrivant en V3 ?'] },
   system: {
     t: 'Système : la même installation grandit',
     p: ['La taille Petite tourne sur votre VM (2 vCPU, 4 Go). Ajouter un nœud fait passer en Moyenne, sans réinstaller.',
         'Les chiffres de charge viendront des mesures réelles sur votre VM, pas d\'estimations.',
         'Le tableau Sécurité prépare la certification : mode durci, mises à jour signées, journal chaîné, clé du coffre.'],
-    d: ['Sauvegardes : gérées par le bastion (comme ici) ou laissées à la sauvegarde de VM du client ?'] },
+    d: ['Sauvegardes : gérées par la Gate (comme ici) ou laissées à la sauvegarde de VM du client ?'] },
 };
 const ADMIN = new Set(['live', 'replay', 'rights', 'system']);
 const explain = document.getElementById('explain');
@@ -510,11 +510,11 @@ function show(s) {
   const ul2 = document.createElement('ul'); x.d.forEach((t) => { const li = document.createElement('li'); li.textContent = t; ul2.append(li); });
   right.append(h2, ul2);
   explain.append(left, right);
-  try { localStorage.setItem('bastion-maquette', s); } catch {}
+  try { localStorage.setItem('Gate-maquette', s); } catch {}
 }
 document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => show(b.dataset.s)));
 document.querySelectorAll('.nav-row[data-nav]').forEach((r) => { r.style.cursor = 'pointer'; r.addEventListener('click', () => show(r.dataset.nav)); });
 let start = 'tree';
-try { const v = localStorage.getItem('bastion-maquette'); if (v && TEXT[v]) start = v; } catch {}
+try { const v = localStorage.getItem('Gate-maquette'); if (v && TEXT[v]) start = v; } catch {}
 show(start);
 </script>

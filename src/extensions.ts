@@ -51,9 +51,9 @@ export function renderExtensions(
       h('div', { class: 'ext-meta' },
         h('h4', {}, p.name, h('span', { class: 'ext-tag' }, core ? t('Core', 'Cœur') : p.builtin ? t('Built-in', 'Intégrée') : t('External', 'Externe'))),
         h('p', {}, p.description),
-        h('p', { class: 'muted small' }, p.id === 'heimdia' ? t(`v${p.version} · SSH Gate · its servers are added to the sidebar`, `v${p.version} · Gate SSH · ses serveurs s'ajoutent dans la barre latérale`) : `v${p.version} · ${VIEW_LABEL[p.view] ?? p.view} · ${p.fields.length} champ(s)`)),
+        h('p', { class: 'muted small' }, p.id === 'gate' ? t(`v${p.version} · SSH Gate · its servers are added to the sidebar`, `v${p.version} · Gate SSH · ses serveurs s'ajoutent dans la barre latérale`) : `v${p.version} · ${VIEW_LABEL[p.view] ?? p.view} · ${p.fields.length} champ(s)`)),
       h('div', { class: 'ext-side' },
-        h('span', { class: 'ext-count' }, p.id === 'heimdia' ? `${count} Gate${count > 1 ? 's' : ''}` : `${count} session${count > 1 ? 's' : ''}`),
+        h('span', { class: 'ext-count' }, p.id === 'gate' ? `${count} Gate${count > 1 ? 's' : ''}` : `${count} session${count > 1 ? 's' : ''}`),
         toggle));
     return el;
   };

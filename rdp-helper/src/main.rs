@@ -8,7 +8,7 @@
 //!   { "type": "connected" } | { "type": "resize", width, height }
 //!   | { "type": "image", x, y, width, height, rgba } | { "type": "closed", "reason": … }
 //!
-//! Relecture (bastion Heimdia) : 1re ligne { "replay": "fichier" }, voir `replay`.
+//! Relecture (Gate) : 1re ligne { "replay": "fichier" }, voir `replay`.
 
 mod replay;
 mod scancodes;
@@ -45,7 +45,7 @@ struct Settings {
     password: String,
     width: u16,
     height: u16,
-    /// Passage RDCleanPath d'un bastion Heimdia (mode enregistré).
+    /// Passage RDCleanPath d'une Gate (mode enregistré).
     #[serde(default)]
     rdcleanpath: Option<RdCleanPath>,
 }

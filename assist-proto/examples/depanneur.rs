@@ -1,4 +1,4 @@
-//! Essai : le côté dépanneur, comme Portunia (bastion de test au certificat auto-signé).
+//! Essai : le côté dépanneur, comme Portunia (Gate de test au certificat auto-signé).
 //!
 //!   cargo run --example depanneur -- wss://127.0.0.1:18444 JETON "483 216 907" 13391
 //! puis connecter un client RDP à 127.0.0.1:13391.
@@ -17,7 +17,7 @@ use tokio_rustls::rustls::{
 };
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
-/// Bastion de test : certificat accepté sans vérification (Portunia, lui, vérifie l'empreinte).
+/// Gate de test : certificat accepté sans vérification (Portunia, lui, vérifie l'empreinte).
 #[derive(Debug)]
 struct AnyCert;
 impl ServerCertVerifier for AnyCert {

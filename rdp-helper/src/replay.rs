@@ -1,6 +1,6 @@
-//! Relecture d'une session Bureau à distance enregistrée par un bastion Heimdia.
+//! Relecture d'une session Bureau à distance enregistrée par une Gate.
 //!
-//! Le bastion fournit les messages du serveur, dans l'ordre et avec leur temps (fichier :
+//! La Gate fournit les messages du serveur, dans l'ordre et avec leur temps (fichier :
 //! temps f64, longueur u32, message, à la suite). Ils sont rejoués dans IronRDP comme si le
 //! serveur les envoyait : la séquence de connexion d'abord (négociation simulée en TLS simple,
 //! l'authentification NLA n'étant pas enregistrée), puis l'image. Ce qu'IronRDP voudrait
@@ -322,7 +322,7 @@ mod tests {
         [img.data()[i], img.data()[i + 1], img.data()[i + 2]]
     }
 
-    /// Séquence de connexion réelle (serveur xrdp, enregistrée par Heimdia), puis des images
+    /// Séquence de connexion réelle (serveur xrdp, enregistrée par Portunia Gate), puis des images
     /// au format qu'envoie Windows : la relecture redonne les bons pixels, et un retour en
     /// arrière (nouveau décodage) aussi.
     #[test]

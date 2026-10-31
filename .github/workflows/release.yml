@@ -66,8 +66,8 @@ jobs:
         run: |
           cargo build --release --manifest-path aide/Cargo.toml
           mkdir -p assist
-          cp aide/target/release/portunia-assist.exe assist/
-          (cd assist && sha256sum portunia-assist.exe | cut -d' ' -f1 > portunia-assist.exe.sha256)
+          cp aide/target/release/portunia-assistance.exe assist/
+          (cd assist && sha256sum portunia-assistance.exe | cut -d' ' -f1 > portunia-assistance.exe.sha256)
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -75,8 +75,8 @@ jobs:
           token: ${{ secrets.RELEASES_TOKEN }}
           tag_name: ${{ github.ref_name }}
           files: |
-            assist/portunia-assist.exe
-            assist/portunia-assist.exe.sha256
+            assist/portunia-assistance.exe
+            assist/portunia-assistance.exe.sha256
 
       # Copie dans ce dépôt privé, avec la liste des changements depuis la version précédente.
       - uses: softprops/action-gh-release@v2

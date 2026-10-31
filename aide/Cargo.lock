@@ -3156,8 +3156,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "portunia-assist"
-version = "0.48.0"
+name = "portunia-assistance"
+version = "0.50.0"
 dependencies = [
  "anyhow",
  "assist-proto",

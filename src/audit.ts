@@ -1,23 +1,23 @@
-// Audit d'un bastion Heimdia (onglet) : sessions avec recherche et relecture, journal vérifié.
-// Ouvert par le menu « Audit » du bastion : administrateurs, auditeurs, et chaque compte pour
-// ses propres sessions si le bastion l'autorise.
+// Audit d'une Gate (onglet) : sessions avec recherche et relecture, journal vérifié.
+// Ouvert par le menu « Audit » de la Gate : administrateurs, auditeurs, et chaque compte pour
+// ses propres sessions si la Gate l'autorise.
 import { save } from '@tauri-apps/plugin-dialog';
-import { Bastion, bastions, errorText } from './api';
+import { Gate, gates, errorText } from './api';
 import { h } from './dom';
 import { LOCALE, t } from './i18n';
 
 export interface AuditHost {
   toast(message: string, kind?: 'info' | 'error'): void;
   /** Ouvre la relecture d'une session dans un onglet, à `start` secondes si donné. */
-  openRecording(b: Bastion, session: AuditRow, start?: number): void;
+  openRecording(b: Gate, session: AuditRow, start?: number): void;
 }
 
 export interface AuditRow {
   id: string; compte: string; serveur: string; type: string; detail: string; mode: string; adresse: string;
   debut: string; fin: string | null; enregistree: boolean; frappe: boolean; octets: number;
-  /** Absent sur un bastion antérieur à la 0.8 : relisible si enregistrée. */
+  /** Absent sur une Gate antérieur à la 0.8 : relisible si enregistrée. */
   relisible?: boolean;
-  /** Session Bureau à distance relisible (Heimdia 0.10 et suivants). */
+  /** Session Bureau à distance relisible (Portunia Gate 0.10 et suivants). */
   relisible_rdp?: boolean;
   trouve: { t: number; extrait: string } | null;
 }
@@ -44,12 +44,12 @@ function dayBefore(days: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
+export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
   const full = b.role === 'admin' || b.role === 'auditor';
   const sections: { id: Section; label: string }[] = full ? [{ id: 'sessions', label: 'Sessions' }, { id: 'journal', label: t('Log', 'Journal') }] : [{ id: 'sessions', label: t('My sessions', 'Mes sessions') }];
   const nav = h('div', { class: 'seg admin-nav', role: 'tablist' });
   const content = h('div', { class: 'admin-content' });
-  const call = <T = any>(path: string) => bastions.admin<T>(b.id, 'GET', path);
+  const call = <T = any>(path: string) => gates.admin<T>(b.id, 'GET', path);
   const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
 
   const show = async (id: Section) => {
@@ -146,13 +146,13 @@ export function renderBastionAudit(b: Bastion, host: AuditHost): HTMLElement {
     const exportCsv = async () => {
       const dest = await save({ defaultPath: `journal-${b.name}-${new Date().toISOString().slice(0, 10)}.csv`, filters: [{ name: 'CSV', extensions: ['csv'] }] });
       if (!dest) return;
-      try { await bastions.journalCsv(b.id, search.value, dest); host.toast(t(`Log exported: ${dest}`, `Journal exporté : ${dest}`)); } catch (e) { fail(e); }
+      try { await gates.journalCsv(b.id, search.value, dest); host.toast(t(`Log exported: ${dest}`, `Journal exporté : ${dest}`)); } catch (e) { fail(e); }
     };
     return h('div', { class: 'admin-section' }, h('div', { class: 'admin-bar' }, search, h('button', { class: 'btn', onclick: exportCsv }, t('Export to CSV', 'Exporter en CSV'))), seal, list);
   };
 
   show('sessions');
-  return h('div', { class: 'ext-page bastion-admin' },
+  return h('div', { class: 'ext-page gate-admin' },
     h('header', {}, h('h2', {}, `Audit · ${b.name}`), h('p', { class: 'muted' }, full
       ? t(`${b.host} · ${b.login} (${b.role === 'admin' ? 'administrator' : 'auditor'}) · session replay and log`, `${b.host} · ${b.login} (${b.role === 'admin' ? 'administrateur' : 'auditeur'}) · relecture des sessions et journal`)
       : t(`${b.host} · your sessions on this Gate`, `${b.host} · vos sessions sur cette Gate`))),

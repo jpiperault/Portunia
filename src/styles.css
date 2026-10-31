@@ -607,25 +607,25 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .quick-options-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
 .quick-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px; }
 
-/* Extension Heimdia : section Bastions de la barre latérale */
-.bastions { flex: 1 1 auto; min-height: 0; max-height: 55%; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
-.bastion-list { display: flex; flex-direction: column; gap: 2px; }
-.bastion-card { display: flex; align-items: center; gap: 2px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--card); margin: 2px 0; }
-.bastion-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: transparent; border: 0; color: var(--text); text-align: left; cursor: pointer; }
-.bastion-main .grow { display: flex; flex-direction: column; }
-.bastion-name { font-size: 13px; font-weight: 600; }
-.bastion-sub { font-size: 11.5px; color: var(--muted); }
+/* Extension Portunia Gate : section Gates de la barre latérale */
+.gates { flex: 1 1 auto; min-height: 0; max-height: 55%; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 4px; }
+.gate-list { display: flex; flex-direction: column; gap: 2px; }
+.gate-card { display: flex; align-items: center; gap: 2px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--card); margin: 2px 0; }
+.gate-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: transparent; border: 0; color: var(--text); text-align: left; cursor: pointer; }
+.gate-main .grow { display: flex; flex-direction: column; }
+.gate-name { font-size: 13px; font-weight: 600; }
+.gate-sub { font-size: 11.5px; color: var(--muted); }
 .led { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--dot-ring); }
 .led.on { background: var(--ok); }
-.bastion-card.off .bastion-name { color: var(--text-2); }
-.bastion-folder { min-height: 26px; padding-left: 10px; font-size: 12px; }
-.bastion-empty { margin: 4px 10px 8px; }
-.bastion-warn { margin: 2px 0 4px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: 6px; background: var(--warn-soft); color: var(--text); font-size: 12px; text-align: left; cursor: pointer; }
+.gate-card.off .gate-name { color: var(--text-2); }
+.gate-folder { min-height: 26px; padding-left: 10px; font-size: 12px; }
+.gate-empty { margin: 4px 10px 8px; }
+.gate-warn { margin: 2px 0 4px; padding: 6px 10px; border: 1px solid var(--warn); border-radius: 6px; background: var(--warn-soft); color: var(--text); font-size: 12px; text-align: left; cursor: pointer; }
 .badge.mode-coffre { background: var(--warn-soft); color: var(--warn); }
 .badge.mode-enregistre { background: rgb(255 123 123 / .14); color: var(--danger); }
 .badge.mode-rebond { background: var(--chip-bg); color: var(--text-2); }
 .badge.proto-rdp { background: rgb(91 155 255 / .14); color: var(--accent); margin-right: 4px; }
-.badge-heimdia { background: var(--warn-soft); color: var(--warn); }
+.badge-gate { background: var(--warn-soft); color: var(--warn); }
 
 /* Fenêtres de l'extension */
 .dialog.narrow { width: min(560px, calc(100vw - 32px)); }
@@ -651,8 +651,8 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .day:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
 .day:has(input:focus-visible) { outline: 2px solid var(--accent); }
 
-/* Administration d'un bastion */
-.bastion-admin { max-width: 1280px; }
+/* Administration d'une Gate */
+.gate-admin { max-width: 1280px; }
 .admin-nav { gap: 6px; }
 .admin-nav .seg-opt { height: 32px; font-size: 13px; }
 .admin-content { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
@@ -678,7 +678,7 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .seal { padding: 9px 12px; border-radius: 8px; font-size: 13px; background: rgb(76 195 138 / .12); color: var(--text); }
 .seal.bad { background: rgb(255 123 123 / .16); color: var(--danger); font-weight: 600; }
 .form-narrow { max-width: 620px; }
-/* Portail web (administration du bastion) */
+/* Portail web (administration de la Gate) */
 .portal-head { display: flex; gap: 14px; align-items: flex-start; }
 .portal-head .switch { margin-top: 2px; }
 .portal-head p { margin: 4px 0 0; }
@@ -693,7 +693,7 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .sidebar { min-height: 0; overflow: hidden; }
 .sidebar-foot { flex: none; }
 
-/* Audit d'un bastion : filtres des sessions */
+/* Audit d'une Gate : filtres des sessions */
 .audit-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .audit-filters .input { height: 34px; padding: 0 10px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; color: var(--text); min-width: 0; }
 .audit-filters .grow { flex: 1 1 280px; }

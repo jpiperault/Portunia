@@ -1,8 +1,8 @@
-//! Extension Heimdia : bastions SSH ajoutés dans Portunia.
+//! Extension Portunia Gate : Gates SSH ajoutés dans Portunia.
 //!
-//! L'API du bastion (HTTPS, certificat vérifié par son empreinte) donne un jeton de
+//! L'API de la Gate (HTTPS, certificat vérifié par son empreinte) donne un jeton de
 //! session après mot de passe et code ; pour chaque ouverture, Portunia demande un jeton
-//! SSH à usage unique et se connecte avec « login%serveur » au port SSH du bastion.
+//! SSH à usage unique et se connecte avec « login%serveur » au port SSH de la Gate.
 //! Le jeton de session reste dans le Gestionnaire d'identifiants Windows.
 
 use std::{
@@ -23,14 +23,14 @@ use tauri::{ipc::Channel, AppHandle, State};
 
 use crate::commands::{err, full, start_connection, AppState, CmdResult, ConnectResponse};
 
-const FILE: &str = "bastions.json";
+const FILE: &str = "gates.json";
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct Bastion {
+pub struct Gate {
     pub id: String,
     pub name: String,
-    /// Hôte de l'API (et du SSH) : « bastion.acme.local ».
+    /// Hôte de l'API (et du SSH) : « Gate.acme.local ».
     pub host: String,
     pub api_port: u16,
     pub ssh_port: u16,
@@ -40,12 +40,12 @@ pub struct Bastion {
     pub login: String,
     #[serde(default)]
     pub role: String,
-    /// Fin de la session du bastion (RFC 3339) ; vide = déconnecté.
+    /// Fin de la session de la Gate (RFC 3339) ; vide = déconnecté.
     #[serde(default)]
     pub expires: String,
     #[serde(default)]
     pub remember_allowed: bool,
-    /// Le bastion laisse chaque compte relire ses propres sessions.
+    /// La Gate laisse chaque compte relire ses propres sessions.
     #[serde(default)]
     pub own_replay: bool,
     /// Dernière liste connue des serveurs, affichée grisée hors connexion.
@@ -53,9 +53,9 @@ pub struct Bastion {
     pub servers: Vec<Value>,
 }
 
-impl Bastion {
+impl Gate {
     fn secret_id(&self) -> String {
-        format!("heimdia-{}", self.id)
+        format!("gate-{}", self.id)
     }
     fn connected(&self) -> bool {
         chrono::DateTime::parse_from_rfc3339(&self.expires).is_ok_and(|e| e > chrono::Utc::now())
@@ -66,23 +66,23 @@ fn path(data_dir: &Path) -> PathBuf {
     data_dir.join(FILE)
 }
 
-fn load(data_dir: &Path) -> Vec<Bastion> {
+fn load(data_dir: &Path) -> Vec<Gate> {
     crate::vault::load_json(&path(data_dir)).0
 }
 
-fn save(data_dir: &Path, list: &[Bastion]) -> Result<()> {
+fn save(data_dir: &Path, list: &[Gate]) -> Result<()> {
     crate::vault::write(&path(data_dir), &serde_json::to_string_pretty(list)?)
 }
 
-fn find(data_dir: &Path, id: &str) -> Result<Bastion> {
+fn find(data_dir: &Path, id: &str) -> Result<Gate> {
     load(data_dir).into_iter().find(|b| b.id == id).ok_or_else(|| anyhow!(t!("Unknown Gate", "Gate inconnu")))
 }
 
-fn update(data_dir: &Path, bastion: &Bastion) -> Result<()> {
+fn update(data_dir: &Path, gate: &Gate) -> Result<()> {
     let mut list = load(data_dir);
-    match list.iter_mut().find(|b| b.id == bastion.id) {
-        Some(b) => *b = bastion.clone(),
-        None => list.push(bastion.clone()),
+    match list.iter_mut().find(|b| b.id == gate.id) {
+        Some(b) => *b = gate.clone(),
+        None => list.push(gate.clone()),
     }
     save(data_dir, &list)
 }
@@ -150,7 +150,7 @@ fn client(expected: Option<&str>) -> Result<(reqwest::Client, Arc<Mutex<Option<S
         .tls_backend_preconfigured(config)
         .timeout(std::time::Duration::from_secs(20))
         .user_agent(concat!("Portunia/", env!("CARGO_PKG_VERSION")))
-        // Messages du bastion dans la langue de l'interface.
+        // Messages de la Gate dans la langue de l'interface.
         .default_headers(reqwest::header::HeaderMap::from_iter([(
             reqwest::header::ACCEPT_LANGUAGE,
             reqwest::header::HeaderValue::from_static(crate::lang::code()),
@@ -159,8 +159,8 @@ fn client(expected: Option<&str>) -> Result<(reqwest::Client, Arc<Mutex<Option<S
     Ok((http, seen))
 }
 
-/// Relais local vers l'API du bastion, en TLS avec le certificat épinglé : le moteur RDP s'y
-/// connecte en clair sur 127.0.0.1 (passage RDCleanPath du bastion). Une seule connexion.
+/// Relais local vers l'API de la Gate, en TLS avec le certificat épinglé : le moteur RDP s'y
+/// connecte en clair sur 127.0.0.1 (passage RDCleanPath de la Gate). Une seule connexion.
 async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u16> {
     let mut tls = pinned_tls(host, port, fingerprint).await?;
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
@@ -174,7 +174,7 @@ async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u1
     Ok(local)
 }
 
-/// Connexion TLS à l'API du bastion, certificat vérifié par son empreinte.
+/// Connexion TLS à l'API de la Gate, certificat vérifié par son empreinte.
 async fn pinned_tls(host: &str, port: u16, fingerprint: &str) -> Result<tokio_rustls::client::TlsStream<tokio::net::TcpStream>> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let verifier = Pinned { expected: Some(fingerprint.to_string()), seen: Arc::default(), provider: provider.clone() };
@@ -222,12 +222,12 @@ fn root_cause(e: &dyn std::error::Error) -> String {
     cur.to_string()
 }
 
-fn token(b: &Bastion) -> Result<String> {
+fn token(b: &Gate) -> Result<String> {
     crate::secrets::get(&b.secret_id(), "jeton")?.ok_or_else(|| anyhow!("SESSION_EXPIREE"))
 }
 
-/// Appel authentifié ; sur session expirée, le bastion est marqué déconnecté.
-async fn authed(data_dir: &Path, b: &mut Bastion, method: reqwest::Method, path: &str, body: Option<Value>) -> Result<Value> {
+/// Appel authentifié ; sur session expirée, la Gate est marqué déconnecté.
+async fn authed(data_dir: &Path, b: &mut Gate, method: reqwest::Method, path: &str, body: Option<Value>) -> Result<Value> {
     let t = token(b)?;
     match call(&b.host, b.api_port, &b.api_fingerprint, Some(&t), method, path, body).await {
         Err(e) if e.to_string() == "SESSION_EXPIREE" => {
@@ -244,31 +244,31 @@ async fn authed(data_dir: &Path, b: &mut Bastion, method: reqwest::Method, path:
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BastionView {
+pub struct GateView {
     #[serde(flatten)]
-    bastion: Bastion,
+    gate: Gate,
     connected: bool,
     password_saved: bool,
 }
 
-fn view(b: Bastion) -> BastionView {
+fn view(b: Gate) -> GateView {
     let password_saved = crate::secrets::get(&b.secret_id(), "mot_de_passe").ok().flatten().is_some();
-    BastionView { connected: b.connected(), password_saved, bastion: b }
+    GateView { connected: b.connected(), password_saved, gate: b }
 }
 
 #[tauri::command]
-pub fn bastion_list(state: State<'_, AppState>) -> CmdResult<Vec<BastionView>> {
+pub fn gate_list(state: State<'_, AppState>) -> CmdResult<Vec<GateView>> {
     state.unlocked()?;
     Ok(load(&state.data_dir).into_iter().map(view).collect())
 }
 
-/// Premier contact : empreinte du certificat et informations publiques du bastion.
+/// Premier contact : empreinte du certificat et informations publiques de la Gate.
 #[tauri::command]
-pub async fn bastion_probe(address: String) -> CmdResult<Value> {
+pub async fn gate_probe(address: String) -> CmdResult<Value> {
     let (host, port) = split_address(&address).map_err(full)?;
     let (http, seen) = client(None).map_err(full)?;
     let resp = http
-        .get(format!("https://{host}:{port}/api/v1/bastion"))
+        .get(format!("https://{host}:{port}/api/v1/gate"))
         .send()
         .await
         .map_err(|e| format!("Gate injoignable ({host}:{port}) : {}", root_cause(&e)))?;
@@ -283,7 +283,7 @@ pub async fn bastion_probe(address: String) -> CmdResult<Value> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginRequest {
-    /// Bastion déjà ajouté (reconnexion) ; sinon ajout.
+    /// Gate déjà ajouté (reconnexion) ; sinon ajout.
     id: Option<String>,
     host: String,
     api_port: u16,
@@ -295,10 +295,10 @@ pub struct LoginRequest {
     remember: bool,
 }
 
-/// Connexion (ou reconnexion) : renvoie l'état donné par le bastion (« code_requis »,
-/// « changer_mot_de_passe », « enrolement » avec le secret à scanner) ou le bastion connecté.
+/// Connexion (ou reconnexion) : renvoie l'état donné par la Gate (« code_requis »,
+/// « changer_mot_de_passe », « enrolement » avec le secret à scanner) ou la Gate connecté.
 #[tauri::command]
-pub async fn bastion_login(state: State<'_, AppState>, request: LoginRequest) -> CmdResult<Value> {
+pub async fn gate_login(state: State<'_, AppState>, request: LoginRequest) -> CmdResult<Value> {
     state.unlocked()?;
     let data_dir = state.data_dir.clone();
     let existing = request.id.as_deref().and_then(|id| find(&data_dir, id).ok());
@@ -321,8 +321,8 @@ pub async fn bastion_login(state: State<'_, AppState>, request: LoginRequest) ->
     if answer.get("etat").and_then(Value::as_str) != Some("ok") {
         return Ok(answer);
     }
-    let info = &answer["bastion"];
-    let mut b = existing.unwrap_or_else(|| Bastion { id: uuid::Uuid::new_v4().to_string(), ..Default::default() });
+    let info = &answer["gate"];
+    let mut b = existing.unwrap_or_else(|| Gate { id: uuid::Uuid::new_v4().to_string(), ..Default::default() });
     b.name = info["nom"].as_str().unwrap_or("Portunia Gate").to_string();
     b.host = request.host.clone();
     b.api_port = request.api_port;
@@ -335,14 +335,14 @@ pub async fn bastion_login(state: State<'_, AppState>, request: LoginRequest) ->
     b.remember_allowed = info["memo_mot_de_passe"].as_bool().unwrap_or(false);
     b.own_replay = info["relecture_propres"].as_bool().unwrap_or(false);
     crate::secrets::set(&b.secret_id(), "jeton", answer["jeton"].as_str().unwrap_or_default()).map_err(full)?;
-    // Mot de passe gardé seulement si l'utilisateur le demande et que le bastion l'autorise.
+    // Mot de passe gardé seulement si l'utilisateur le demande et que la Gate l'autorise.
     let final_password = request.new_password.filter(|p| !p.is_empty()).unwrap_or(password);
     if request.remember && b.remember_allowed {
         crate::secrets::set(&b.secret_id(), "mot_de_passe", &final_password).map_err(full)?;
     } else {
         let _ = crate::secrets::delete(&b.secret_id(), "mot_de_passe");
     }
-    // L'empreinte SSH du bastion vient de l'API vérifiée : pas de question à la première session.
+    // L'empreinte SSH de la Gate vient de l'API vérifiée : pas de question à la première session.
     if !b.ssh_fingerprint.is_empty() {
         crate::connectors::ssh::remember_host(&data_dir, &format!("{}:{}", b.host, b.ssh_port), &b.ssh_fingerprint);
     }
@@ -350,11 +350,11 @@ pub async fn bastion_login(state: State<'_, AppState>, request: LoginRequest) ->
         b.servers = list["serveurs"].as_array().cloned().unwrap_or_default();
     }
     update(&data_dir, &b).map_err(full)?;
-    Ok(json!({ "etat": "ok", "bastion": view(b) }))
+    Ok(json!({ "etat": "ok", "gate": view(b) }))
 }
 
 #[tauri::command]
-pub async fn bastion_logout(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+pub async fn gate_logout(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     let mut b = find(&state.data_dir, &id).map_err(full)?;
     if let Ok(t) = token(&b) {
         let _ = call(&b.host, b.api_port, &b.api_fingerprint, Some(&t), reqwest::Method::DELETE, "/connexion", None).await;
@@ -365,8 +365,8 @@ pub async fn bastion_logout(state: State<'_, AppState>, id: String) -> CmdResult
 }
 
 #[tauri::command]
-pub async fn bastion_remove(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    let _ = bastion_logout(state.clone(), id.clone()).await;
+pub async fn gate_remove(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    let _ = gate_logout(state.clone(), id.clone()).await;
     let b = find(&state.data_dir, &id).map_err(full)?;
     let _ = crate::secrets::delete(&b.secret_id(), "mot_de_passe");
     let mut list = load(&state.data_dir);
@@ -376,7 +376,7 @@ pub async fn bastion_remove(state: State<'_, AppState>, id: String) -> CmdResult
 
 /// Serveurs autorisés maintenant (et mise à jour de la liste gardée).
 #[tauri::command]
-pub async fn bastion_servers(state: State<'_, AppState>, id: String) -> CmdResult<BastionView> {
+pub async fn gate_servers(state: State<'_, AppState>, id: String) -> CmdResult<GateView> {
     state.unlocked()?;
     let mut b = find(&state.data_dir, &id).map_err(full)?;
     let list = authed(&state.data_dir, &mut b, reqwest::Method::GET, "/serveurs", None).await.map_err(full)?;
@@ -385,14 +385,14 @@ pub async fn bastion_servers(state: State<'_, AppState>, id: String) -> CmdResul
     Ok(view(b))
 }
 
-/// Appel d'administration (/admin/…) ou d'audit (/audit/…), réservé par le bastion aux rôles autorisés.
+/// Appel d'administration (/admin/…) ou d'audit (/audit/…), réservé par la Gate aux rôles autorisés.
 #[tauri::command]
-pub async fn bastion_admin(state: State<'_, AppState>, id: String, method: String, path: String, body: Option<Value>) -> CmdResult<Value> {
+pub async fn gate_admin(state: State<'_, AppState>, id: String, method: String, path: String, body: Option<Value>) -> CmdResult<Value> {
     state.unlocked()?;
     if !(path.starts_with("/admin/") || path.starts_with("/audit/")) || path.contains("..") {
         return Err(t!("Invalid administration path", "Chemin d'administration invalide").into());
     }
-    state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
+    state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
     let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(err)?;
     let mut b = find(&state.data_dir, &id).map_err(full)?;
     authed(&state.data_dir, &mut b, method, &path, body).await.map_err(full)
@@ -400,17 +400,17 @@ pub async fn bastion_admin(state: State<'_, AppState>, id: String, method: Strin
 
 /// Export de l'audit (enregistrement, transcription), écrit dans le fichier choisi par l'utilisateur.
 #[tauri::command]
-pub fn bastion_export(state: State<'_, AppState>, dest: String, content: String) -> CmdResult<()> {
+pub fn gate_export(state: State<'_, AppState>, dest: String, content: String) -> CmdResult<()> {
     state.unlocked()?;
-    state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
+    state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
     std::fs::write(&dest, content).map_err(|e| format!("Écriture impossible : {e}"))
 }
 
 /// Export CSV du journal, écrit dans le fichier choisi.
 #[tauri::command]
-pub async fn bastion_journal_csv(state: State<'_, AppState>, id: String, query: String, dest: String) -> CmdResult<()> {
+pub async fn gate_journal_csv(state: State<'_, AppState>, id: String, query: String, dest: String) -> CmdResult<()> {
     state.unlocked()?;
-    state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
+    state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
     let b = find(&state.data_dir, &id).map_err(full)?;
     let t = token(&b).map_err(full)?;
     let (http, _) = client(Some(&b.api_fingerprint)).map_err(full)?;
@@ -436,11 +436,11 @@ fn urlencode(text: &str) -> String {
         .collect()
 }
 
-/// Ouvre une session sur un serveur du bastion. `extra` : identifiants tapés dans le
+/// Ouvre une session sur un serveur de la Gate. `extra` : identifiants tapés dans le
 /// terminal (serveurs en mode rebond, comme pour la connexion rapide).
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub async fn bastion_connect(
+pub async fn gate_connect(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
@@ -457,7 +457,7 @@ pub async fn bastion_connect(
     let t = authed(&data_dir, &mut b, reqwest::Method::POST, &path, None).await.map_err(full)?;
     let ticket = t["ticket"].as_str().ok_or(t!("The Gate gave no token", "La Gate n'a pas donné de jeton"))?.to_string();
     let ssh_user = t["utilisateur_ssh"].as_str().unwrap_or_default().to_string();
-    let bastion_values: serde_json::Map<String, Value> = [
+    let gate_values: serde_json::Map<String, Value> = [
         ("host".to_string(), json!(b.host)),
         ("port".to_string(), json!(b.ssh_port)),
         ("username".to_string(), json!(ssh_user)),
@@ -469,7 +469,7 @@ pub async fn bastion_connect(
     let mut values: HashMap<String, Value> = HashMap::new();
     let name = format!("{server} · {}", b.name);
     if t["protocole"].as_str() == Some("rdp") && t["mode"].as_str() == Some("enregistre") {
-        // Bureau à distance enregistré : passage RDCleanPath du bastion (qui relaie et enregistre) ;
+        // Bureau à distance enregistré : passage RDCleanPath de la Gate (qui relaie et enregistre) ;
         // l'authentification Windows (NLA) reste entre le moteur RDP et le serveur.
         let local = pinned_forwarder(&b.host, b.api_port, &b.api_fingerprint).await.map_err(full)?;
         values.insert("host".into(), t["hote"].clone());
@@ -481,25 +481,25 @@ pub async fn bastion_connect(
         return start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await;
     }
     if t["protocole"].as_str() == Some("rdp") {
-        // Bureau à distance en rebond : tunnel par le bastion, identifiants Windows de bout en bout.
+        // Bureau à distance en rebond : tunnel par la Gate, identifiants Windows de bout en bout.
         values.insert("host".into(), t["hote"].clone());
         values.insert("port".into(), t["port"].clone());
         values.insert("client".into(), json!("tab"));
-        values.insert("jumpHost".into(), Value::Object(bastion_values));
+        values.insert("jumpHost".into(), Value::Object(gate_values));
         values.extend(extra.into_iter().filter(|(k, _)| ["username", "password"].contains(&k.as_str())));
         return start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await;
     }
     if t["mode"].as_str() == Some("rebond") {
-        // De bout en bout : le bastion relaie, l'authentification va au serveur.
+        // De bout en bout : la Gate relaie, l'authentification va au serveur.
         values.insert("host".into(), t["hote"].clone());
         values.insert("port".into(), t["port"].clone());
         if let Some(account) = t["compte"].as_str() {
             values.insert("username".into(), json!(account));
         }
         values.insert("auth".into(), json!("auto"));
-        values.insert("jumpHost".into(), Value::Object(bastion_values));
+        values.insert("jumpHost".into(), Value::Object(gate_values));
     } else {
-        values.extend(bastion_values);
+        values.extend(gate_values);
     }
     values.extend(extra.into_iter().filter(|(k, _)| ["username", "password", "auth"].contains(&k.as_str())));
     start_connection(&app, &state, "ssh", name, values, cols, rows, on_event).await
@@ -518,7 +518,7 @@ mod tests {
 
     #[test]
     fn adresses() {
-        assert_eq!(split_address("bastion.acme.local").unwrap(), ("bastion.acme.local".into(), 8443));
+        assert_eq!(split_address("gate.acme.local").unwrap(), ("gate.acme.local".into(), 8443));
         assert_eq!(split_address("https://10.0.0.5:9443/").unwrap(), ("10.0.0.5".into(), 9443));
         assert!(split_address("").is_err());
         assert!(split_address("hote:abc").is_err());
@@ -546,14 +546,14 @@ fn replays() -> &'static Mutex<HashMap<String, RdpReplay>> {
     REPLAYS.get_or_init(Mutex::default)
 }
 
-/// Ouvre la relecture d'une session Bureau à distance : télécharge son image depuis le bastion
-/// (signature contrôlée par le bastion) et la confie au moteur RDP. Ses messages (images,
+/// Ouvre la relecture d'une session Bureau à distance : télécharge son image depuis la Gate
+/// (signature contrôlée par la Gate) et la confie au moteur RDP. Ses messages (images,
 /// position) arrivent par `on_event` ; renvoie l'identifiant de la relecture.
 #[tauri::command]
-pub async fn bastion_rdp_replay(state: State<'_, AppState>, id: String, session: String, on_event: Channel<Value>) -> CmdResult<String> {
+pub async fn gate_rdp_replay(state: State<'_, AppState>, id: String, session: String, on_event: Channel<Value>) -> CmdResult<String> {
     use std::io::{BufRead, Write};
     state.unlocked()?;
-    state.license.lock().unwrap().require(crate::license::Feature::BastionAdmin).map_err(full)?;
+    state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
     if !session.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
         return Err(t!("Session not found", "Session introuvable").into());
     }
@@ -613,7 +613,7 @@ pub async fn bastion_rdp_replay(state: State<'_, AppState>, id: String, session:
 
 /// Amène la relecture à ce temps (secondes) : le moteur envoie les zones changées.
 #[tauri::command]
-pub fn bastion_rdp_replay_seek(replay: String, t: f64) -> CmdResult<()> {
+pub fn gate_rdp_replay_seek(replay: String, t: f64) -> CmdResult<()> {
     use std::io::Write;
     let mut all = replays().lock().unwrap();
     let r = all.get_mut(&replay).ok_or_else(|| t!("Session closed", "Session fermée").to_string())?;
@@ -623,26 +623,26 @@ pub fn bastion_rdp_replay_seek(replay: String, t: f64) -> CmdResult<()> {
 
 /// Ferme la relecture (moteur arrêté, fichier temporaire effacé).
 #[tauri::command]
-pub fn bastion_rdp_replay_close(replay: String) {
+pub fn gate_rdp_replay_close(replay: String) {
     replays().lock().unwrap().remove(&replay);
 }
 
 // ---------- Assistance à distance (Portunia Assist) ----------
 
-/// Le relais d'assistance du bastion : actif, autorisé pour ce compte, adresse à donner.
+/// Le relais d'assistance de la Gate : actif, autorisé pour ce compte, adresse à donner.
 #[tauri::command]
-pub async fn bastion_assist_status(state: State<'_, AppState>, id: String) -> CmdResult<Value> {
+pub async fn gate_assist_status(state: State<'_, AppState>, id: String) -> CmdResult<Value> {
     state.unlocked()?;
     let mut b = find(&state.data_dir, &id).map_err(full)?;
     authed(&state.data_dir, &mut b, reqwest::Method::GET, "/assistance", None).await.map_err(full)
 }
 
-/// Rejoint la personne aidée par le relais du bastion, avec le code qu'elle a lu : échange de
+/// Rejoint la personne aidée par le relais de la Gate, avec le code qu'elle a lu : échange de
 /// clés authentifié par le code (le relais ne peut ni lire ni se faire passer pour l'un des deux),
 /// attente de son accord, puis Bureau à distance dans le canal chiffré, dans un onglet.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub async fn bastion_assist(
+pub async fn gate_assist(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,

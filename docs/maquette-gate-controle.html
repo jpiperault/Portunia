@@ -1,4 +1,4 @@
-<title>Heimdia contrôle des accès</title>
+<title>Portunia Gate contrôle des accès</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 /* Maquette : relecture RDP, coffre RDP, sessions en direct, MP4 et lecteur détachable,
@@ -217,7 +217,7 @@ td.num { font-variant-numeric: tabular-nums; }
 
 <div class="wrap">
   <div class="intro">
-    <p class="label">Maquette · Heimdia et Portunia Équipes</p>
+    <p class="label">Maquette · Portunia Gate et Portunia Équipes</p>
     <h1>Voir, approuver et alerter : le contrôle des accès</h1>
     <p>Six fonctions qui complètent l'audit : relire les sessions Bureau à distance, ouvrir un serveur Windows avec le compte du coffre, regarder et couper une session en cours, exporter en vidéo, faire approuver un accès sensible, et prévenir quand quelque chose d'inquiétant se passe. Les écrans se parcourent avec les boutons ; l'onglet Questions rassemble les choix à faire avant de coder, et les réponses s'enregistrent toutes seules.</p>
   </div>
@@ -241,19 +241,19 @@ td.num { font-variant-numeric: tabular-nums; }
     <!-- Vue d'ensemble -->
     <div data-screen="all" class="wrap" style="max-width:none">
       <div class="overview">
-        <button class="ov" type="button" data-go="rdp"><span class="k">AUDIT</span><b>Relecture des sessions Bureau à distance</b><p>Le flux RDP déjà enregistré et signé par le bastion se rejoue dans le lecteur de Portunia : l'image exacte, avec la frappe, les clics et les copier-coller sur la barre de temps.</p><span class="ed">Équipes · Heimdia 0.10</span></button>
-        <button class="ov" type="button" data-go="vault"><span class="k">ACCÈS</span><b>Coffre pour les serveurs Windows</b><p>L'utilisateur clique, le bureau s'ouvre. Le bastion s'authentifie au serveur avec le compte du coffre ; le mot de passe ne quitte jamais le bastion.</p><span class="ed">Heimdia 0.11</span></button>
-        <button class="ov" type="button" data-go="live"><span class="k">AUDIT</span><b>Sessions en direct</b><p>Les sessions en cours, SSH et RDP, se regardent pendant qu'elles se déroulent. Un clic les coupe, avec un message à l'utilisateur.</p><span class="ed">Équipes · Heimdia 0.12</span></button>
+        <button class="ov" type="button" data-go="rdp"><span class="k">AUDIT</span><b>Relecture des sessions Bureau à distance</b><p>Le flux RDP déjà enregistré et signé par la Gate se rejoue dans le lecteur de Portunia : l'image exacte, avec la frappe, les clics et les copier-coller sur la barre de temps.</p><span class="ed">Équipes · Portunia Gate 0.10</span></button>
+        <button class="ov" type="button" data-go="vault"><span class="k">ACCÈS</span><b>Coffre pour les serveurs Windows</b><p>L'utilisateur clique, le bureau s'ouvre. La Gate s'authentifie au serveur avec le compte du coffre ; le mot de passe ne quitte jamais la Gate.</p><span class="ed">Portunia Gate 0.11</span></button>
+        <button class="ov" type="button" data-go="live"><span class="k">AUDIT</span><b>Sessions en direct</b><p>Les sessions en cours, SSH et RDP, se regardent pendant qu'elles se déroulent. Un clic les coupe, avec un message à l'utilisateur.</p><span class="ed">Équipes · Portunia Gate 0.12</span></button>
         <button class="ov" type="button" data-go="mp4"><span class="k">AUDIT</span><b>Export vidéo et lecteur détachable</b><p>Un MP4 avec la frappe en sous-titres pour un dossier d'enquête ; le lecteur s'ouvre dans sa propre fenêtre, sur un deuxième écran.</p><span class="ed">Équipes · Portunia 0.48</span></button>
-        <button class="ov" type="button" data-go="appr"><span class="k">ACCÈS</span><b>Approbation d'accès</b><p>Sur les serveurs sensibles, l'utilisateur demande avec un motif ; un approbateur accorde pour une durée limitée. Tout est inscrit au journal.</p><span class="ed">Équipes · Heimdia 0.13</span></button>
-        <button class="ov" type="button" data-go="alert"><span class="k">SURVEILLANCE</span><b>Alertes</b><p>Commande sensible, échecs de connexion répétés, saisie révélée, journal altéré : un message part par e-mail, Teams, Slack ou webhook.</p><span class="ed">Équipes · Heimdia 0.13</span></button>
+        <button class="ov" type="button" data-go="appr"><span class="k">ACCÈS</span><b>Approbation d'accès</b><p>Sur les serveurs sensibles, l'utilisateur demande avec un motif ; un approbateur accorde pour une durée limitée. Tout est inscrit au journal.</p><span class="ed">Équipes · Portunia Gate 0.13</span></button>
+        <button class="ov" type="button" data-go="alert"><span class="k">SURVEILLANCE</span><b>Alertes</b><p>Commande sensible, échecs de connexion répétés, saisie révélée, journal altéré : un message part par e-mail, Teams, Slack ou webhook.</p><span class="ed">Équipes · Portunia Gate 0.13</span></button>
       </div>
       <p class="screen-note">Les numéros de version indiquent un ordre possible ; la dernière question permet de le changer.</p>
     </div>
 
     <!-- Relecture RDP -->
     <div data-screen="rdp" class="wrap" style="max-width:none" hidden>
-      <p class="screen-note">Menu ⋯ du bastion › Audit › Sessions : les sessions RDP ont maintenant le bouton « ▶ Relire ». Le lecteur est le même que pour SSH : barre de temps, pauses sautées, vitesse, signature vérifiée. À droite, la frappe (si la règle l'enregistre), les clics et les copier-coller.</p>
+      <p class="screen-note">Menu ⋯ de la Gate › Audit › Sessions : les sessions RDP ont maintenant le bouton « ▶ Relire ». Le lecteur est le même que pour SSH : barre de temps, pauses sautées, vitesse, signature vérifiée. À droite, la frappe (si la règle l'enregistre), les clics et les copier-coller.</p>
       <div class="app">
         <div class="app-bar"><span class="tab">▶ srv-ad-01 · 30/10 09:42</span><span class="sp muted">Portunia</span></div>
         <div class="main">
@@ -314,20 +314,20 @@ PS C:\&gt; _</div></div>
           <div class="body">
             <div class="form2">
               <label class="fld">Protocole<select class="input" id="v-proto"><option>Bureau à distance (RDP)</option></select></label>
-              <label class="fld">Mode<select class="input" id="v-mode"><option>Coffre : compte fourni par le bastion</option></select></label>
+              <label class="fld">Mode<select class="input" id="v-mode"><option>Coffre : compte fourni par la Gate</option></select></label>
             </div>
             <div class="form2">
               <label class="fld">Compte sur le serveur<input class="input" id="v-acc" value="ACME\svc-admin-ad"><span class="h">DOMAINE\compte ou compte local</span></label>
-              <label class="fld">Secret du coffre<input class="input" id="v-sec" type="password" value="xxxxxxxxxxxx"><span class="h">chiffré par le bastion, ne se relit jamais</span></label>
+              <label class="fld">Secret du coffre<input class="input" id="v-sec" type="password" value="xxxxxxxxxxxx"><span class="h">chiffré par la Gate, ne se relit jamais</span></label>
             </div>
-            <label class="check"><i class="on">✓</i><span>Changer le mot de passe après chaque session<small>Le bastion choisit un nouveau mot de passe et le pose sur le serveur (compte local ou Active Directory).</small></span></label>
-            <div class="banner info"><b>Comment</b><span>Le bastion fait lui-même l'authentification NLA auprès du serveur. Portunia et le navigateur ne reçoivent jamais le mot de passe.</span></div>
+            <label class="check"><i class="on">✓</i><span>Changer le mot de passe après chaque session<small>La Gate choisit un nouveau mot de passe et le pose sur le serveur (compte local ou Active Directory).</small></span></label>
+            <div class="banner info"><b>Comment</b><span>La Gate fait lui-même l'authentification NLA auprès du serveur. Portunia et le navigateur ne reçoivent jamais le mot de passe.</span></div>
           </div>
           <footer><button class="btn" type="button">Annuler</button><button class="btn primary" type="button">Enregistrer</button></footer>
         </div>
         <div class="flow">
-          <div><span class="n">1</span><b>Clic sur srv-ad-01</b>Portunia (ou le portail) demande un jeton à usage unique au bastion, avec la session de l'utilisateur.</div>
-          <div><span class="n">2</span><b>Le bastion ouvre la connexion</b>TLS vers le serveur, empreinte du certificat vérifiée, puis authentification NLA avec le compte du coffre.</div>
+          <div><span class="n">1</span><b>Clic sur srv-ad-01</b>Portunia (ou le portail) demande un jeton à usage unique à la Gate, avec la session de l'utilisateur.</div>
+          <div><span class="n">2</span><b>La Gate ouvre la connexion</b>TLS vers le serveur, empreinte du certificat vérifiée, puis authentification NLA avec le compte du coffre.</div>
           <div><span class="n">3</span><b>Le bureau s'affiche</b>Le client reçoit l'écran déjà connecté. Il n'a ni le mot de passe ni de quoi le retrouver.</div>
           <div><span class="n">4</span><b>Enregistré et signé</b>Comme le mode enregistré : relecture, journal, coupure en direct.</div>
         </div>
@@ -338,7 +338,7 @@ PS C:\&gt; _</div></div>
     <div data-screen="live" class="wrap" style="max-width:none" hidden>
       <p class="screen-note">Audit › Sessions : les sessions en cours passent en tête, avec « Regarder » et « Couper ». Regarder ouvre le lecteur en direct (on peut revenir en arrière dans ce qui s'est déjà passé, puis rejoindre le direct).</p>
       <div class="app">
-        <div class="app-bar"><span class="tab">Audit · Bastion ACME</span><span class="sp muted">Portunia</span></div>
+        <div class="app-bar"><span class="tab">Audit · Gate ACME</span><span class="sp muted">Portunia</span></div>
         <div class="main">
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="seg"><span class="on">Sessions</span><span>Journal</span><span>Demandes</span><span>Alertes</span></span><span class="chip live"><i></i>3 en cours</span></div>
           <div class="tbl-wrap"><table>
@@ -380,8 +380,8 @@ clients=# <span class="w">DROP TABLE factures_archive;</span>
       </div>
       <div class="term"><span class="d">Côté utilisateur, au moment de la coupure :</span>
 clients=# DROP TABLE factures_archive;
-<span class="w">[Heimdia] Session interrompue par l'équipe sécurité. Merci de rappeler le 4410.</span>
-Connection to bastion closed.</div>
+<span class="w">[Portunia Gate] Session interrompue par l'équipe sécurité. Merci de rappeler le 4410.</span>
+Connection to Gate closed.</div>
     </div>
 
     <!-- Vidéo et détachable -->
@@ -421,7 +421,7 @@ Connection to bastion closed.</div>
         <div class="app">
           <div class="app-body" style="grid-template-columns:200px minmax(0,1fr);min-height:330px">
             <div class="side" style="display:flex">
-              <span class="h">Bastion ACME</span>
+              <span class="h">Gate ACME</span>
               <span class="nrow">web-01 <span class="proto ssh">SSH</span></span>
               <span class="nrow sel">db-prod-01 <span class="lock">🔒</span></span>
               <span class="nrow">srv-ad-01 <span class="proto rdp">RDP</span></span>
@@ -442,7 +442,7 @@ Connection to bastion closed.</div>
           </div>
         </div>
         <div class="app">
-          <div class="app-bar"><span class="tab">Audit · Bastion ACME</span></div>
+          <div class="app-bar"><span class="tab">Audit · Gate ACME</span></div>
           <div class="main">
             <span class="seg"><span>Sessions</span><span>Journal</span><span class="on">Demandes (2)</span><span>Alertes</span></span>
             <div class="req">
@@ -473,7 +473,7 @@ Connection to bastion closed.</div>
     <div data-screen="alert" class="wrap" style="max-width:none" hidden>
       <p class="screen-note">Administrer › Alertes : quels événements, vers quels canaux. Chaque alerte envoyée apparaît aussi dans l'historique, avec un lien vers la relecture au bon moment.</p>
       <div class="app">
-        <div class="app-bar"><span class="tab">Administration · Bastion ACME</span></div>
+        <div class="app-bar"><span class="tab">Administration · Gate ACME</span></div>
         <div class="app-body">
           <div class="side" style="display:flex">
             <span class="nrow">Serveurs et coffre</span><span class="nrow">Comptes</span><span class="nrow">Groupes</span><span class="nrow">Règles</span><span class="nrow">Portail web</span><span class="nrow sel">Alertes</span><span class="nrow">Réglages</span>
@@ -485,7 +485,7 @@ Connection to bastion closed.</div>
                 <tr><td><b>Commande sensible</b><br><span class="muted small">rm -rf, DROP TABLE, Add-ADGroupMember…</span></td><td>Serveurs du dossier « Production »</td><td><span class="chip">Teams · #securite</span> <span class="chip">E-mail · rssi@acme.fr</span></td><td>Avertir l'utilisateur dans le terminal</td><td><span class="chip ok">active</span></td></tr>
                 <tr><td><b>5 échecs de connexion en 10 min</b></td><td>Tous</td><td><span class="chip">E-mail · rssi@acme.fr</span></td><td>—</td><td><span class="chip ok">active</span></td></tr>
                 <tr><td><b>Saisie masquée révélée</b></td><td>Tous</td><td><span class="chip">Webhook · SIEM</span></td><td>—</td><td><span class="chip ok">active</span></td></tr>
-                <tr><td><b>Journal altéré</b></td><td>Bastion</td><td><span class="chip">E-mail</span> <span class="chip">Teams</span> <span class="chip">Webhook</span></td><td>—</td><td><span class="chip ok">active</span></td></tr>
+                <tr><td><b>Journal altéré</b></td><td>Gate</td><td><span class="chip">E-mail</span> <span class="chip">Teams</span> <span class="chip">Webhook</span></td><td>—</td><td><span class="chip ok">active</span></td></tr>
               </tbody>
             </table></div>
             <div class="duo">
@@ -495,7 +495,7 @@ Connection to bastion closed.</div>
                   <div class="form2">
                     <label class="fld">Serveur d'envoi (SMTP)<input class="input" id="al-smtp" value="smtp.acme.fr:587"></label>
                     <label class="fld">Teams (lien du connecteur)<input class="input" id="al-teams" value="https://acme.webhook.office.com/…"></label>
-                    <label class="fld">Webhook (JSON signé)<input class="input" id="al-hook" value="https://siem.acme.fr/heimdia"></label>
+                    <label class="fld">Webhook (JSON signé)<input class="input" id="al-hook" value="https://siem.acme.fr/portunia-gate"></label>
                     <label class="fld">Slack<input class="input" id="al-slack" placeholder="https://hooks.slack.com/…"></label>
                   </div>
                   <div class="acts"><button class="btn sm" type="button">Envoyer une alerte d'essai</button></div>
@@ -503,7 +503,7 @@ Connection to bastion closed.</div>
               </div>
               <div style="display:flex;flex-direction:column;gap:10px">
                 <div class="teams">
-                  <span class="from">Heimdia · Bastion ACME · 14:08</span>
+                  <span class="from">Portunia Gate · Gate ACME · 14:08</span>
                   <b>⚠ Commande sensible sur db-prod-01</b>
                   <span>presta-dupont a tapé <code>DROP TABLE factures_archive;</code></span>
                   <span class="muted small">Adresse 203.0.113.40 (portail web) · session en cours depuis 6 min</span>
@@ -511,7 +511,7 @@ Connection to bastion closed.</div>
                 </div>
 <div class="term"><span class="d">Dans le terminal de l'utilisateur :</span>
 clients=# DROP TABLE factures_archive;
-<span class="w">[Heimdia] Commande sensible : l'équipe sécurité a été prévenue.</span></div>
+<span class="w">[Portunia Gate] Commande sensible : l'équipe sécurité a été prévenue.</span></div>
               </div>
             </div>
           </div>
@@ -545,37 +545,37 @@ tabs.q.addEventListener('click', () => showTab('q'));
 function showScreen(s) {
   document.querySelectorAll('.steps button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
   document.querySelectorAll('[data-screen]').forEach((d) => { d.hidden = d.dataset.screen !== s; });
-  try { localStorage.setItem('heimdia-controle-ecran', s); } catch {}
+  try { localStorage.setItem('portunia-gate-controle-ecran', s); } catch {}
 }
 document.querySelectorAll('.steps button').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.s)));
 document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => showScreen(b.dataset.go)));
-try { const s = localStorage.getItem('heimdia-controle-ecran'); if (s && document.querySelector(`[data-screen="${s}"]`)) showScreen(s); } catch {}
+try { const s = localStorage.getItem('portunia-gate-controle-ecran'); if (s && document.querySelector(`[data-screen="${s}"]`)) showScreen(s); } catch {}
 
 // Questionnaire
 const SECTIONS = [
   { title: 'Relecture des sessions Bureau à distance', qs: [
-    { id: 'rdp_rendu', t: 'Comment rejouer l\'image ?', why: 'Le bastion garde déjà le flux RDP signé (.rdpcap). Le rejouer dans Portunia avec IronRDP donne l\'image exacte sans rien stocker de plus ; une vidéo fabriquée sur le bastion demande du calcul et de la place, mais se lit partout.', type: 'one', o: ['Rejouer le flux enregistré dans Portunia (image exacte)', 'Convertir en vidéo sur le bastion à la fin de chaque session'], rec: 0 },
+    { id: 'rdp_rendu', t: 'Comment rejouer l\'image ?', why: 'La Gate garde déjà le flux RDP signé (.rdpcap). Le rejouer dans Portunia avec IronRDP donne l\'image exacte sans rien stocker de plus ; une vidéo fabriquée sur la Gate demande du calcul et de la place, mais se lit partout.', type: 'one', o: ['Rejouer le flux enregistré dans Portunia (image exacte)', 'Convertir en vidéo sur la Gate à la fin de chaque session'], rec: 0 },
     { id: 'rdp_marks', t: 'Repères sur la barre de temps', why: 'Ce que le flux contient vraiment : frappe et souris (si la règle l\'enregistre), presse-papiers, changements de résolution. Les titres de fenêtres n\'y sont pas.', type: 'many', o: ['Frappe clavier (si la règle l\'enregistre)', 'Clics souris', 'Copier-coller (texte échangé)', 'Changements de résolution', 'Inactivité (pauses sautées)'], rec: [0, 2, 4] },
-    { id: 'rdp_ocr', t: 'Recherche dans ce qui s\'affiche à l\'écran', why: 'Un flux RDP ne contient que des images : chercher « DROP TABLE » dans l\'écran demande une reconnaissance de texte (OCR), coûteuse en processeur sur le bastion.', type: 'one', o: ['Plus tard : recherche dans la frappe seulement', 'OCR sur le bastion, en tâche de fond après la session'], rec: 0 },
+    { id: 'rdp_ocr', t: 'Recherche dans ce qui s\'affiche à l\'écran', why: 'Un flux RDP ne contient que des images : chercher « DROP TABLE » dans l\'écran demande une reconnaissance de texte (OCR), coûteuse en processeur sur la Gate.', type: 'one', o: ['Plus tard : recherche dans la frappe seulement', 'OCR sur la Gate, en tâche de fond après la session'], rec: 0 },
     { id: 'rdp_clip', t: 'Contenu du presse-papiers', why: 'Enregistrer le texte copié-collé aide l\'enquête, mais peut capter des mots de passe collés.', type: 'one', o: ['Enregistrer la taille seulement', 'Enregistrer le texte, masqué comme les saisies sans écho', 'Ne rien enregistrer'], rec: 1 },
   ]},
   { title: 'Coffre pour les serveurs Windows', qs: [
-    { id: 'vault_how', t: 'Comment fournir le compte du coffre ?', why: 'L\'injection par le bastion garde le mot de passe sur le bastion (il fait l\'authentification NLA lui-même, comme Devolutions Gateway). L\'autre méthode envoie le mot de passe au client, qui pourrait le récupérer.', type: 'one', o: ['Injection par le bastion (le mot de passe ne sort jamais)', 'Envoyer le mot de passe à Portunia sans l\'afficher'], rec: 0 },
+    { id: 'vault_how', t: 'Comment fournir le compte du coffre ?', why: 'L\'injection par la Gate garde le mot de passe sur la Gate (il fait l\'authentification NLA lui-même, comme Devolutions Gateway). L\'autre méthode envoie le mot de passe au client, qui pourrait le récupérer.', type: 'one', o: ['Injection par la Gate (le mot de passe ne sort jamais)', 'Envoyer le mot de passe à Portunia sans l\'afficher'], rec: 0 },
     { id: 'vault_web', t: 'Aussi depuis le portail web ?', why: 'Avec l\'injection, le navigateur n\'a pas besoin du mot de passe : c\'est même le cas le plus sûr pour un poste non maîtrisé.', type: 'one', o: ['Oui, avec les mêmes règles', 'Portunia seulement'], rec: 0 },
     { id: 'vault_rotate', t: 'Changer le mot de passe Windows après chaque session', why: 'Le compte du coffre ne vaut plus rien une fois la session finie. Demande les droits de changer le mot de passe (compte local, ou délégation Active Directory).', type: 'one', o: ['Plus tard', 'Dès cette version, en option par serveur'], rec: 0 },
     { id: 'vault_drives', t: 'Lecteurs, imprimantes et presse-papiers', why: 'En mode coffre, l\'utilisateur ne doit pas pouvoir tout copier vers son poste.', type: 'many', o: ['Presse-papiers texte', 'Lecteurs du poste (copie de fichiers)', 'Imprimantes', 'Réglable par règle d\'accès'], rec: [0, 3] },
   ]},
   { title: 'Sessions en direct', qs: [
     { id: 'live_who', t: 'Qui peut regarder une session en cours ?', why: 'Les auditeurs relisent déjà tout ; regarder en direct est plus intrusif.', type: 'one', o: ['Administrateurs et auditeurs', 'Administrateurs seulement'], rec: 0 },
-    { id: 'live_notify', t: 'L\'utilisateur sait-il qu\'il est regardé ?', why: 'La bannière de connexion annonce déjà l\'enregistrement. Un bandeau « session observée » est plus transparent ; l\'observation discrète reste inscrite au journal.', type: 'one', o: ['Oui, message « session observée par … »', 'Non, observation discrète (inscrite au journal)', 'Réglage du bastion'], rec: 2 },
+    { id: 'live_notify', t: 'L\'utilisateur sait-il qu\'il est regardé ?', why: 'La bannière de connexion annonce déjà l\'enregistrement. Un bandeau « session observée » est plus transparent ; l\'observation discrète reste inscrite au journal.', type: 'one', o: ['Oui, message « session observée par … »', 'Non, observation discrète (inscrite au journal)', 'Réglage de la Gate'], rec: 2 },
     { id: 'live_cut', t: 'Couper une session', why: 'Un message explique la coupure ; désactiver le compte en même temps évite qu\'il se reconnecte aussitôt.', type: 'one', o: ['Couper avec un message', 'Couper, avec option « désactiver aussi le compte »'], rec: 1 },
     { id: 'live_take', t: 'Prendre la main (taper dans la session)', why: 'Utile en dépannage, mais l\'administrateur agirait sous le compte de l\'utilisateur : responsabilité floue.', type: 'one', o: ['Non', 'Oui, administrateurs, inscrit au journal'], rec: 0 },
   ]},
   { title: 'Vidéo et lecteur détachable', qs: [
-    { id: 'mp4_where', t: 'Où fabriquer la vidéo ?', why: 'Dans Portunia : rien de plus sur le bastion, la vidéo ne transite pas. Sur le bastion : possible depuis n\'importe quel poste, mais charge le serveur.', type: 'one', o: ['Dans Portunia, sur le PC', 'Sur le bastion, en file d\'attente'], rec: 0 },
+    { id: 'mp4_where', t: 'Où fabriquer la vidéo ?', why: 'Dans Portunia : rien de plus sur la Gate, la vidéo ne transite pas. Sur la Gate : possible depuis n\'importe quel poste, mais charge le serveur.', type: 'one', o: ['Dans Portunia, sur le PC', 'Sur la Gate, en file d\'attente'], rec: 0 },
     { id: 'mp4_sub', t: 'Sous-titres de la frappe', why: 'Incrustés : lisibles partout. En .srt : activables ou non dans le lecteur vidéo.', type: 'one', o: ['Incrustés', 'Fichier .srt à côté', 'Les deux'], rec: 2 },
     { id: 'mp4_mark', t: 'Filigrane sur la vidéo', why: 'Une vidéo exportée circule : le nom de qui l\'a exportée et la date dissuadent les fuites.', type: 'one', o: ['Nom de qui exporte et date', 'Aucun'], rec: 0 },
-    { id: 'mp4_journal', t: 'Inscrire chaque export au journal du bastion', why: 'Comme chaque relecture l\'est déjà.', type: 'one', o: ['Oui', 'Non'], rec: 0 },
+    { id: 'mp4_journal', t: 'Inscrire chaque export au journal de la Gate', why: 'Comme chaque relecture l\'est déjà.', type: 'one', o: ['Oui', 'Non'], rec: 0 },
     { id: 'detach', t: 'Lecteur détachable', why: 'Une fenêtre à part de Portunia, pour relire sur un deuxième écran pendant qu\'on travaille.', type: 'one', o: ['Oui, fenêtre séparée', 'Plus tard'], rec: 0 },
   ]},
   { title: 'Approbation d\'accès', qs: [
@@ -591,7 +591,7 @@ const SECTIONS = [
   { title: 'Alertes', qs: [
     { id: 'al_events', t: 'Événements qui déclenchent une alerte', why: 'Trop d\'alertes et plus personne ne les lit : mieux vaut commencer par les plus graves.', type: 'many', o: ['Commande sensible tapée', 'Échecs de connexion répétés', 'Saisie masquée révélée', 'Journal altéré', 'Accès hors horaires refusé', 'Demande d\'approbation en attente', 'Ouverture de session sur un serveur marqué critique'], rec: [0, 1, 2, 3] },
     { id: 'al_channels', t: 'Canaux', why: 'E-mail pour tout le monde ; Teams ou Slack pour une équipe ; webhook JSON signé pour un SIEM (Splunk, Wazuh, Sentinel…).', type: 'many', o: ['E-mail (SMTP)', 'Microsoft Teams', 'Slack', 'Webhook JSON signé', 'Syslog'], rec: [0, 1, 3] },
-    { id: 'al_action', t: 'Sur une commande sensible, en plus de l\'alerte', why: 'Bloquer est possible en mode coffre et enregistré (le bastion voit la ligne avant le serveur), pas en mode rebond. Bloquer à tort gêne le travail.', type: 'one', o: ['Rien de plus', 'Avertir l\'utilisateur dans le terminal', 'Bloquer la commande (réglable par règle)'], rec: 1 },
+    { id: 'al_action', t: 'Sur une commande sensible, en plus de l\'alerte', why: 'Bloquer est possible en mode coffre et enregistré (la Gate voit la ligne avant le serveur), pas en mode rebond. Bloquer à tort gêne le travail.', type: 'one', o: ['Rien de plus', 'Avertir l\'utilisateur dans le terminal', 'Bloquer la commande (réglable par règle)'], rec: 1 },
     { id: 'al_group', t: 'Regroupement', why: 'Évite une rafale de messages pendant une attaque par mots de passe.', type: 'one', o: ['Une alerte par événement', 'Regroupées par 5 minutes pour un même événement'], rec: 1 },
   ]},
   { title: 'Offre et ordre', qs: [
@@ -650,7 +650,7 @@ function progress() {
 }
 function changed() {
   progress();
-  try { localStorage.setItem('heimdia-controle', JSON.stringify(answers)); } catch {}
+  try { localStorage.setItem('portunia-gate-controle', JSON.stringify(answers)); } catch {}
   clearTimeout(saveTimer);
   if (!db) { setSave('Gardées dans ce navigateur. Utilisez « Copier mes réponses ».'); return; }
   setSave('Enregistrement…'); saveTimer = setTimeout(save, 700);
@@ -660,7 +660,7 @@ async function save() {
   catch (e) { if (e && e.code === 'unavailable') { setTimeout(save, 1500 + Math.random() * 1000); return; } setSave('Enregistrement impossible : utilisez « Copier mes réponses ».', 'err'); }
 }
 function summary() {
-  const lines = ['Réponses Heimdia : contrôle des accès']; let n = 0;
+  const lines = ['Réponses Portunia Gate : contrôle des accès']; let n = 0;
   for (const sec of SECTIONS) { lines.push('', '## ' + sec.title); for (const q of sec.qs) { n++; const a = answers[q.id] || {}; const pick = Array.isArray(a.v) ? a.v.map((i) => q.o[i]).join(', ') : a.v != null ? q.o[a.v] : ''; lines.push(n + '. ' + q.t + ' → ' + (pick || '(conseillé)') + (a.note ? ' — ' + a.note : '')); } }
   return lines.join('\n');
 }
@@ -669,7 +669,7 @@ document.getElementById('copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(text); setSave('Copié.', 'ok'); }
   catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); setSave('Copié.', 'ok'); } catch { setSave('Copie impossible.', 'err'); } ta.remove(); }
 });
-try { answers = JSON.parse(localStorage.getItem('heimdia-controle') || '{}') || {}; } catch { answers = {}; }
+try { answers = JSON.parse(localStorage.getItem('portunia-gate-controle') || '{}') || {}; } catch { answers = {}; }
 render();
 (async () => {
   const api = window.claude && typeof window.claude.use === 'function' ? await window.claude.use('db') : null;

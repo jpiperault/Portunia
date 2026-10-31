@@ -1204,7 +1204,7 @@ fn session_values(state: &AppState, session: &Session) -> CmdResult<HashMap<Stri
 /// par des virgules comme ProxyJump) → valeurs complètes dans `jumpHost`.
 fn resolve_jump(state: &AppState, values: &mut HashMap<String, Value>, visited: &mut Vec<String>) -> CmdResult<()> {
     let spec = values.get("jump").and_then(Value::as_str).unwrap_or("").trim().to_string();
-    // Sans champ « jump », un rebond déjà préparé (bastion Heimdia) est gardé tel quel.
+    // Sans champ « jump », un rebond déjà préparé (Gate) est gardé tel quel.
     if spec.is_empty() {
         return Ok(());
     }
@@ -1241,7 +1241,7 @@ fn jump_values(state: &AppState, hop: &str, visited: &mut Vec<String>) -> CmdRes
         }
         visited.push(session.id.clone());
         let mut values = session_values(state, &session)?;
-        // Le bastion n'ouvre pas ses propres tunnels.
+        // La Gate n'ouvre pas ses propres tunnels.
         values.remove("tunnels");
         resolve_jump(state, &mut values, visited)?;
         return Ok(values);
@@ -1615,7 +1615,7 @@ pub fn multi_exec(
     if command.trim().is_empty() {
         return Err(t!("Give a command", "Indiquez une commande").into());
     }
-    // Valeurs préparées tout de suite (secrets, identifiants partagés, bastions) : erreurs par serveur.
+    // Valeurs préparées tout de suite (secrets, identifiants partagés, Gates) : erreurs par serveur.
     let mut targets = Vec::new();
     for id in &session_ids {
         let prepared = (|| -> CmdResult<(String, HashMap<String, Value>)> {
