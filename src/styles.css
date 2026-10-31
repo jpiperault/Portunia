@@ -683,6 +683,8 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .portal-head .switch { margin-top: 2px; }
 .portal-head p { margin: 4px 0 0; }
 .ok-text { color: var(--ok); }
+.hardening-command { display: flex; gap: 8px; align-items: center; }
+.hardening-command .fp { flex: 1; min-width: 0; }
 .portal-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
 .portal-stat { border: 1px solid var(--line-soft); border-radius: 8px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
 .portal-stat b { font-size: 17px; font-variant-numeric: tabular-nums; }

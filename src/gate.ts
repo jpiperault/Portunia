@@ -387,7 +387,7 @@ function openBypass(host: GateHost, b: Gate, list: { session: Session; server: G
 
 // ---------- Administration ----------
 
-type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'assistance' | 'reglages';
+type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'assistance' | 'durcissement' | 'reglages';
 const SECTIONS: { id: Section; label: string; admin: boolean }[] = [
   { id: 'cibles', label: t('Servers and vault', 'Serveurs et coffre'), admin: true },
   { id: 'comptes', label: t('Accounts', 'Comptes'), admin: true },
@@ -395,6 +395,7 @@ const SECTIONS: { id: Section; label: string; admin: boolean }[] = [
   { id: 'regles', label: t('Rules', 'Règles'), admin: true },
   { id: 'portail', label: t('Web portal', 'Portail web'), admin: true },
   { id: 'assistance', label: t('Assistance', 'Assistance'), admin: true },
+  { id: 'durcissement', label: t('Hardening', 'Durcissement'), admin: true },
   { id: 'reglages', label: t('Settings', 'Réglages'), admin: true },
 ];
 const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
@@ -795,6 +796,44 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         field(t('Group of helpers', 'Groupe des dépanneurs'), groupe, groupMissing ? t(`the group « ${a.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${a.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can start an assistance from Portunia', 'seuls ses membres peuvent lancer une assistance depuis Portunia')),
         field(t('Maximum duration of an assistance', 'Durée maximale d\'une assistance'), duree),
         h('div', {}, save));
+    },
+
+    // Lecture seule : le durcissement se pilote sur le serveur, avec les droits de root.
+    durcissement: async () => {
+      let d: any;
+      try {
+        d = await call<any>('GET', '/admin/durcissement');
+      } catch (e) {
+        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('This view needs Portunia Gate 0.16 or later: update the Gate.', 'Cette vue demande Portunia Gate 0.16 ou suivant : mettez la Gate à jour.')));
+        throw e;
+      }
+      const command = (label: string, text: string) => h('div', { class: 'fld' }, h('span', {}, label),
+        h('div', { class: 'hardening-command' }, h('div', { class: 'fp' }, text),
+          h('button', { type: 'button', class: 'btn', onclick: () => navigator.clipboard.writeText(text).then(() => host.toast(t('Command copied', 'Commande copiée'))).catch(fail) }, t('Copy', 'Copier'))));
+      const commands = h('div', {},
+        h('h3', {}, t('On the server', 'Sur le serveur')),
+        h('p', { class: 'muted small' }, t('Hardening changes the firewall and services: it runs on the server, as root, never from Portunia. For a server dedicated to the Gate only.', 'Le durcissement modifie le pare-feu et les services : il se lance sur le serveur, en root, jamais depuis Portunia. Pour un serveur dédié à la Gate uniquement.')),
+        command(t('See the plan, without changing anything', 'Voir le plan, sans rien changer'), t('sudo bash installer.sh harden plan', 'sudo bash installer.sh durcir simulation')),
+        command(t('Harden', 'Durcir'), t('sudo bash installer.sh harden', 'sudo bash installer.sh durcir')),
+        command(t('Undo', 'Annuler'), t('sudo bash installer.sh harden undo', 'sudo bash installer.sh durcir annuler')));
+      if (!d.actif) return h('div', { class: 'admin-section form-narrow' }, h('p', {}, t('This server is not hardened.', 'Ce serveur n\'est pas durci.')), commands);
+      const e = d.etat ?? {};
+      const stat = (label: string, on: boolean, text?: string) => h('div', { class: 'portal-stat' }, h('b', { class: `chip ${on ? 'ok' : 'warn'}` }, text ?? (on ? t('active', 'actif') : t('absent', 'absent'))), h('span', { class: 'muted small' }, label));
+      const firewall = e.pare_feu_prevu === false ? stat(t('Firewall', 'Pare-feu'), false, t('on the host', 'sur l\'hôte')) : stat(t('Firewall', 'Pare-feu'), !!e.pare_feu);
+      const messages: Record<string, string> = {
+        illisible: t('The state written by the server is unreadable.', 'L\'état écrit par le serveur est illisible.'),
+        ancien: t('The state has not been read for over an hour: check the portunia-gate-etat.timer task on the server.', 'L\'état n\'a pas été relevé depuis plus d\'une heure : vérifiez la tâche portunia-gate-etat.timer sur le serveur.'),
+        pare_feu: t('The firewall is no longer active.', 'Le pare-feu n\'est plus actif.'),
+        services: t(`Stopped services are running again: ${(e.services_relances ?? []).join(', ')}.`, `Des services arrêtés tournent de nouveau : ${(e.services_relances ?? []).join(', ')}.`),
+      };
+      const alerts: string[] = d.alertes ?? [];
+      return h('div', { class: 'admin-section form-narrow' },
+        h('div', { class: 'portal-stats' }, firewall, stat(t('System SSH', 'SSH du système'), !!e.ssh), stat(t('Kernel', 'Noyau'), !!e.noyau), stat(t('Security updates', 'Mises à jour de sécurité'), !!e.mises_a_jour)),
+        ...alerts.map((a) => h('p', { class: 'form-error' }, messages[a] ?? a)),
+        h('p', { class: 'muted small' }, t(`${e.services_arretes ?? 0} services stopped.`, `${e.services_arretes ?? 0} services arrêtés.`), ' ',
+          e.date ? t(`Read on ${new Date(e.date).toLocaleString()}.`, `Relevé le ${new Date(e.date).toLocaleString()}.`) : ''),
+        h('p', { class: 'muted small' }, t('Reported by the server itself: a dashboard, not proof if the server is compromised.', 'Relevé par le serveur lui-même : un tableau de bord, pas une preuve si le serveur est compromis.')),
+        commands);
     },
 
     reglages: async () => {
