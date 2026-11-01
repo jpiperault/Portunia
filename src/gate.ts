@@ -732,20 +732,55 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const proxys = input({ id: 'p-proxys', value: bare(p.proxys), placeholder: '10.0.5.10, 10.0.5.11' });
       const entete = input({ id: 'p-entete', value: p.entete ?? 'X-Forwarded-For' });
       const reseaux = input({ id: 'p-reseaux', value: bare(p.reseaux), placeholder: '10.0.0.0/8, 192.168.91.0/24' });
-      const MODES: { id: string; name: string; hint: string; flow: string; team?: boolean; soon?: boolean }[] = [
+      const MODES: { id: string; name: string; hint: string; flow: string; team?: boolean }[] = [
         { id: 'interne', name: t('Internal or VPN', 'Interne ou VPN'), hint: t('Nothing exposed on the Internet', 'Rien d\'exposé sur Internet'), flow: t('Workstation or VPN → HTTPS → Gate → servers', 'Poste ou VPN → HTTPS → Gate → serveurs') },
         { id: 'cloudflare', name: 'Cloudflare', hint: t('Tunnel: no inbound port', 'Tunnel : aucun port entrant'), flow: t('Browser → Cloudflare ← outbound tunnel ← Gate → servers', 'Navigateur → Cloudflare ← tunnel sortant ← Gate → serveurs') },
         { id: 'direct', name: t('Direct HTTPS', 'HTTPS direct'), hint: t('No proxy, small organisations', 'Sans proxy, petites structures'), flow: t('Browser → HTTPS → Gate → servers', 'Navigateur → HTTPS → Gate → serveurs') },
         { id: 'proxy', name: t('Proxy or WAF', 'Proxy ou WAF'), hint: 'F5, Imperva, HAProxy, Nginx…', team: true, flow: t('Browser → WAF in the DMZ → HTTPS → Gate → servers', 'Navigateur → WAF en DMZ → HTTPS → Gate → serveurs') },
-        { id: 'relais', name: t('Dedicated relay', 'Relais dédié'), hint: t('Coming soon', 'Bientôt disponible'), team: true, soon: true, flow: '' },
+        { id: 'relais', name: t('Dedicated relay', 'Relais dédié'), hint: t('DMZ, no flow to the internal network', 'DMZ, sans flux vers l\'interne'), team: true, flow: t('Browser → HTTPS → relay in the DMZ ← outbound connection ← Gate → servers', 'Navigateur → HTTPS → relais en DMZ ← connexion sortante ← Gate → serveurs') },
       ];
       const modeBody = h('div', { class: 'admin-section' });
+      let pairing = '';
+      const relayName = input({ id: 'p-relais-nom', placeholder: 'dmz-01' });
+      const relayAddress = input({ id: 'p-relais-adresse', placeholder: '10.0.5.20:8447' });
+      const relayBody = () => {
+        const relays: any[] = p.relais ?? [];
+        const seen = (r: any) => (r.vu ? new Date(r.vu).toLocaleString() : t('never', 'jamais'));
+        return h('div', { class: 'admin-section' },
+          relays.length ? h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' },
+            h('thead', {}, h('tr', {}, ...[t('Relay', 'Relais'), t('Address', 'Adresse'), t('State', 'État'), 'Version', ''].map((c) => h('th', {}, c)))),
+            h('tbody', {}, ...relays.map((r) => h('tr', {},
+              h('td', {}, h('b', {}, r.nom)), h('td', {}, r.adresse),
+              h('td', { title: r.erreur ?? '' }, r.connecte ? h('b', { class: 'chip ok' }, t('connected', 'connecté')) : h('b', { class: 'chip warn' }, mode === p.mode ? t('offline', 'hors ligne') : t('waiting for the mode to be saved', 'en attente du mode')), h('span', { class: 'muted small' }, r.connecte ? '' : ` ${r.erreur ?? ''} · ${t('last seen', 'vu')} ${seen(r)}`)),
+              h('td', {}, r.version || '—'),
+              h('td', {}, small(t('Revoke', 'Révoquer'), async () => {
+                if (!confirm(t(`Revoke the relay « ${r.nom} »? Web sessions close and this machine must be paired again.`, `Révoquer le relais « ${r.nom} » ? Les sessions web se ferment et cette machine devra être réappairée.`))) return;
+                try { await call('DELETE', `/admin/portail/relais/${r.id}`); host.toast(t('Relay revoked', 'Relais révoqué')); reload(); } catch (e) { fail(e); }
+              }, true))))))) : h('p', { class: 'muted small' }, t('No relay yet.', 'Aucun relais pour l\'instant.')),
+          h('div', { class: 'row2' },
+            field(t('Relay name', 'Nom du relais'), relayName),
+            field(t('Address the Gate reaches it at', 'Adresse où la Gate le joint'), relayAddress, t('the relay never calls the Gate', 'le relais n\'appelle jamais la Gate'))),
+          h('div', {}, h('button', { class: 'btn', onclick: async () => {
+            try {
+              const r = await call<any>('POST', '/admin/portail/relais', { nom: relayName.value.trim(), adresse: relayAddress.value.trim() });
+              pairing = `sudo bash installer.sh relay ${r.code} ${url.value.replace(/^https:\/\//, '').trim()}`;
+              p = await call<any>('GET', '/admin/portail');
+              relayName.value = ''; relayAddress.value = '';
+              drawModes();
+            } catch (e) { fail(e); }
+          } }, t('Add a relay', 'Ajouter un relais'))),
+          pairing && h('p', {}, h('b', {}, t('On the relay machine (shown only once):', 'Sur la machine du relais (affiché une seule fois) :'))),
+          pairing && h('div', { class: 'hardening-command' },
+            h('div', { class: 'fp' }, pairing),
+            h('button', { class: 'btn', onclick: () => navigator.clipboard.writeText(pairing).then(() => host.toast(t('Copied', 'Copié'))) }, t('Copy', 'Copier'))),
+          h('p', { class: 'muted small' }, t('Firewall: port 443 from browsers to the relay, port 8447 from the Gate to the relay, nothing from the relay to the internal network. The relay holds neither vault, accounts nor database.', 'Pare-feu : port 443 des navigateurs vers le relais, port 8447 de la Gate vers le relais, rien du relais vers le réseau interne. Le relais ne contient ni coffre, ni comptes, ni base.')));
+      };
       const drawModes = () => {
         const current = MODES.find((m) => m.id === mode)!;
-        const needsListener = mode !== 'cloudflare' && !p.ecoute.proxy;
+        const needsListener = mode !== 'cloudflare' && mode !== 'relais' && !p.ecoute.proxy;
         modeBody.replaceChildren(...[
           h('div', { class: 'expo-modes' }, ...MODES.map((m) => h('button', {
-            type: 'button', class: `expo-mode${m.id === mode ? ' on' : ''}`, disabled: !!m.soon, 'aria-pressed': String(m.id === mode),
+            type: 'button', class: `expo-mode${m.id === mode ? ' on' : ''}`, 'aria-pressed': String(m.id === mode),
             onclick: () => { mode = m.id; drawModes(); },
           }, h('span', { class: 'expo-name' }, h('b', {}, m.name), m.team && h('span', { class: 'chip pro' }, t('TEAMS', 'ÉQUIPES'))), h('span', { class: 'muted small' }, m.hint)))),
           h('p', { class: 'expo-flow' }, current.flow),
@@ -755,6 +790,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           mode === 'proxy' && h('p', { class: 'muted small' }, t('The WAF must let the web socket and WebAssembly files through.', 'Le WAF doit laisser passer le WebSocket et les fichiers WebAssembly.')),
           (mode === 'interne' || mode === 'direct') && field(t('Allowed networks', 'Réseaux autorisés'), reseaux, mode === 'interne' ? t('empty: private networks', 'vide : les réseaux privés') : t('empty: the whole Internet', 'vide : tout Internet')),
           mode === 'direct' && h('p', { class: 'gate-warn' }, t('The Gate is then directly exposed and it holds the vault: limit the allowed networks, or prefer a proxy.', 'La Gate est alors exposée directement et elle détient le coffre : limitez les réseaux autorisés, ou préférez un proxy.')),
+          mode === 'relais' && relayBody(),
           needsListener && h('p', { class: 'gate-warn' }, t(
             'HTTPS listening is off on this Gate. Set PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 in /etc/portunia-gate/portunia-gate.env, restart the Gate and open the port.',
             'L\'écoute HTTPS est coupée sur cette Gate. Réglez PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 dans /etc/portunia-gate/portunia-gate.env, redémarrez la Gate et ouvrez le port.')),
@@ -777,16 +813,16 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           h('div', {}, h('b', {}, t('Web portal', 'Portail web')), ' · ', state),
           h('p', { class: 'muted small' }, t('Access to SSH servers from a browser, without Portunia. Disabled: the page shows « Portal closed » and open web sessions close.', 'Accès aux serveurs SSH depuis un navigateur, sans Portunia. Désactivé : la page affiche « Portail fermé » et les sessions web en cours se ferment.')))),
         h('div', { class: 'portal-stats' },
-          stat(p.sessions_en_cours, 'sessions web en cours'), stat(p.connexions_jour, 'connexions aujourd\'hui'), stat(p.echecs_jour, t('failures today', 'échecs aujourd\'hui')),
-          h('div', { class: 'portal-stat' }, h('b', { class: `chip ${tunnel[0]}` }, tunnel[1]), h('span', {}, 'tunnel Cloudflare'))),
+          stat(p.sessions_en_cours, t('open web sessions', 'sessions web en cours')), stat(p.connexions_jour, t('sign-ins today', 'connexions aujourd\'hui')), stat(p.echecs_jour, t('failures today', 'échecs aujourd\'hui')),
+          (p.mode ?? 'cloudflare') === 'cloudflare' && h('div', { class: 'portal-stat' }, h('b', { class: `chip ${tunnel[0]}` }, tunnel[1]), h('span', {}, t('Cloudflare tunnel', 'tunnel Cloudflare')))),
         h('div', {}, closeAll),
         hasModes && h('h3', {}, t('Exposure mode', 'Mode d\'exposition')),
         hasModes && modeBody,
         h('h3', {}, t('Address', 'Adresse')),
         field(t('Public address', 'Adresse publique'), url, t('the one visitors type; checked at every connection', 'celle que tapent les visiteurs ; vérifiée à chaque connexion')),
         h('p', { class: 'muted small' }, t(
-          `The Gate serves the portal on ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` and ${p.ecoute.proxy} over HTTPS (Cloudflare proxy, Cloudflare addresses only)` : ''}. Install the tunnel: sudo bash installer.sh portal.`,
-          `La Gate sert le portail sur ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` et ${p.ecoute.proxy} en HTTPS (proxy Cloudflare, adresses de Cloudflare seulement)` : ''}. Installer le tunnel : sudo bash installer.sh portail.`)),
+          mode !== 'cloudflare' ? '' : `The Gate serves the portal on ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` and ${p.ecoute.proxy} over HTTPS (Cloudflare proxy, Cloudflare addresses only)` : ''}. Install the tunnel: sudo bash installer.sh portal.`,
+          mode !== 'cloudflare' ? '' : `La Gate sert le portail sur ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` et ${p.ecoute.proxy} en HTTPS (proxy Cloudflare, adresses de Cloudflare seulement)` : ''}. Installer le tunnel : sudo bash installer.sh portail.`)),
         h('h3', {}, t('Who and for how long', 'Qui et combien de temps')),
         field(t('Allowed group', 'Groupe autorisé'), groupe, groupMissing ? t(`the group « ${p.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${p.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can sign in to the portal', 'seuls ses membres peuvent se connecter au portail')),
         h('div', { class: 'row2' }, field(t('Web session duration', 'Durée d\'une session web'), duree), field(t('Close after inactivity', 'Fermeture après inactivité'), idle)),
