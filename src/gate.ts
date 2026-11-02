@@ -709,7 +709,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         if (on && !p.url) host.toast(t('First give the portal\'s public address, then save.', 'Indiquez d\'abord l\'adresse publique du portail, puis enregistrez.'), 'info');
         try { await call('PUT', '/admin/portail', { actif: on }); host.toast(on ? t('Web portal enabled', 'Portail web activé') : t('Web portal disabled', 'Portail web désactivé')); reload(); } catch (e) { fail(e); }
       });
-      const tunnel = { relie: ['ok', t('connected', 'relié')], deconnecte: ['warn', t('installed, not connected', 'installé, non relié')], absent: ['off', t('not installed', 'non installé')] }[p.tunnel as string] ?? ['off', p.tunnel];
+      const tunnel = { relie: ['ok', t('connected', 'relié')], deconnecte: ['warn', t('not connected', 'non relié')], absent: ['off', t('not set up', 'non configuré')] }[p.tunnel as string] ?? ['off', p.tunnel];
       const stat = (value: string | number, label: string) => h('div', { class: 'portal-stat' }, h('b', {}, String(value)), h('span', {}, label));
       const closeAll = small(t('Close all web sessions', 'Fermer toutes les sessions web'), async () => {
         if (!confirm(t('Close all open web sessions? Users will have to sign in again.', 'Fermer toutes les sessions web en cours ? Les utilisateurs devront se reconnecter.'))) return;
@@ -775,6 +775,77 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
             h('button', { class: 'btn', onclick: () => navigator.clipboard.writeText(pairing).then(() => host.toast(t('Copied', 'Copié'))) }, t('Copy', 'Copier'))),
           h('p', { class: 'muted small' }, t('Firewall: port 443 from browsers to the relay, port 8447 from the Gate to the relay, nothing from the relay to the internal network. The relay holds neither vault, accounts nor database.', 'Pare-feu : port 443 des navigateurs vers le relais, port 8447 de la Gate vers le relais, rien du relais vers le réseau interne. Le relais ne contient ni coffre, ni comptes, ni base.')));
       };
+      // Tunnel lancé par la Gate (0.19 et suivantes) : jeton collé ici, cloudflared géré par elle.
+      const managed = p.tunnel_gere;
+      const tunnelToken = input({ id: 'p-tunnel', type: 'password', placeholder: t('eyJh… or the whole install command', 'eyJh… ou toute la commande d\'installation') });
+      const tunnelState = h('div', { class: 'tunnel-state' });
+      const checkResult = h('p', { class: 'muted small' });
+      const TUNNEL_STATES: Record<string, [string, string]> = {
+        arrete: ['off', t('stopped', 'arrêté')], telechargement: ['warn', t('downloading cloudflared', 'téléchargement de cloudflared')],
+        demarrage: ['warn', t('starting', 'démarrage')], relie: ['ok', t('connected', 'relié')],
+        deconnecte: ['warn', t('not connected', 'non relié')], erreur: ['err', t('error', 'erreur')],
+      };
+      const drawTunnelState = (g: any) => {
+        const [cls, label] = TUNNEL_STATES[g.etat] ?? ['off', g.etat];
+        const since = g.depuis ? ` · ${t('since', 'depuis')} ${new Date(g.depuis).toLocaleString()}` : '';
+        tunnelState.replaceChildren(...[
+          h('div', {}, h('b', { class: `chip ${cls}` }, label),
+            h('span', { class: 'muted small' }, g.etat === 'relie' ? ` ${g.connexions} ${t('connection(s) to Cloudflare', 'connexion(s) vers Cloudflare')}${since}` : since)),
+          g.erreur && h('p', { class: 'gate-warn' }, g.erreur),
+        ].filter(Boolean) as HTMLElement[]);
+      };
+      const copyBox = (text: string) => h('div', { class: 'hardening-command' }, h('div', { class: 'fp' }, text),
+        h('button', { class: 'btn', onclick: () => navigator.clipboard.writeText(text).then(() => host.toast(t('Copied', 'Copié'))).catch(() => {}) }, t('Copy', 'Copier')));
+      const saveToken = async (value: string) => {
+        try {
+          await call('PUT', '/admin/portail', { tunnel_jeton: value, mode: 'cloudflare' });
+          host.toast(value ? t('Token saved: the Gate starts the tunnel', 'Jeton enregistré : la Gate démarre le tunnel') : t('Token removed: tunnel stopped', 'Jeton effacé : tunnel arrêté'));
+          reload();
+        } catch (e) { fail(e); }
+      };
+      const cloudflareBody = () => {
+        const g = managed;
+        drawTunnelState(g);
+        const target = g.service.replace(/^http:\/\//, '');
+        return h('div', { class: 'admin-section' }, ...[
+          g.jeton_defini && tunnelState,
+          !g.jeton_defini && g.externe && h('p', { class: 'muted small' }, t(
+            `A cloudflared installed beside the Gate serves the tunnel (${g.externe_relie ? 'connected' : 'not connected'}). To manage it from here, paste the same token, then remove the old one (sudo cloudflared service uninstall).`,
+            `Un cloudflared installé à côté de la Gate sert le tunnel (${g.externe_relie ? 'relié' : 'non relié'}). Pour le gérer d'ici, collez le même jeton, puis retirez l'ancien (sudo cloudflared service uninstall).`)),
+          h('ol', { class: 'tunnel-steps' },
+            h('li', {}, t('In Cloudflare Zero Trust › Networks › Tunnels, create a « Cloudflared » tunnel and copy the install command it shows: it holds the token.', 'Dans Cloudflare Zero Trust › Networks › Tunnels, créez un tunnel « Cloudflared » et copiez la commande d\'installation affichée : elle contient le jeton.')),
+            h('li', {}, g.jeton_defini
+              ? h('div', { class: 'tunnel-token' }, h('span', {}, t('Tunnel', 'Tunnel'), ' ', h('code', {}, g.tunnel_id ?? '?')),
+                small(t('Replace', 'Remplacer'), () => { tokenRow.hidden = false; tunnelToken.focus(); }),
+                small(t('Remove', 'Effacer'), () => { if (confirm(t('Remove the token? The Gate stops the tunnel and the portal is no longer reachable through Cloudflare.', 'Effacer le jeton ? La Gate arrête le tunnel et le portail n\'est plus joignable par Cloudflare.'))) saveToken(''); }, true))
+              : h('span', {}, t('Paste it here:', 'Collez-la ici :')),
+              tokenRow),
+            h('li', {}, t('In the tunnel\'s « Public hostname » tab: your public address, type HTTP, URL:', 'Dans l\'onglet « Public hostname » du tunnel : votre adresse publique, type HTTP, URL :'), copyBox(target)),
+            h('li', {}, t('Fill in the public address below, save, then test:', 'Renseignez l\'adresse publique ci-dessous, enregistrez, puis testez :'), ' ',
+              small(t('Test the public address', 'Tester l\'adresse publique'), async () => {
+                checkResult.className = 'muted small';
+                checkResult.textContent = t('Testing…', 'Essai…');
+                try {
+                  const r = await call<any>('POST', '/admin/portail/tester');
+                  checkResult.className = r.ok ? 'ok-text small' : 'gate-warn';
+                  checkResult.textContent = r.message;
+                } catch (e) { checkResult.textContent = ''; fail(e); }
+              }), checkResult)),
+          h('p', { class: 'muted small' }, t(
+            `cloudflared ${g.version} is downloaded by the Gate from Cloudflare's GitHub, its fingerprint checked, and run under the Gate's account: nothing to install, no root, no inbound port. The token is kept encrypted by the vault.`,
+            `cloudflared ${g.version} est téléchargé par la Gate depuis le GitHub de Cloudflare, son empreinte vérifiée, et lancé sous le compte de la Gate : rien à installer, pas de root, aucun port entrant. Le jeton est gardé chiffré par le coffre.`)),
+        ].filter(Boolean) as HTMLElement[]);
+      };
+      const tokenRow = h('div', { class: 'tunnel-token' }, tunnelToken,
+        h('button', { class: 'btn primary', onclick: () => { if (tunnelToken.value.trim()) saveToken(tunnelToken.value.trim()); } }, t('Save the token', 'Enregistrer le jeton')));
+      if (managed?.jeton_defini) {
+        tokenRow.hidden = true;
+        // État du tunnel suivi en direct tant que l'onglet est affiché.
+        const timer = window.setInterval(async () => {
+          if (!tunnelState.isConnected) { window.clearInterval(timer); return; }
+          try { const q = await call<any>('GET', '/admin/portail'); if (q.tunnel_gere) drawTunnelState(q.tunnel_gere); } catch { /* prochain essai */ }
+        }, 4000);
+      }
       const drawModes = () => {
         const current = MODES.find((m) => m.id === mode)!;
         const needsListener = mode !== 'cloudflare' && mode !== 'relais' && !p.ecoute.proxy;
@@ -791,6 +862,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           (mode === 'interne' || mode === 'direct') && field(t('Allowed networks', 'Réseaux autorisés'), reseaux, mode === 'interne' ? t('empty: private networks', 'vide : les réseaux privés') : t('empty: the whole Internet', 'vide : tout Internet')),
           mode === 'direct' && h('p', { class: 'gate-warn' }, t('The Gate is then directly exposed and it holds the vault: limit the allowed networks, or prefer a proxy.', 'La Gate est alors exposée directement et elle détient le coffre : limitez les réseaux autorisés, ou préférez un proxy.')),
           mode === 'relais' && relayBody(),
+          mode === 'cloudflare' && managed && cloudflareBody(),
           needsListener && h('p', { class: 'gate-warn' }, t(
             'HTTPS listening is off on this Gate. Set PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 in /etc/portunia-gate/portunia-gate.env, restart the Gate and open the port.',
             'L\'écoute HTTPS est coupée sur cette Gate. Réglez PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 dans /etc/portunia-gate/portunia-gate.env, redémarrez la Gate et ouvrez le port.')),
@@ -821,8 +893,8 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         h('h3', {}, t('Address', 'Adresse')),
         field(t('Public address', 'Adresse publique'), url, t('the one visitors type; checked at every connection', 'celle que tapent les visiteurs ; vérifiée à chaque connexion')),
         h('p', { class: 'muted small' }, t(
-          mode !== 'cloudflare' ? '' : `The Gate serves the portal on ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` and ${p.ecoute.proxy} over HTTPS (Cloudflare proxy, Cloudflare addresses only)` : ''}. Install the tunnel: sudo bash installer.sh portal.`,
-          mode !== 'cloudflare' ? '' : `La Gate sert le portail sur ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` et ${p.ecoute.proxy} en HTTPS (proxy Cloudflare, adresses de Cloudflare seulement)` : ''}. Installer le tunnel : sudo bash installer.sh portail.`)),
+          mode !== 'cloudflare' || managed ? '' : `The Gate serves the portal on ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` and ${p.ecoute.proxy} over HTTPS (Cloudflare proxy, Cloudflare addresses only)` : ''}. Install the tunnel: sudo bash installer.sh portal.`,
+          mode !== 'cloudflare' || managed ? '' : `La Gate sert le portail sur ${p.ecoute.tunnel} (Cloudflare Tunnel)${p.ecoute.proxy ? ` et ${p.ecoute.proxy} en HTTPS (proxy Cloudflare, adresses de Cloudflare seulement)` : ''}. Installer le tunnel : sudo bash installer.sh portail.`)),
         h('h3', {}, t('Who and for how long', 'Qui et combien de temps')),
         field(t('Allowed group', 'Groupe autorisé'), groupe, groupMissing ? t(`the group « ${p.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${p.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can sign in to the portal', 'seuls ses membres peuvent se connecter au portail')),
         h('div', { class: 'row2' }, field(t('Web session duration', 'Durée d\'une session web'), duree), field(t('Close after inactivity', 'Fermeture après inactivité'), idle)),
