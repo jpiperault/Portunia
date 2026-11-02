@@ -872,10 +872,156 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
               h('button', { class: 'btn primary', onclick: () => applyHttps(httpsAddress.value.trim() || '8446') }, p.ecoute.proxy ? t('Apply', 'Appliquer') : t('Open', 'Ouvrir')),
               p.ecoute.proxy && small(t('Close', 'Fermer'), () => { if (confirm(t('Close HTTPS listening? Browsers can no longer reach the portal in this mode.', 'Fermer l\'écoute HTTPS ? Les navigateurs ne joignent plus le portail dans ce mode.'))) applyHttps(''); }, true)),
           h('p', { class: 'muted small' }, t(
-            `A port, or address:port. Open port ${port} on the firewall in front of the Gate; from the Internet, redirect 443 to it on the box or the firewall. Hardened firewall: 8446 is already allowed. Certificate: the Gate's (self-signed unless yours is set).`,
-            `Un port, ou adresse:port. Ouvrez le port ${port} sur le pare-feu devant la Gate ; depuis Internet, redirigez-y le 443 sur la box ou le pare-feu. Pare-feu durci : le 8446 est déjà autorisé. Certificat : celui de la Gate (auto-signé sauf le vôtre).`)),
+            `A port, or address:port. Open port ${port} on the firewall in front of the Gate; from the Internet, redirect 443 to it on the box or the firewall. Hardened firewall: 8446 is already allowed.`,
+            `Un port, ou adresse:port. Ouvrez le port ${port} sur le pare-feu devant la Gate ; depuis Internet, redirigez-y le 443 sur la box ou le pare-feu. Pare-feu durci : le 8446 est déjà autorisé.`)),
         ].filter(Boolean) as HTMLElement[]);
       };
+      // Certificat du portail (Gate 0.21 et suivantes) : PKI (PEM, PFX) ou Let's Encrypt.
+      const certificate = p.certificat;
+      let acme = p.acme;
+      const CERT_SOURCES: Record<string, string> = {
+        auto: t('self-signed', 'auto-signé'), importe: t('imported', 'importé'), acme: 'Let\'s Encrypt', fichier: t('configuration file', 'fichier de configuration'),
+      };
+      const ACME_STATES: Record<string, [string, string]> = {
+        inactif: ['off', t('off', 'inactif')], en_attente: ['warn', t('waiting', 'en attente')], en_cours: ['warn', t('in progress', 'en cours')],
+        obtenu: ['ok', t('obtained', 'obtenu')], erreur: ['err', t('error', 'erreur')],
+      };
+      let certPanel: '' | 'import' | 'acme' = acme?.actif ? 'acme' : '';
+      const certBox = h('div', { class: 'admin-section' });
+      const certFile = h('input', { type: 'file', id: 'p-cert', accept: '.pem,.crt,.cer,.pfx,.p12' }) as HTMLInputElement;
+      const keyFile = h('input', { type: 'file', id: 'p-cle', accept: '.pem,.key' }) as HTMLInputElement;
+      const pfxPassword = input({ id: 'p-pfx', type: 'password', autocomplete: 'new-password' });
+      const host0 = (p.url ?? '').replace(/^https:\/\//, '').split(/[/:]/)[0];
+      const acmeDomains = input({ id: 'p-acme-noms', value: (acme?.domaines ?? []).join(', ') || host0, placeholder: 'portail.example.com' });
+      const acmeEmail = input({ id: 'p-acme-email', type: 'email', value: acme?.email ?? '', placeholder: t('optional', 'facultatif') });
+      const acmeMethod = select('p-acme-methode', [
+        ['tls-alpn', t('TLS-ALPN-01: port 443 redirected to the HTTPS listener', 'TLS-ALPN-01 : port 443 redirigé vers l\'écoute HTTPS')],
+        ['dns-cloudflare', t('DNS-01 through Cloudflare: nothing to open, wildcard allowed', 'DNS-01 par Cloudflare : rien à ouvrir, générique permis')],
+      ], acme?.methode ?? 'tls-alpn');
+      const acmeToken = input({ id: 'p-acme-jeton', type: 'password', placeholder: acme?.cloudflare_defini ? t('Saved: leave empty to keep it', 'Enregistré : laisser vide pour le garder') : t('API token (Zone › DNS › Edit)', 'Jeton d\'API (Zone › DNS › Edit)') });
+      const acmeStaging = checkbox('p-acme-essai', t('Let\'s Encrypt staging (test certificate, not trusted by browsers)', 'Autorité d\'essai de Let\'s Encrypt (certificat de test, non reconnu par les navigateurs)'), !!acme?.essai);
+      const acmeTerms = checkbox('p-acme-cgu', t('I accept the Let\'s Encrypt Subscriber Agreement', 'J\'accepte les conditions d\'utilisation de Let\'s Encrypt'), !!acme?.actif);
+      const tokenField = field(t('Cloudflare API token', 'Jeton d\'API Cloudflare'), acmeToken, t('My Profile › API Tokens › Create Token › Edit zone DNS; kept encrypted by the vault', 'My Profile › API Tokens › Create Token › Edit zone DNS ; gardé chiffré par le coffre'));
+      acmeMethod.addEventListener('change', () => { tokenField.hidden = acmeMethod.value !== 'dns-cloudflare'; drawCert(); });
+      tokenField.hidden = acmeMethod.value !== 'dns-cloudflare';
+      const readBytes = (f: File) => new Promise<Uint8Array>((ok, ko) => {
+        const r = new FileReader();
+        r.onload = () => ok(new Uint8Array(r.result as ArrayBuffer));
+        r.onerror = () => ko(r.error);
+        r.readAsArrayBuffer(f);
+      });
+      const toBase64 = (bytes: Uint8Array) => {
+        let text = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) text += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return btoa(text);
+      };
+      const importCert = async () => {
+        const f = certFile.files?.[0];
+        if (!f) { host.toast(t('Choose the certificate file', 'Choisissez le fichier du certificat')); return; }
+        try {
+          const bytes = await readBytes(f);
+          const text = new TextDecoder().decode(bytes);
+          const body: Record<string, unknown> = text.includes('-----BEGIN')
+            ? { certificat: text, cle: keyFile.files?.[0] ? new TextDecoder().decode(await readBytes(keyFile.files[0])) : '' }
+            : { pfx: toBase64(bytes), mot_de_passe: pfxPassword.value };
+          const r = await call<any>('PUT', '/admin/portail/certificat', body);
+          host.toast(t(`Certificate imported: ${r.certificat.noms.join(', ')}`, `Certificat importé : ${r.certificat.noms.join(', ')}`));
+          reload();
+        } catch (e) { fail(e); }
+      };
+      const saveAcme = async (actif: boolean) => {
+        const body: Record<string, unknown> = {
+          actif, domaines: acmeDomains.value.split(/[\s,;]+/).filter(Boolean), email: acmeEmail.value.trim(),
+          methode: acmeMethod.value, essai: acmeStaging.box.checked, conditions: acmeTerms.box.checked,
+        };
+        if (acmeToken.value.trim()) body.cloudflare_jeton = acmeToken.value.trim();
+        try {
+          acme = await call<any>('PUT', '/admin/portail/acme', body);
+          acmeToken.value = '';
+          host.toast(actif ? t('Let\'s Encrypt enabled: certificate requested', 'Let\'s Encrypt activé : certificat demandé') : t('Let\'s Encrypt disabled', 'Let\'s Encrypt désactivé'));
+          drawCert();
+          followAcme();
+        } catch (e) { fail(e); }
+      };
+      // Suivi de la demande en cours, tant que l'onglet est affiché.
+      let following = false;
+      const followAcme = () => {
+        if (following) return;
+        following = true;
+        const timer = window.setInterval(async () => {
+          if (!certBox.isConnected) { window.clearInterval(timer); following = false; return; }
+          try {
+            const q = await call<any>('GET', '/admin/portail');
+            const done = !['en_attente', 'en_cours'].includes(q.acme?.etat);
+            const changed = q.certificat?.info?.empreinte !== p.certificat?.info?.empreinte;
+            acme = q.acme;
+            if (changed) p.certificat = q.certificat;
+            drawCert();
+            if (done) { window.clearInterval(timer); following = false; }
+          } catch { /* prochain essai */ }
+        }, 3000);
+      };
+      const drawCert = () => {
+        const c = p.certificat;
+        const info = c?.info;
+        const date = (d?: string) => (d ? new Date(d).toLocaleDateString() : '—');
+        const days = c?.jours ?? 0;
+        const expiry = info && h('b', { class: `chip ${days < 0 ? 'err' : c.alerte ? 'warn' : 'ok'}` },
+          days < 0 ? t('expired', 'expiré') : t(`${days} days left`, `encore ${days} jours`));
+        const [acmeCls, acmeLabel] = ACME_STATES[acme?.etat] ?? ['off', acme?.etat ?? ''];
+        const toggle = (panel: 'import' | 'acme', label: string) => small(label, () => { certPanel = certPanel === panel ? '' : panel; drawCert(); });
+        certBox.replaceChildren(...[
+          h('div', {}, h('b', {}, t('Portal certificate', 'Certificat du portail')), ' ', info ? h('b', { class: 'chip off' }, CERT_SOURCES[info.source] ?? info.source) : null, ' ', expiry),
+          info && h('p', { class: 'muted small' },
+            `${info.noms.join(', ') || info.sujet} · ${t('issued by', 'émis par')} ${info.emetteur} · ${t('valid until', 'valable jusqu\'au')} ${date(info.expire)}`,
+            h('br'), `${t('Fingerprint', 'Empreinte')} ${info.empreinte}`),
+          info?.source === 'auto' && h('p', { class: 'muted small' }, t('Self-signed: browsers show a warning. Import your PKI certificate or use Let\'s Encrypt.', 'Auto-signé : les navigateurs affichent un avertissement. Importez le certificat de votre PKI ou utilisez Let\'s Encrypt.')),
+          c?.alerte && info?.source !== 'acme' && h('p', { class: 'gate-warn' }, t('The certificate expires soon: import the renewed one.', 'Le certificat expire bientôt : importez celui qui le renouvelle.')),
+          c?.erreur && h('p', { class: 'gate-warn' }, c.erreur),
+          c?.fixe
+            ? h('p', { class: 'muted small' }, t('Set by PORTUNIA_GATE_PORTAL_TLS_CERT and PORTUNIA_GATE_PORTAL_TLS_KEY in the configuration file: replace the files there (taken within seconds), or remove the variables to manage it from here.', 'Fixé par PORTUNIA_GATE_PORTAL_TLS_CERT et PORTUNIA_GATE_PORTAL_TLS_KEY dans le fichier de configuration : remplacez les fichiers là (pris en compte sous quelques secondes), ou retirez les variables pour le gérer d\'ici.'))
+            : h('div', { class: 'cert-actions' },
+              toggle('import', t('Import a certificate…', 'Importer un certificat…')),
+              toggle('acme', 'Let\'s Encrypt…'),
+              (info?.source === 'importe' || info?.source === 'acme') && small(t('Back to self-signed', 'Revenir à l\'auto-signé'), async () => {
+                if (!confirm(t('Go back to the self-signed certificate? Let\'s Encrypt renewal stops and browsers show a warning again.', 'Revenir au certificat auto-signé ? Le renouvellement Let\'s Encrypt s\'arrête et les navigateurs affichent de nouveau un avertissement.'))) return;
+                try { await call('DELETE', '/admin/portail/certificat'); host.toast(t('Self-signed certificate restored', 'Certificat auto-signé rétabli')); reload(); } catch (e) { fail(e); }
+              }, true)),
+          !c?.fixe && certPanel === 'import' && h('div', { class: 'cert-panel' },
+            h('p', { class: 'muted small' }, t('From your internal or public PKI: a PEM certificate with its chain and its unencrypted key, or a PFX file (.pfx, .p12) and its password. Applied within seconds, without restarting the Gate.', 'De votre PKI interne ou publique : un certificat PEM avec sa chaîne et sa clé non chiffrée, ou un fichier PFX (.pfx, .p12) et son mot de passe. Appliqué sous quelques secondes, sans redémarrer la Gate.')),
+            h('div', { class: 'row2' },
+              field(t('Certificate (PEM or PFX)', 'Certificat (PEM ou PFX)'), certFile, t('with the intermediate certificates', 'avec les certificats intermédiaires')),
+              field(t('Private key (PEM)', 'Clé privée (PEM)'), keyFile, t('if not in the certificate file', 'si elle n\'est pas dans le fichier du certificat'))),
+            field(t('PFX password', 'Mot de passe du PFX'), pfxPassword, t('PFX only', 'PFX seulement')),
+            h('div', {}, h('button', { class: 'btn primary', onclick: importCert }, t('Import', 'Importer')))),
+          !c?.fixe && certPanel === 'acme' && h('div', { class: 'cert-panel' },
+            h('div', {}, h('b', {}, 'Let\'s Encrypt'), ' ', h('span', { class: 'chip pro' }, 'PRO'), ' ', h('b', { class: `chip ${acmeCls}` }, acmeLabel),
+              acme?.etape && acme?.etat === 'en_cours' ? h('span', { class: 'muted small' }, ` ${acme.etape}…`) : null),
+            acme?.erreur && h('p', { class: 'gate-warn' }, acme.erreur),
+            acme?.actif && acme?.prochaine && h('p', { class: 'muted small' }, acme.etat === 'erreur'
+              ? t(`Next automatic try: ${new Date(acme.prochaine).toLocaleString()}`, `Prochain essai automatique : ${new Date(acme.prochaine).toLocaleString()}`)
+              : t(`Automatic renewal from ${date(acme.prochaine)}`, `Renouvellement automatique à partir du ${date(acme.prochaine)}`)),
+            field(t('Domain names', 'Noms de domaine'), acmeDomains, t('separated by commas; they must point to this Gate (TLS-ALPN-01) or be in a Cloudflare zone (DNS-01)', 'séparés par des virgules ; ils doivent pointer vers cette Gate (TLS-ALPN-01) ou être dans une zone Cloudflare (DNS-01)')),
+            h('div', { class: 'row2' }, field(t('Check', 'Vérification'), acmeMethod), field(t('Contact email', 'E-mail de contact'), acmeEmail, t('for Let\'s Encrypt', 'pour Let\'s Encrypt'))),
+            tokenField,
+            acmeMethod.value === 'tls-alpn' && h('p', { class: 'muted small' }, t('TLS-ALPN-01: open HTTPS listening above, then redirect port 443 of the public address to it (box, firewall). Let\'s Encrypt connects to it to check the name.', 'TLS-ALPN-01 : ouvrez l\'écoute HTTPS ci-dessus, puis redirigez-y le port 443 de l\'adresse publique (box, pare-feu). Let\'s Encrypt s\'y connecte pour vérifier le nom.')),
+            acmeStaging.row,
+            acmeTerms.row,
+            h('p', { class: 'muted small' }, acme?.conditions ?? 'https://letsencrypt.org/repository/'),
+            h('div', { class: 'cert-actions' },
+              h('button', { class: 'btn primary', onclick: () => saveAcme(true) }, acme?.actif ? t('Save and request', 'Enregistrer et demander') : t('Enable and request', 'Activer et demander')),
+              acme?.actif && small(t('Renew now', 'Renouveler maintenant'), async () => {
+                try { await call('POST', '/admin/portail/acme/renouveler'); acme = { ...acme, etat: 'en_cours', erreur: null }; drawCert(); followAcme(); } catch (e) { fail(e); }
+              }),
+              acme?.actif && small(t('Disable', 'Désactiver'), () => { if (confirm(t('Stop Let\'s Encrypt renewal? The current certificate stays until it expires.', 'Arrêter le renouvellement Let\'s Encrypt ? Le certificat en place reste jusqu\'à son échéance.'))) saveAcme(false); }, true)),
+            h('p', { class: 'muted small' }, t('The Gate renews the certificate 30 days before it expires, by itself. The account and the token are kept encrypted by the vault.', 'La Gate renouvelle le certificat 30 jours avant son échéance, seule. Le compte et le jeton sont gardés chiffrés par le coffre.'))),
+          h('p', { class: 'muted small' }, t('Separate from the API certificate: changing it does not affect Portunia consoles.', 'Distinct du certificat de l\'API : le changer ne touche pas les consoles Portunia.')),
+        ].filter(Boolean) as HTMLElement[]);
+      };
+      if (certificate) {
+        drawCert();
+        if (['en_attente', 'en_cours'].includes(acme?.etat)) followAcme();
+      }
       const drawModes = () => {
         const current = MODES.find((m) => m.id === mode)!;
         const needsListener = mode !== 'cloudflare' && mode !== 'relais' && !p.ecoute.proxy && !https;
@@ -894,6 +1040,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           mode === 'relais' && relayBody(),
           mode === 'cloudflare' && managed && cloudflareBody(),
           (mode === 'interne' || mode === 'direct' || mode === 'proxy') && https && httpsBody(),
+          (mode === 'interne' || mode === 'direct' || mode === 'proxy') && certificate && certBox,
           needsListener && h('p', { class: 'gate-warn' }, t(
             'HTTPS listening is off on this Gate. Set PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 in /etc/portunia-gate/portunia-gate.env, restart the Gate and open the port.',
             'L\'écoute HTTPS est coupée sur cette Gate. Réglez PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 dans /etc/portunia-gate/portunia-gate.env, redémarrez la Gate et ouvrez le port.')),
