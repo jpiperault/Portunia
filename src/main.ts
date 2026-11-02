@@ -662,63 +662,188 @@ function renderToolbar() {
   const v = session.values;
   const target = [v.username && `${v.username}@`, v.host ?? v.url, v.port && `:${v.port}`].filter(Boolean).join('');
   const label = { connecting: tr('connecting…', 'connexion…'), connected: tr('connected', 'connecté'), reconnecting: 'reconnexion…', closed: tr('disconnected', 'déconnecté') }[tab.state];
+  const side = shownSide(tab);
+  const ssh = tab.state === 'connected' && session.protocol === 'ssh';
+  const panels = panelButtons(tab, session);
+  // Ordre de repli quand la place manque : d'abord le libellé (label), puis le menu « ⋯ » (menu).
+  const items: (ToolbarItem | '|' | 'panels')[] = [
+    ...(tab.state === 'closed' ? [{ id: 'reconnect', icon: 'refresh', label: tr('Reconnect', 'Reconnecter'), action: () => reconnect(tab), cls: 'primary', fold: { label: 20 } }] : []),
+    ...(tab.state === 'reconnecting' ? [{ id: 'cancel', icon: 'close', label: tr('Cancel the reconnection', 'Annuler la reconnexion'), action: () => viewOf(tab)?.cancelReconnect(), fold: { label: 20 } }] : []),
+    ...(tab.term ? [{ id: 'commands', icon: 'commands', label: tr('Commands', 'Commandes'), title: tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)'), action: () => openPalette(snippetContext()), fold: { label: 9 } }] : []),
+    ...(tab.term ? [{ id: 'search', icon: 'search', label: tr('Search in the terminal', 'Rechercher dans le terminal'), title: tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)'), action: () => tab.term?.openSearch(), iconOnly: true }] : []),
+    ...(tab.term && tab.state === 'connected' ? [{
+      id: 'record', lead: h('span', { class: 'rec-dot' }), label: tab.recording ? tr('Stop recording', 'Arrêter l’enregistrement') : tr('Record', 'Enregistrer'),
+      title: tab.recording ? `${tr('Recording', 'Enregistrement en cours')} : ${tab.recording}` : tr('Record this session (asciicast + text)', 'Enregistrer cette session (asciicast + texte)'),
+      action: () => (tab.recording ? stopRecording(tab) : startRecording(tab)), cls: tab.recording ? 'rec' : '', fold: { label: 5 },
+    }] : []),
+    ...(tab.screen ? [{ id: 'cad', icon: 'power', label: tr('Ctrl+Alt+Del', 'Ctrl+Alt+Suppr'), title: tr('Send Ctrl+Alt+Del to the remote screen', 'Envoyer Ctrl+Alt+Suppr à l’écran distant'), action: () => tab.screen?.sendCtrlAltDel(), fold: { label: 4, menu: 7 } }] : []),
+    ...(tab.screen && session.protocol !== 'rdp' ? [{ id: 'clipboard', icon: 'copy', label: tr('Clipboard', 'Presse-papiers'), title: tr('Copy the Windows clipboard to the remote screen', 'Copier le presse-papiers de Windows vers l’écran distant'), action: () => tab.screen?.sendClipboard(), fold: { label: 3, menu: 8 } }] : []),
+    ...(tab.screen ? [{ id: 'fit', icon: 'move', label: tab.screen.fit ? tr('Real size', 'Taille réelle') : tr('Fit to window', 'Ajuster à la fenêtre'), title: tr('Fit the image to the tab or show it at real size', 'Adapter l’image à l’onglet ou afficher en taille réelle'), action: () => { tab.screen?.toggleFit(); renderToolbar(); }, fold: { label: 4, menu: 9 } }] : []),
+    { id: 'split', icon: 'split', label: tr('Split screen', 'Écran partagé'), title: tr('Show several sessions side by side', 'Afficher plusieurs sessions côte à côte'), action: (e: MouseEvent) => splitMenu(e), cls: isSplit() ? 'on' : '', fold: { label: 4, menu: 10 } },
+    ...(isSplit() ? [{
+      id: 'broadcast', icon: 'broadcast', label: state.broadcast ? tr('Multi-input: ON', 'Saisie multiple : ACTIVE') : tr('Multi-input', 'Saisie multiple'),
+      title: tr('Send keystrokes to all displayed sessions (Ctrl Shift B)', 'Envoyer la frappe à toutes les sessions affichées (Ctrl Maj B)'), action: () => toggleBroadcast(), cls: state.broadcast ? 'warn' : '', pressed: state.broadcast, fold: { label: 6 },
+    }] : []),
+    '|',
+    ...(!tab.quick && tab.state === 'connected' && protocolOf(session.protocol)?.portForwarding ? [{
+      id: 'tunnels', icon: 'tunnel', label: 'Tunnels', title: tr('Port forwards through this session', 'Redirections de ports à travers cette session'),
+      action: () => { const id = tab.term?.connection; if (id) openTunnels(session, id, toast, () => reload()); }, fold: { label: 3, menu: 8 },
+    }] : []),
+    ...(ssh ? [{ id: 'key', icon: 'lock', label: tr('SSH key', 'Clé SSH'), title: tr('Create an SSH key and install it on this server (no more password)', 'Créer une clé SSH et l’installer sur ce serveur (plus de mot de passe)'), action: () => openKeysFor(tab, session), fold: { label: 2, menu: 7 } }] : []),
+    tab.quick
+      ? { id: 'save', icon: 'plus', label: tr('Save as a session', 'Enregistrer comme session'), title: tr('Keep this connection in the session list', 'Garder cette connexion dans la liste des sessions'), action: () => { if (tab.quick) saveQuick(tab.quick); }, cls: 'primary', fold: { label: 8 } }
+      : { id: 'edit', icon: 'edit', label: tr('Edit', 'Modifier'), title: tr('Edit the session', 'Modifier la session'), action: () => editSession(session), fold: { label: 1, menu: 6 } },
+    '|',
+    'panels',
+    ...(tab.state === 'connected' ? [{ id: 'disconnect', icon: 'power', label: tr('Disconnect', 'Déconnecter'), title: tr('Close the connection and the tab', 'Fermer la connexion et l’onglet'), action: () => closeTab(tab.id), fold: { label: 11 } }] : []),
+  ];
   toolbar.replaceChildren(
-    h('div', { class: 'toolbar-info' },
+    h('div', { class: 'toolbar-info', title: [target || session.name, session.folder, label].filter(Boolean).join(' · ') },
+      h('span', { class: `dot ${tab.state === 'connected' ? 'on' : tab.state === 'connecting' || tab.state === 'reconnecting' ? 'wait' : ''}` }),
       coloredFolder && h('span', { class: 'env-label', title: tr('Folder colour', 'Couleur du dossier') }, coloredFolder.toUpperCase()),
-      icon('terminal'), h('strong', {}, target || session.name),
-      session.folder && h('span', { class: 'muted' }, `· ${session.folder}`),
-      typeof v.jump === 'string' && v.jump.trim() && h('span', { class: 'muted', title: tr('Jump server', 'Serveur de rebond') }, `· via ${v.jump}`),
-      h('span', { class: 'muted' }, `· ${label}`)),
-    h('div', { class: 'toolbar-actions' },
-      tab.state === 'closed' && h('button', { class: 'btn', onclick: () => reconnect(tab) }, icon('refresh', 14), tr('Reconnect', 'Reconnecter')),
-      tab.state === 'reconnecting' && h('button', { class: 'btn', onclick: () => viewOf(tab)?.cancelReconnect() }, icon('close', 14), tr('Cancel the reconnection', 'Annuler la reconnexion')),
-      !tab.quick && tab.state === 'connected' && protocolOf(session.protocol)?.portForwarding && h('button', {
-        class: 'btn', title: tr('Port forwards through this session', 'Redirections de ports à travers cette session'),
-        onclick: () => { const id = tab.term?.connection; if (id) openTunnels(session, id, toast, () => reload()); },
-      }, icon('tunnel', 14), 'Tunnels'),
-      tab.state === 'connected' && session.protocol === 'ssh' && h('button', {
-        class: 'btn', title: tr('Create an SSH key and install it on this server (no more password)', 'Créer une clé SSH et l’installer sur ce serveur (plus de mot de passe)'),
-        onclick: () => openKeysFor(tab, session),
-      }, icon('lock', 14), tr('SSH key', 'Clé SSH')),
-      tab.screen && h('button', { class: 'btn', title: tr('Send Ctrl+Alt+Del to the remote screen', 'Envoyer Ctrl+Alt+Suppr à l’écran distant'), onclick: () => tab.screen?.sendCtrlAltDel() }, tr('Ctrl+Alt+Del', 'Ctrl+Alt+Suppr')),
-      tab.screen && session.protocol !== 'rdp' && h('button', { class: 'btn', title: tr('Copy the Windows clipboard to the remote screen', 'Copier le presse-papiers de Windows vers l’écran distant'), onclick: () => tab.screen?.sendClipboard() }, icon('copy', 14), tr('Clipboard', 'Presse-papiers')),
-      tab.screen && h('button', { class: 'btn', title: tr('Fit the image to the tab or show it at real size', 'Adapter l’image à l’onglet ou afficher en taille réelle'), onclick: () => { tab.screen?.toggleFit(); renderToolbar(); } }, tab.screen.fit ? tr('Real size', 'Taille réelle') : tr('Fit to window', 'Ajuster à la fenêtre')),
-      tab.term && tab.state === 'connected' && h('button', {
-        class: `btn${tab.recording ? ' rec' : ''}`, title: tab.recording ? `Enregistrement en cours : ${tab.recording}` : tr('Record this session (asciicast + text)', 'Enregistrer cette session (asciicast + texte)'),
-        onclick: () => (tab.recording ? stopRecording(tab) : startRecording(tab)),
-      }, h('span', { class: 'rec-dot' }), tab.recording ? tr('Stop recording', 'Arrêter l’enregistrement') : tr('Record', 'Enregistrer')),
-      tab.term && h('button', { class: 'btn', title: tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)'), onclick: () => openPalette(snippetContext()) }, icon('commands', 14), tr('Commands', 'Commandes')),
-      tab.term && h('button', { class: 'icon-btn', 'aria-label': tr('Search in the terminal', 'Rechercher dans le terminal'), title: tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)'), onclick: () => tab.term?.openSearch() }, icon('search')),
-      h('button', { class: `btn${isSplit() ? ' on' : ''}`, title: tr('Show several sessions side by side', 'Afficher plusieurs sessions côte à côte'), onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), tr('Split screen', 'Écran partagé')),
-      isSplit() && h('button', {
-        class: `btn${state.broadcast ? ' warn' : ''}`, 'aria-pressed': String(state.broadcast),
-        title: tr('Send keystrokes to all displayed sessions (Ctrl Shift B)', 'Envoyer la frappe à toutes les sessions affichées (Ctrl Maj B)'),
-        onclick: () => toggleBroadcast(),
-      }, icon('broadcast', 14), state.broadcast ? tr('Multi-input: ON', 'Saisie multiple : ACTIVE') : tr('Multi-input', 'Saisie multiple')),
-      tab.state === 'connected' && h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('power', 14), tr('Disconnect', 'Déconnecter')),
-      tab.state === 'connected' && session.protocol === 'ssh' && h('button', {
-        class: `btn${shownSide(tab) === 'containers' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'containers'),
-        title: tr('Server\'s Docker / Podman containers and Kubernetes pods', 'Conteneurs Docker / Podman et pods Kubernetes du serveur'),
-        onclick: () => toggleContainers(tab),
-      }, icon('box', 14), tr('Containers', 'Conteneurs'), !allows('containers') && h('span', { class: 'chip pro locked' }, 'PRO')),
-      tab.state === 'connected' && session.protocol === 'ssh' && h('button', {
-        class: `btn${shownSide(tab) === 'server' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'server'),
-        title: tr('Dashboard: CPU, memory, disks, processes, failed services', 'Tableau de bord : processeur, mémoire, disques, processus, services en échec'),
-        onclick: () => toggleServer(tab),
-      }, icon('chart', 14), tr('Server', 'Serveur'), !allows('serverDashboard') && h('span', { class: 'chip pro locked' }, 'PRO')),
-      !tab.quick && h('button', {
-        class: `btn${shownSide(tab) === 'notes' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'notes'),
-        title: state.noteIds.has(session.id) ? tr('Notes for this session (a note exists)', 'Notes de cette session (une note existe)') : tr('Notes for this session (Markdown)', 'Notes de cette session (Markdown)'),
-        onclick: () => toggleNotes(tab),
-      }, icon('edit', 14), state.noteIds.has(session.id) ? 'Notes •' : 'Notes'),
-      tab.files && !tab.filesView && h('button', {
-        class: `btn${shownSide(tab) === 'files' ? ' on' : ''}`, 'aria-pressed': String(shownSide(tab) === 'files'), title: tr('Show / hide the file browser', 'Afficher / masquer l\'explorateur de fichiers'),
-        onclick: () => showSide(tab, 'files'),
-      }, icon('files', 14), tr('Files', 'Fichiers')),
-      tab.quick
-        ? h('button', { class: 'btn primary', title: tr('Keep this connection in the session list', 'Garder cette connexion dans la liste des sessions'), onclick: () => tab.quick && saveQuick(tab.quick) }, icon('plus', 14), tr('Save as a session', 'Enregistrer comme session'))
-        : h('button', { class: 'btn', onclick: () => editSession(session) }, icon('edit', 14), tr('Edit', 'Modifier'))),
-  );
+      h('strong', { class: 'ellipsis' }, target || session.name),
+      session.folder && h('span', { class: 'muted tb-folder' }, `· ${session.folder}`),
+      typeof v.jump === 'string' && v.jump.trim() && h('span', { class: 'muted tb-folder', title: tr('Jump server', 'Serveur de rebond') }, `· via ${v.jump}`),
+      h('span', { class: 'muted tb-state' }, `· ${label}`)),
+    toolbarActions(items, panels, side));
+  fitToolbar();
+}
+
+/** Panneaux de la session (groupe de la barre et onglets du panneau ouvert). */
+function panelButtons(tab: Tab, session: Session): PanelButton[] {
+  const ssh = tab.state === 'connected' && session.protocol === 'ssh';
+  const hasNote = !tab.quick && state.noteIds.has(session.id);
+  return [
+    ...(tab.files && !tab.filesView ? [{ side: 'files' as const, icon: 'files', label: tr('Files', 'Fichiers'), title: tr('File browser (SFTP)', 'Explorateur de fichiers (SFTP)'), open: () => showSide(tab, 'files') }] : []),
+    ...(!tab.quick ? [{ side: 'notes' as const, icon: 'edit', label: 'Notes', title: hasNote ? tr('Notes for this session (a note exists)', 'Notes de cette session (une note existe)') : tr('Notes for this session (Markdown)', 'Notes de cette session (Markdown)'), open: () => toggleNotes(tab), dot: hasNote }] : []),
+    ...(ssh ? [{ side: 'server' as const, icon: 'chart', label: tr('Server', 'Serveur'), title: tr('Dashboard: CPU, memory, disks, processes, failed services', 'Tableau de bord : processeur, mémoire, disques, processus, services en échec'), open: () => toggleServer(tab), locked: !allows('serverDashboard') }] : []),
+    ...(ssh ? [{ side: 'containers' as const, icon: 'box', label: tr('Containers', 'Conteneurs'), title: tr('Docker / Podman containers and Kubernetes pods', 'Conteneurs Docker / Podman et pods Kubernetes'), open: () => toggleContainers(tab), locked: !allows('containers') }] : []),
+  ];
+}
+
+interface ToolbarItem {
+  id: string;
+  label: string;
+  icon?: string;
+  /** Élément placé avant le libellé à la place de l'icône (point rouge de l'enregistrement). */
+  lead?: Node;
+  title?: string;
+  action: (e: MouseEvent) => void;
+  cls?: string;
+  pressed?: boolean;
+  /** Icône seule, quelle que soit la place. */
+  iconOnly?: boolean;
+  /** Rang de repli : le plus petit perd son libellé (label), puis passe dans « ⋯ » (menu), en premier. */
+  fold?: { label?: number; menu?: number };
+}
+
+interface PanelButton {
+  side: Exclude<SidePanel, ''>;
+  icon: string;
+  label: string;
+  title: string;
+  open: () => void;
+  locked?: boolean;
+  dot?: boolean;
+}
+
+/** Bouton de la barre : icône, libellé qui peut disparaître, rangs de repli en attributs. */
+function toolbarButton(it: ToolbarItem): HTMLButtonElement {
+  const b = h('button', {
+    type: 'button', class: `btn tb-btn${it.cls ? ` ${it.cls}` : ''}${it.iconOnly ? ' icon-only' : ''}`, title: it.title ?? it.label, 'aria-label': it.label,
+    'aria-pressed': it.pressed === undefined ? null : String(it.pressed), onclick: it.action,
+  }, it.lead ?? (it.icon ? icon(it.icon, 14) : null), h('span', { class: 'tb-label' }, it.label)) as HTMLButtonElement;
+  b.dataset.label = it.label;
+  if (it.icon) b.dataset.icon = it.icon;
+  b.dataset.id = it.id;
+  if (it.iconOnly) b.dataset.iconOnly = '';
+  if (it.fold?.label !== undefined) b.dataset.foldLabel = String(it.fold.label);
+  if (it.fold?.menu !== undefined) b.dataset.foldMenu = String(it.fold.menu);
+  return b;
+}
+
+function toolbarActions(items: (ToolbarItem | '|' | 'panels')[], panels: PanelButton[], side: SidePanel): HTMLElement {
+  const out: HTMLElement[] = [];
+  for (const it of items) {
+    if (it === '|') { if (out.length && !out[out.length - 1].classList.contains('tb-sep')) out.push(h('span', { class: 'tb-sep', 'aria-hidden': 'true' })); continue; }
+    if (it === 'panels') {
+      if (panels.length) out.push(h('div', { class: 'tb-group', role: 'group', 'aria-label': tr('Session panels', 'Panneaux de la session') }, ...panels.map((p) => h('button', {
+        type: 'button', class: `${side === p.side ? 'on' : ''}${p.locked ? ' locked' : ''}`, 'aria-pressed': String(side === p.side),
+        'aria-label': p.label, title: p.locked ? `${p.title} · Pro` : p.title, onclick: p.open,
+      }, icon(p.icon, 16), p.dot && h('span', { class: 'note-dot' })))));
+      continue;
+    }
+    out.push(toolbarButton(it));
+  }
+  while (out.length && out[out.length - 1].classList.contains('tb-sep')) out.pop();
+  const more = h('button', {
+    type: 'button', class: 'btn tb-btn icon-only tb-more', hidden: true, 'aria-label': tr('More actions', 'Plus d’actions'), title: tr('More actions', 'Plus d’actions'),
+    onclick: (e: MouseEvent) => {
+      const folded = [...(e.currentTarget as HTMLElement).parentElement!.querySelectorAll<HTMLButtonElement>('.tb-btn.tb-folded')];
+      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      showMenu(r.left, r.bottom + 4, folded.map((b) => ({ label: b.dataset.label ?? '', icon: b.dataset.icon ?? 'more', action: () => b.click() })));
+    },
+  }, icon('more', 14), h('span', { class: 'tb-label' }, tr('More', 'Plus')));
+  // « ⋯ » juste avant Déconnecter (ou à la fin).
+  const last = out[out.length - 1];
+  if (last?.dataset.id === 'disconnect') out.splice(out.length - 1, 0, more); else out.push(more);
+  return h('div', { class: 'toolbar-actions' }, ...out);
+}
+
+/**
+ * Garde la barre sur une ligne : selon la place, l'identité se raccourcit, des libellés
+ * disparaissent (icône et infobulle), puis les actions rares passent dans « ⋯ ».
+ */
+function fitToolbar() {
+  if (toolbar.hidden) return;
+  const actions = toolbar.querySelector<HTMLElement>('.toolbar-actions');
+  const info = toolbar.querySelector<HTMLElement>('.toolbar-info');
+  if (!actions || !info) return;
+  const width = toolbar.clientWidth;
+  toolbar.dataset.size = width >= 1000 ? 'l' : width >= 760 ? 'm' : 's';
+  const buttons = [...actions.querySelectorAll<HTMLButtonElement>('.tb-btn:not(.tb-more)')];
+  const more = actions.querySelector<HTMLElement>('.tb-more');
+  for (const b of buttons) {
+    b.hidden = false;
+    b.classList.remove('tb-folded');
+    b.classList.toggle('icon-only', b.dataset.iconOnly !== undefined);
+  }
+  if (more) more.hidden = true;
+  const keep = width >= 1000 ? 260 : width >= 760 ? 190 : 130;
+  const style = getComputedStyle(toolbar);
+  // Largeur naturelle de l'identité : ses morceaux visibles, avant tout rétrécissement.
+  const parts = [...info.children].filter((c) => (c as HTMLElement).offsetParent !== null) as HTMLElement[];
+  const natural = parts.reduce((n, c) => n + c.scrollWidth, 0) + 8 * Math.max(0, parts.length - 1);
+  const room = () => width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - Math.min(natural, keep) - 12;
+  tidySeparators(actions);
+  if (actions.scrollWidth <= room()) return;
+  const steps: { b: HTMLButtonElement; menu: boolean; rank: number }[] = [];
+  for (const b of buttons) {
+    if (b.dataset.foldLabel) steps.push({ b, menu: false, rank: Number(b.dataset.foldLabel) });
+    if (b.dataset.foldMenu) steps.push({ b, menu: true, rank: Number(b.dataset.foldMenu) });
+  }
+  steps.sort((a, b) => a.rank - b.rank);
+  for (const step of steps) {
+    if (step.menu) {
+      step.b.hidden = true;
+      step.b.classList.add('tb-folded');
+      if (more) more.hidden = false;
+    } else step.b.classList.add('icon-only');
+    tidySeparators(actions);
+    if (actions.scrollWidth <= room()) return;
+  }
+}
+
+/** Pas de séparateur en tête, en fin, ni deux de suite (groupe entièrement replié). */
+function tidySeparators(actions: HTMLElement) {
+  let previous: HTMLElement | null = null;
+  for (const el of [...actions.children] as HTMLElement[]) {
+    if (el.classList.contains('tb-sep')) {
+      el.hidden = !previous || previous.classList.contains('tb-sep');
+      if (!el.hidden) previous = el;
+    } else if (!el.hidden) previous = el;
+  }
+  if (previous?.classList.contains('tb-sep')) previous.hidden = true;
 }
 
 type SidePanel = 'files' | 'notes' | 'server' | 'containers' | '';
@@ -731,6 +856,26 @@ function shownSide(tab: Tab | undefined): SidePanel {
   if (state.side === 'server' && tab.server) return 'server';
   if (state.side === 'containers' && tab.containers) return 'containers';
   return tab.files ? 'files' : '';
+}
+
+// Panneau de droite : onglets en tête (Fichiers, Notes, Serveur, Conteneurs), contenu dessous.
+const sideTabs = h('div', { class: 'side-tabs', role: 'tablist', 'aria-label': tr('Session panels', 'Panneaux de la session') });
+const sideBody = h('div', { class: 'side-body' });
+details.replaceChildren(sideTabs, sideBody);
+
+function renderSideTabs(tab: Tab, side: SidePanel) {
+  const session = sessionOf(tab.sessionId) ?? (tab.quick && quickSession(tab.quick));
+  const list = session ? panelButtons(tab, session) : [];
+  sideTabs.replaceChildren(
+    ...list.map((p) => h('button', {
+      type: 'button', role: 'tab', class: `side-tab${p.side === side ? ' on' : ''}`, 'aria-selected': String(p.side === side), title: p.title,
+      onclick: () => { if (p.side !== shownSide(tab)) p.open(); },
+    }, p.label)),
+    h('span', { class: 'grow' }),
+    h('button', {
+      type: 'button', class: 'icon-btn sm', 'aria-label': tr('Close the panel', 'Fermer le panneau'), title: tr('Close the panel', 'Fermer le panneau'),
+      onclick: () => { state.side = ''; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
+    }, icon('close', 14)));
 }
 
 /** Panneau de droite de l'onglet actif : fichiers, notes ou tableau de bord du serveur. */
@@ -746,8 +891,21 @@ function renderSidePanel() {
     return;
   }
   details.hidden = false;
-  if (details.firstChild !== panel) details.replaceChildren(panel);
+  renderSideTabs(tab!, side);
+  if (sideBody.firstChild !== panel) sideBody.replaceChildren(panel);
 }
+
+// Fenêtre étroite : le panneau passe par-dessus le terminal au lieu de le rétrécir.
+// La barre d'outils se replie à chaque changement de largeur.
+const contentArea = document.querySelector<HTMLElement>('.content')!;
+new ResizeObserver(() => {
+  const narrow = contentArea.clientWidth < 860;
+  if (narrow !== contentArea.classList.contains('narrow')) {
+    contentArea.classList.toggle('narrow', narrow);
+    requestAnimationFrame(() => { const t = activeTab(); if (t) viewOf(t)?.refit(); });
+  }
+}).observe(contentArea);
+new ResizeObserver(() => fitToolbar()).observe(toolbar);
 
 /** Affiche un panneau, ou le masque s'il est déjà affiché. */
 function showSide(tab: Tab, side: Exclude<SidePanel, ''>) {
@@ -1389,17 +1547,20 @@ function renderLocalToolbar(tab: Tab, shell: ShellSpec) {
       h('strong', {}, shell.name),
       h('span', { class: 'muted ellipsis' }, tr(`· ${shell.cwd || 'home folder'}`, `· ${shell.cwd || 'dossier personnel'}`)),
       h('span', { class: 'muted' }, `· ${label}`)),
-    h('div', { class: 'toolbar-actions' },
-      tab.state === 'closed' && h('button', { class: 'btn', onclick: () => tab.term?.reconnectNow() }, icon('refresh', 14), tr('Restart', 'Relancer')),
-      tab.state === 'connected' && h('button', {
-        class: `btn${tab.recording ? ' rec' : ''}`, onclick: () => (tab.recording ? stopRecording(tab) : startRecording(tab)),
-      }, h('span', { class: 'rec-dot' }), tab.recording ? tr('Stop recording', 'Arrêter l’enregistrement') : tr('Record', 'Enregistrer')),
-      h('button', { class: 'btn', title: tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)'), onclick: () => openPalette(snippetContext()) }, icon('commands', 14), tr('Commands', 'Commandes')),
-      h('button', { class: 'icon-btn', 'aria-label': tr('Search in the terminal', 'Rechercher dans le terminal'), title: tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)'), onclick: () => tab.term?.openSearch() }, icon('search')),
-      h('button', { class: `btn${isSplit() ? ' on' : ''}`, onclick: (e: MouseEvent) => splitMenu(e) }, icon('split', 14), tr('Split screen', 'Écran partagé')),
-      isSplit() && h('button', { class: `btn${state.broadcast ? ' warn' : ''}`, onclick: () => toggleBroadcast() }, icon('broadcast', 14), state.broadcast ? tr('Multi-input: ON', 'Saisie multiple : ACTIVE') : tr('Multi-input', 'Saisie multiple')),
-      h('button', { class: 'btn', onclick: () => closeTab(tab.id) }, icon('close', 14), tr('Close', 'Fermer'))),
+    toolbarActions([
+      ...(tab.state === 'closed' ? [{ id: 'restart', icon: 'refresh', label: tr('Restart', 'Relancer'), action: () => tab.term?.reconnectNow(), cls: 'primary', fold: { label: 20 } }] : []),
+      ...(tab.state === 'connected' ? [{
+        id: 'record', lead: h('span', { class: 'rec-dot' }), label: tab.recording ? tr('Stop recording', 'Arrêter l’enregistrement') : tr('Record', 'Enregistrer'),
+        action: () => (tab.recording ? stopRecording(tab) : startRecording(tab)), cls: tab.recording ? 'rec' : '', fold: { label: 5 },
+      }] : []),
+      { id: 'commands', icon: 'commands', label: tr('Commands', 'Commandes'), title: tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)'), action: () => openPalette(snippetContext()), fold: { label: 9 } },
+      { id: 'search', icon: 'search', label: tr('Search in the terminal', 'Rechercher dans le terminal'), title: tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)'), action: () => tab.term?.openSearch(), iconOnly: true },
+      { id: 'split', icon: 'split', label: tr('Split screen', 'Écran partagé'), action: (e: MouseEvent) => splitMenu(e), cls: isSplit() ? 'on' : '', fold: { label: 4, menu: 10 } },
+      ...(isSplit() ? [{ id: 'broadcast', icon: 'broadcast', label: state.broadcast ? tr('Multi-input: ON', 'Saisie multiple : ACTIVE') : tr('Multi-input', 'Saisie multiple'), action: () => toggleBroadcast(), cls: state.broadcast ? 'warn' : '', fold: { label: 6 } }] : []),
+      { id: 'disconnect', icon: 'close', label: tr('Close', 'Fermer'), action: () => closeTab(tab.id), fold: { label: 11 } },
+    ], [], '')
   );
+  fitToolbar();
 }
 
 $('manage-shells').append(icon('settings', 14));

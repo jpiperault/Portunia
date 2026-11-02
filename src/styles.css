@@ -93,11 +93,11 @@ button { cursor: pointer; }
 .rail-sep { width: 24px; height: 1px; flex: none; margin: 6px 0; background: var(--line-strong); }
 .app.folded .sidebar { display: none; }
 .sidebar { width: 280px; flex: none; display: flex; flex-direction: column; padding: 12px 10px; border-right: 1px solid var(--line); min-height: 0; }
-.pane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-.pane-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 2px 0 6px; }
-.pane-title { font-weight: 600; font-size: 14px; color: var(--strong); }
-.pane-title .count { color: var(--muted); }
-.pane .gates { flex: 1; max-height: none; border-top: 0; padding-top: 0; }
+.side-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.side-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 2px 2px 0 6px; }
+.side-pane-title { font-weight: 600; font-size: 14px; color: var(--strong); }
+.side-pane-title .count { color: var(--muted); }
+.side-pane .gates { flex: 1; max-height: none; border-top: 0; padding-top: 0; }
 .filter-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .filter-chips:empty { display: none; }
 .fchip { height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid var(--line-soft); background: transparent; color: var(--text-2); font-size: 12px; }
@@ -169,10 +169,32 @@ button { cursor: pointer; }
 .tab.active { background: var(--work); color: var(--strong); }
 .tab-main { display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 8px 0 14px; background: transparent; border: 0; font-size: 13px; color: inherit; min-width: 0; }
 .tabs > .icon-btn { margin-bottom: 2px; }
-.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 16px; border-bottom: 1px solid var(--line); flex: none; }
-.toolbar-info { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-width: 0; }
+/* Barre de la session : toujours sur une ligne (voir fitToolbar). */
+.toolbar { display: flex; flex-wrap: nowrap; align-items: center; gap: 12px; min-height: 44px; padding: 6px 10px 6px 16px; border-bottom: 1px solid var(--line); flex: none; box-sizing: border-box; }
+.toolbar-info { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-width: 0; overflow: hidden; white-space: nowrap; }
+.toolbar-info > * { flex: none; }
+.toolbar-info strong { flex: 0 1 auto; min-width: 0; }
+.toolbar[data-size='m'] .tb-state, .toolbar[data-size='s'] .tb-state, .toolbar[data-size='s'] .tb-folder { display: none; }
+.tb-btn.icon-only { padding: 0 8px; }
+.tb-btn.icon-only .tb-label { display: none; }
+.tb-sep { width: 1px; height: 20px; flex: none; background: var(--line); }
+.tb-group { display: flex; flex: none; height: 32px; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.tb-group button { position: relative; width: 34px; display: grid; place-items: center; padding: 0; background: transparent; border: 0; color: var(--text-2); }
+.tb-group button + button { border-left: 1px solid var(--line); }
+.tb-group button:hover { background: var(--hover); }
+.tb-group button.on { background: var(--accent-soft); color: var(--accent); }
+.tb-group button.locked { opacity: .55; }
+.tb-group .note-dot { position: absolute; top: 5px; right: 6px; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
+.side-tabs { display: flex; align-items: flex-end; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line); flex: none; }
+.side-tab { height: 32px; padding: 0 10px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.side-tab:hover { color: var(--text); }
+.side-tab.on { color: var(--strong); border-bottom-color: var(--accent); font-weight: 600; }
+.side-tabs .icon-btn { margin-bottom: 3px; }
+.side-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.content { position: relative; }
+.content.narrow .details { position: absolute; top: 0; right: 0; bottom: 0; z-index: 5; max-width: calc(100% - 40px); background: var(--work); box-shadow: -8px 0 24px var(--shadow); }
 .toolbar-info strong { color: var(--text); font-weight: 500; }
-.toolbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.toolbar-actions { margin-left: auto; display: flex; flex: none; flex-wrap: nowrap; align-items: center; gap: 6px; }
 .toolbar-actions > * { flex: none; white-space: nowrap; }
 .content { flex: 1; display: flex; min-height: 0; }
 .views { flex: 1; min-width: 0; position: relative; display: flex; }
