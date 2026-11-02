@@ -812,15 +812,15 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
             `A cloudflared installed beside the Gate serves the tunnel (${g.externe_relie ? 'connected' : 'not connected'}). To manage it from here, paste the same token, then remove the old one (sudo cloudflared service uninstall).`,
             `Un cloudflared installé à côté de la Gate sert le tunnel (${g.externe_relie ? 'relié' : 'non relié'}). Pour le gérer d'ici, collez le même jeton, puis retirez l'ancien (sudo cloudflared service uninstall).`)),
           h('ol', { class: 'tunnel-steps' },
-            h('li', {}, t('In Cloudflare: Networking › Tunnels › Create a tunnel, give it a name, then copy the installation command shown (any system): it holds the token. No need to run it.', 'Dans Cloudflare : Networking › Tunnels › Create a tunnel, donnez-lui un nom, puis copiez la commande d\'installation affichée (n\'importe quel système) : elle contient le jeton. Inutile de l\'exécuter.')),
+            h('li', {}, t('Create the tunnel in Cloudflare: Networking › Tunnels › Create Tunnel, a name (e.g. portunia-gate), then copy the installation command shown, for any system. It holds the token; do not run it.', 'Créez le tunnel dans Cloudflare : Networking › Tunnels › Create Tunnel, un nom (ex. portunia-gate), puis copiez la commande d\'installation affichée, pour n\'importe quel système. Elle contient le jeton ; ne l\'exécutez pas.')),
             h('li', {}, g.jeton_defini
               ? h('div', { class: 'tunnel-token' }, h('span', {}, t('Tunnel', 'Tunnel'), ' ', h('code', {}, g.tunnel_id ?? '?')),
                 small(t('Replace', 'Remplacer'), () => { tokenRow.hidden = false; tunnelToken.focus(); }),
                 small(t('Remove', 'Effacer'), () => { if (confirm(t('Remove the token? The Gate stops the tunnel and the portal is no longer reachable through Cloudflare.', 'Effacer le jeton ? La Gate arrête le tunnel et le portail n\'est plus joignable par Cloudflare.'))) saveToken(''); }, true))
-              : h('span', {}, t('Paste it here:', 'Collez-la ici :')),
+              : h('span', {}, t('Paste it here and save: the Gate starts the tunnel, which turns Healthy in Cloudflare.', 'Collez-la ici et enregistrez : la Gate démarre le tunnel, qui passe à Healthy dans Cloudflare.')),
               tokenRow),
-            h('li', {}, t('Once the tunnel shows Healthy (Continue): Routes tab › Add route › Published application, your subdomain and domain, then Service URL:', 'Une fois le tunnel « Healthy » (Continue) : onglet Routes › Add route › Published application, votre sous-domaine et votre domaine, puis Service URL :'), copyBox(g.service)),
-            h('li', {}, t('Fill in the public address below, save, then test:', 'Renseignez l\'adresse publique ci-dessous, enregistrez, puis testez :'), ' ',
+            h('li', {}, t('In the tunnel: Routes tab › Add route › Published application. Subdomain and Domain (the Full hostname is your public address), Path empty, Service URL below, then Add route. Never add ssh:// or rdp:// routes: they would bypass the Gate.', 'Dans le tunnel : onglet Routes › Add route › Published application. Subdomain et Domain (le Full hostname est votre adresse publique), Path vide, Service URL ci-dessous, puis Add route. Jamais de route ssh:// ou rdp:// : elle contournerait la Gate.'), copyBox(g.service)),
+            h('li', {}, t('Public address below: https:// followed by the Full hostname. Save, then test:', 'Adresse publique ci-dessous : https:// suivi du Full hostname. Enregistrez, puis testez :'), ' ',
               small(t('Test the public address', 'Tester l\'adresse publique'), async () => {
                 checkResult.className = 'muted small';
                 checkResult.textContent = t('Testing…', 'Essai…');
