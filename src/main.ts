@@ -64,6 +64,8 @@ interface Tab {
   recording?: string;
   /** Notes de la session (panneau de droite). */
   notes?: NotesPanel;
+  /** Panneau de droite ouvert dans cet onglet ; aucun à l'ouverture, l'utilisateur choisit. */
+  side?: SidePanel;
   /** Toutes les sessions en tableau (onglet « library »). */
   library?: SessionLibrary;
   /** Lecteur d'enregistrement (onglet « replay »). */
@@ -92,7 +94,6 @@ const state = {
   filter: '',
   folders: [] as string[],
   /** Panneau de droite affiché (vide = masqué). */
-  side: 'files' as SidePanel,
   /** Sessions qui ont une note. */
   noteIds: new Set<string>(),
   /** Onglets affichés côte à côte (2 à 4), vide = un seul onglet à l'écran. */
@@ -848,14 +849,14 @@ function tidySeparators(actions: HTMLElement) {
 
 type SidePanel = 'files' | 'notes' | 'server' | 'containers' | '';
 
-/** Panneau réellement affiché pour cet onglet (celui demandé s'il existe, sinon les fichiers). */
+/** Panneau affiché dans cet onglet : celui que l'utilisateur a ouvert, s'il existe encore. */
 function shownSide(tab: Tab | undefined): SidePanel {
   // Onglet « fichiers seulement » : l'explorateur est déjà au centre.
-  if (!tab || !state.side || tab.filesView) return '';
-  if (state.side === 'notes' && tab.notes) return 'notes';
-  if (state.side === 'server' && tab.server) return 'server';
-  if (state.side === 'containers' && tab.containers) return 'containers';
-  return tab.files ? 'files' : '';
+  if (!tab || !tab.side || tab.filesView) return '';
+  if (tab.side === 'notes' && tab.notes) return 'notes';
+  if (tab.side === 'server' && tab.server) return 'server';
+  if (tab.side === 'containers' && tab.containers) return 'containers';
+  return tab.side === 'files' && tab.files ? 'files' : '';
 }
 
 // Panneau de droite : onglets en tête (Fichiers, Notes, Serveur, Conteneurs), contenu dessous.
@@ -874,7 +875,7 @@ function renderSideTabs(tab: Tab, side: SidePanel) {
     h('span', { class: 'grow' }),
     h('button', {
       type: 'button', class: 'icon-btn sm', 'aria-label': tr('Close the panel', 'Fermer le panneau'), title: tr('Close the panel', 'Fermer le panneau'),
-      onclick: () => { state.side = ''; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
+      onclick: () => { tab.side = ''; renderAll(); requestAnimationFrame(() => viewOf(tab)?.refit()); },
     }, icon('close', 14)));
 }
 
@@ -909,7 +910,7 @@ new ResizeObserver(() => fitToolbar()).observe(toolbar);
 
 /** Affiche un panneau, ou le masque s'il est déjà affiché. */
 function showSide(tab: Tab, side: Exclude<SidePanel, ''>) {
-  state.side = shownSide(tab) === side ? '' : side;
+  tab.side = shownSide(tab) === side ? '' : side;
   renderAll();
   requestAnimationFrame(() => viewOf(tab)?.refit());
 }
@@ -946,7 +947,7 @@ function toggleNotes(tab: Tab) {
       renderTree();
     });
   }
-  if (created) state.side = '';
+  if (created) tab.side = '';
   showSide(tab, 'notes');
 }
 
