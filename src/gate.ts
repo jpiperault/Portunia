@@ -845,9 +845,40 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           try { const q = await call<any>('GET', '/admin/portail'); if (q.tunnel_gere) drawTunnelState(q.tunnel_gere); } catch { /* prochain essai */ }
         }, 4000);
       }
+      // Écoute HTTPS pilotée depuis l'administration (Gate 0.20 et suivantes).
+      const https = p.ecoute?.https;
+      const httpsAddress = input({ id: 'p-https', value: p.ecoute?.proxy ?? '', placeholder: '0.0.0.0:8446' });
+      const applyHttps = async (value: string) => {
+        try {
+          await call('PUT', '/admin/portail', { https: value });
+          host.toast(value ? t('HTTPS listening applied within seconds', 'Écoute HTTPS appliquée sous quelques secondes') : t('HTTPS listening closed', 'Écoute HTTPS fermée'));
+          window.setTimeout(reload, 4000);
+        } catch (e) { fail(e); }
+      };
+      const httpsBody = () => {
+        const state = https.ouverte
+          ? h('b', { class: 'chip ok' }, `${t('listening on', 'en écoute sur')} ${https.ouverte}`)
+          : https.erreur ? h('b', { class: 'chip err' }, t('error', 'erreur'))
+          : p.ecoute.proxy ? h('b', { class: 'chip warn' }, t('starting', 'démarrage')) : h('b', { class: 'chip off' }, t('closed', 'fermée'));
+        const port = (https.ouverte ?? p.ecoute.proxy ?? '0.0.0.0:8446').split(':').pop();
+        return h('div', { class: 'admin-section' }, ...[
+          h('div', {}, h('b', {}, t('HTTPS listening', 'Écoute HTTPS')), ' ', state),
+          https.erreur && h('p', { class: 'gate-warn' }, https.erreur),
+          https.fixe
+            ? h('p', { class: 'muted small' }, t(
+              `Set by PORTUNIA_GATE_PORTAL_TLS_LISTEN in the configuration file (${p.ecoute.proxy}): change it there, or remove it to manage it from here.`,
+              `Fixée par PORTUNIA_GATE_PORTAL_TLS_LISTEN dans le fichier de configuration (${p.ecoute.proxy}) : changez-la là, ou retirez-la pour la gérer d'ici.`))
+            : h('div', { class: 'tunnel-token' }, httpsAddress,
+              h('button', { class: 'btn primary', onclick: () => applyHttps(httpsAddress.value.trim() || '8446') }, p.ecoute.proxy ? t('Apply', 'Appliquer') : t('Open', 'Ouvrir')),
+              p.ecoute.proxy && small(t('Close', 'Fermer'), () => { if (confirm(t('Close HTTPS listening? Browsers can no longer reach the portal in this mode.', 'Fermer l\'écoute HTTPS ? Les navigateurs ne joignent plus le portail dans ce mode.'))) applyHttps(''); }, true)),
+          h('p', { class: 'muted small' }, t(
+            `A port, or address:port. Open port ${port} on the firewall in front of the Gate; from the Internet, redirect 443 to it on the box or the firewall. Hardened firewall: 8446 is already allowed. Certificate: the Gate's (self-signed unless yours is set).`,
+            `Un port, ou adresse:port. Ouvrez le port ${port} sur le pare-feu devant la Gate ; depuis Internet, redirigez-y le 443 sur la box ou le pare-feu. Pare-feu durci : le 8446 est déjà autorisé. Certificat : celui de la Gate (auto-signé sauf le vôtre).`)),
+        ].filter(Boolean) as HTMLElement[]);
+      };
       const drawModes = () => {
         const current = MODES.find((m) => m.id === mode)!;
-        const needsListener = mode !== 'cloudflare' && mode !== 'relais' && !p.ecoute.proxy;
+        const needsListener = mode !== 'cloudflare' && mode !== 'relais' && !p.ecoute.proxy && !https;
         modeBody.replaceChildren(...[
           h('div', { class: 'expo-modes' }, ...MODES.map((m) => h('button', {
             type: 'button', class: `expo-mode${m.id === mode ? ' on' : ''}`, 'aria-pressed': String(m.id === mode),
@@ -862,6 +893,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           mode === 'direct' && h('p', { class: 'gate-warn' }, t('The Gate is then directly exposed and it holds the vault: limit the allowed networks, or prefer a proxy.', 'La Gate est alors exposée directement et elle détient le coffre : limitez les réseaux autorisés, ou préférez un proxy.')),
           mode === 'relais' && relayBody(),
           mode === 'cloudflare' && managed && cloudflareBody(),
+          (mode === 'interne' || mode === 'direct' || mode === 'proxy') && https && httpsBody(),
           needsListener && h('p', { class: 'gate-warn' }, t(
             'HTTPS listening is off on this Gate. Set PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 in /etc/portunia-gate/portunia-gate.env, restart the Gate and open the port.',
             'L\'écoute HTTPS est coupée sur cette Gate. Réglez PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 dans /etc/portunia-gate/portunia-gate.env, redémarrez la Gate et ouvrez le port.')),
