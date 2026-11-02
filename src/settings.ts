@@ -49,6 +49,8 @@ export interface Settings {
   disabledExtensions: string[];
   /** Langue de l'interface : celle de Windows, anglais ou français (appliquée au prochain démarrage). */
   language: 'auto' | 'en' | 'fr';
+  /** Sessions épinglées en tête de la barre latérale. */
+  favorites: string[];
 }
 
 export const DEFAULTS: Settings = {
@@ -74,6 +76,7 @@ export const DEFAULTS: Settings = {
   highlight: { enabled: true, rules: DEFAULT_RULES },
   disabledExtensions: [],
   language: 'auto',
+  favorites: [],
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];

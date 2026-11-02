@@ -50,12 +50,12 @@ if (!FR) {
       else el.setAttribute(k, v);
     }
   };
-  set('.search .sr-only', { text: 'Search for a session' });
+  set('.search .sr-only', { text: 'Filter the sessions' });
   set('#search', {
-    placeholder: 'Search, or ssh user@host…',
-    title: 'Search for a session (Ctrl Shift K). Enter on « user@host », « rdp host »…: quick connect. Palette: Ctrl Shift O',
+    placeholder: 'Filter, or ssh user@host…',
+    title: 'Filter the sessions (Ctrl Shift K); ↓ to browse, Enter opens the first one. « user@host », « rdp host »…: quick connect. Palette: Ctrl Shift O',
   });
-  set('.sidebar-head:first-of-type .label', { text: 'This PC' });
+  set('.rail', { 'aria-label': 'Activities' });
   set('#manage-shells', { 'aria-label': 'Manage local shells', title: 'Manage local shells' });
   set('#quick-connect', { 'aria-label': 'Quick connect', title: 'Quick connect: address, login and password (Ctrl Shift Q)' });
   set('#new-folder', { 'aria-label': 'New folder', title: 'New folder' });

@@ -7,38 +7,51 @@
 </head>
 <body>
   <div class="app">
+    <nav class="rail" aria-label="Activités">
+      <button id="rail-sessions" class="rail-btn" type="button"></button>
+      <button id="rail-gates" class="rail-btn" type="button" hidden></button>
+      <button id="rail-pc" class="rail-btn" type="button"></button>
+      <span class="rail-sep" aria-hidden="true"></span>
+      <button id="open-snippets" class="rail-btn" type="button"></button>
+      <button id="open-credentials" class="rail-btn" type="button"></button>
+      <button id="open-recordings" class="rail-btn" type="button"></button>
+      <button id="open-assist" class="rail-btn" type="button" hidden></button>
+      <button id="open-nettools" class="rail-btn" type="button"></button>
+      <button id="open-import" class="rail-btn" type="button"></button>
+      <span class="grow"></span>
+      <button id="open-extensions" class="rail-btn" type="button"></button>
+      <button id="open-settings" class="rail-btn" type="button"></button>
+    </nav>
     <nav class="sidebar" aria-label="Sessions">
-      <label class="search">
-        <span class="sr-only">Rechercher une session</span>
-        <input id="search" type="search" placeholder="Rechercher, ou ssh user@hôte…" title="Rechercher une session (Ctrl Maj K). Entrée sur « user@hôte », « rdp hôte »… : connexion rapide. Palette : Ctrl Maj O" autocomplete="off">
-      </label>
-      <div class="sidebar-head">
-        <span class="label">Ce PC</span>
-        <div class="head-actions">
-          <button id="manage-shells" class="icon-btn" aria-label="Gérer les shells locaux" title="Gérer les shells locaux"></button>
+      <section id="pane-sessions" class="pane">
+        <div class="pane-head">
+          <span class="pane-title"><span id="title-sessions">Sessions</span> <span id="session-count" class="count"></span></span>
+          <div class="head-actions">
+            <button id="quick-connect" class="icon-btn" aria-label="Connexion rapide" title="Connexion rapide : adresse, identifiant et mot de passe (Ctrl Maj Q)"></button>
+            <button id="new-folder" class="icon-btn" aria-label="Nouveau dossier" title="Nouveau dossier"></button>
+            <button id="new-session" class="icon-btn" aria-label="Nouvelle session" title="Nouvelle session (Ctrl Maj N)"></button>
+          </div>
         </div>
-      </div>
-      <div id="local-shells" class="local-shells"></div>
-      <div class="sidebar-head">
-        <span class="label">Sessions</span>
-        <div class="head-actions">
-          <button id="quick-connect" class="icon-btn" aria-label="Connexion rapide" title="Connexion rapide : adresse, identifiant et mot de passe (Ctrl Maj Q)"></button>
-          <button id="new-folder" class="icon-btn" aria-label="Nouveau dossier" title="Nouveau dossier"></button>
-          <button id="new-session" class="icon-btn" aria-label="Nouvelle session" title="Nouvelle session (Ctrl Maj N)"></button>
+        <label class="search">
+          <span class="sr-only">Filtrer les sessions</span>
+          <input id="search" type="search" placeholder="Filtrer, ou ssh user@hôte…" title="Filtrer les sessions (Ctrl Maj K) ; ↓ pour parcourir, Entrée ouvre la première. « user@hôte », « rdp hôte »… : connexion rapide. Palette : Ctrl Maj O" autocomplete="off">
+        </label>
+        <div id="session-chips" class="filter-chips"></div>
+        <div id="tree" class="tree"></div>
+        <button id="open-library" class="library-link" type="button">Toutes les sessions en tableau</button>
+      </section>
+      <section id="pane-gates" class="pane" hidden>
+        <div id="gates" class="gates" hidden></div>
+      </section>
+      <section id="pane-pc" class="pane" hidden>
+        <div class="pane-head">
+          <span id="title-pc" class="pane-title">Ce PC</span>
+          <div class="head-actions">
+            <button id="manage-shells" class="icon-btn" aria-label="Gérer les shells locaux" title="Gérer les shells locaux"></button>
+          </div>
         </div>
-      </div>
-      <div id="tree" class="tree"></div>
-      <div id="gates" class="gates" hidden></div>
-      <div class="sidebar-foot">
-        <button id="open-snippets" class="tree-item"></button>
-        <button id="open-credentials" class="tree-item"></button>
-        <button id="open-recordings" class="tree-item"></button>
-        <button id="open-assist" class="tree-item" hidden></button>
-        <button id="open-nettools" class="tree-item"></button>
-        <button id="open-import" class="tree-item"></button>
-        <button id="open-extensions" class="tree-item"></button>
-        <button id="open-settings" class="tree-item"></button>
-      </div>
+        <div id="local-shells" class="local-shells"></div>
+      </section>
     </nav>
     <main class="work">
       <div id="tabs" class="tabs" role="tablist" aria-label="Sessions ouvertes"></div>

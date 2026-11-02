@@ -22,6 +22,11 @@ export interface TreeActions {
   activeSessionId(): string | undefined;
   /** La session a une note. */
   hasNote(sessionId: string): boolean;
+  /** Session épinglée en tête de la liste. */
+  isPinned(sessionId: string): boolean;
+  togglePin(s: Session): void;
+  /** Adresse affichée sous le nom dans les résultats (user@hôte, URL…). */
+  target(s: Session): string;
   /** Outils réseau sur l'hôte de la session. */
   netTools(s: Session): void;
   /** Wake-on-LAN (adresse MAC de la session). */
@@ -40,6 +45,25 @@ export interface TreeActions {
   moveSessions(ids: string[], folder: string): void;
   /** Déplace un dossier sous `parent` ('' = racine). */
   moveFolder(path: string, parent: string): void;
+}
+
+/** Ce qui entoure l'arbre : sections du haut, ou résultats à plat. */
+export interface TreeView {
+  /** Filtre tapé ou puce active : liste à plat au lieu de l'arbre. */
+  narrowed: boolean;
+  pinned: Session[];
+  recent: { session: Session; at: number }[];
+  /** Ligne ajoutée sous les résultats (serveurs des Gates). */
+  footer?: HTMLElement | false;
+}
+
+interface RowOptions {
+  /** Ligne hors de l'arbre : sans retrait. */
+  flat?: boolean;
+  /** Adresse et dossier sous le nom. */
+  sub?: boolean;
+  /** Dernière ouverture. */
+  when?: string;
 }
 
 interface FolderNode {
@@ -66,6 +90,16 @@ export class SessionTree {
     this.collapsed = new Set(saved);
     // La zone vide de l'arbre = racine (déposer ici sort une session de son dossier).
     root.dataset.drop = '';
+    // ↑ ↓ d'une ligne à l'autre ; ↑ sur la première remonte au champ de filtre.
+    root.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      const items = [...root.querySelectorAll<HTMLElement>('.tree-item')];
+      const i = items.indexOf(document.activeElement as HTMLElement);
+      if (i < 0) return;
+      e.preventDefault();
+      if (e.key === 'ArrowUp' && i === 0) root.dispatchEvent(new CustomEvent('tree-top'));
+      else items[Math.max(0, Math.min(items.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
+    });
     root.addEventListener('contextmenu', (e) => {
       if (e.target !== root) return;
       e.preventDefault();
@@ -76,17 +110,49 @@ export class SessionTree {
     });
   }
 
-  render(folders: string[], sessions: Session[], filter: string) {
+  /** Première ligne de la liste (↓ depuis le champ de filtre). */
+  focusFirst() {
+    this.root.querySelector<HTMLElement>('.tree-item')?.focus();
+  }
+
+  /** Première session affichée (Entrée dans le champ de filtre). */
+  first(): string | undefined {
+    return this.root.querySelector<HTMLElement>('.tree-item.session')?.dataset.id;
+  }
+
+  render(folders: string[], sessions: Session[], filter: string, view: TreeView = { narrowed: false, pinned: [], recent: [] }) {
     const q = filter.trim().toLowerCase();
+    if (view.narrowed || q) {
+      this.renderResults(sessions.filter((s) => matches(s, q)), q, view.footer);
+      return;
+    }
     if (!sessions.length && !folders.length) {
       this.root.replaceChildren(h('div', { class: 'empty-tree' },
         h('p', {}, t('No saved session.', 'Aucune session enregistrée.')),
         h('button', { class: 'btn primary', onclick: () => this.actions.newSession('') }, t('Create a session', 'Créer une session'))));
       return;
     }
-    const tree = build(folders, sessions.filter((s) => matches(s, q)), q);
-    const rows = this.renderChildren(tree, 0, q !== '');
-    this.root.replaceChildren(...(rows.length ? rows : [h('p', { class: 'empty-tree muted' }, t('No result.', 'Aucun résultat.'))]));
+    const rows: HTMLElement[] = [];
+    if (view.pinned.length) rows.push(section(t('Pinned', 'Épinglées')), ...view.pinned.map((s) => this.renderSession(s, 0, { flat: true })));
+    if (view.recent.length) rows.push(section(t('Recent', 'Récentes')), ...view.recent.map(({ session, at }) => this.renderSession(session, 0, { flat: true, when: ago(at) })));
+    if (rows.length) rows.push(section(t('All', 'Toutes')));
+    rows.push(...this.renderChildren(build(folders, sessions, ''), 0, false));
+    this.root.replaceChildren(...rows);
+  }
+
+  /** Résultats à plat : le nom d'abord, puis l'adresse et le dossier. */
+  private renderResults(found: Session[], q: string, footer?: HTMLElement | false) {
+    const first = q.split(/\s+/)[0] ?? '';
+    const starts = (s: Session) => (first && s.name.toLowerCase().startsWith(first) ? 0 : 1);
+    const live = (s: Session) => (this.actions.isConnected(s.id) ? 0 : 1);
+    found.sort((a, b) => starts(a) - starts(b) || live(a) - live(b) || a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' }));
+    const label = found.length
+      ? t(`${found.length} result${found.length > 1 ? 's' : ''}`, `${found.length} résultat${found.length > 1 ? 's' : ''}`)
+      : t('No session found. Enter on an address: quick connect.', 'Aucune session. Entrée sur une adresse : connexion rapide.');
+    this.root.replaceChildren(
+      h('div', { class: 'tree-section results' }, label),
+      ...found.map((s) => this.renderSession(s, 0, { flat: true, sub: true })),
+      ...(footer ? [footer] : []));
   }
 
   private renderChildren(node: FolderNode, depth: number, searching: boolean): HTMLElement[] {
@@ -134,12 +200,14 @@ export class SessionTree {
     return open ? [row, ...this.renderChildren(folder, depth + 1, searching)] : [row];
   }
 
-  private renderSession(s: Session, depth: number): HTMLElement {
+  private renderSession(s: Session, depth: number, opts: RowOptions = {}): HTMLElement {
     const a = this.actions;
     const enabled = a.protocolEnabled(s.protocol);
+    const pinned = a.isPinned(s.id);
     const menu = (): (MenuItem | 'separator')[] => [
       ...(enabled ? [] : [{ label: t('Enable the extension', 'Activer l’extension'), icon: 'puzzle', action: () => a.enableProtocol(s.protocol) }, 'separator' as const]),
       { label: t('Open', 'Ouvrir'), icon: 'play', action: () => a.openSession(s) },
+      { label: pinned ? t('Unpin', 'Désépingler') : t('Pin to the top', 'Épingler en haut'), icon: 'star', action: () => a.togglePin(s) },
       { label: t('Edit', 'Modifier'), icon: 'edit', action: () => a.editSession(s) },
       { label: t('Duplicate', 'Dupliquer'), icon: 'copy', action: () => a.duplicateSession(s) },
       { label: t('Ping, traceroute, ports…', 'Ping, traceroute, ports…'), icon: 'broadcast', action: () => a.netTools(s) },
@@ -153,7 +221,7 @@ export class SessionTree {
     // Déposer sur une session = déposer dans son dossier.
     const row = h('div', { class: `tree-row${active ? ' active' : ''}${enabled ? '' : ' disabled'}`, 'data-drop': s.folder },
       h('button', {
-        class: 'tree-item session', title: enabled ? t('Open', 'Ouvrir') : t('Extension disabled (right-click › Enable the extension)', 'Extension désactivée (clic droit › Activer l’extension)'), style: `padding-left: ${28 + depth * INDENT}px`,
+        class: 'tree-item session', 'data-id': s.id, title: enabled ? t('Open', 'Ouvrir') : t('Extension disabled (right-click › Enable the extension)', 'Extension désactivée (clic droit › Activer l’extension)'), style: `padding-left: ${opts.flat ? 10 : 28 + depth * INDENT}px`,
         onclick: () => { if (!this.justDragged) a.openSession(s); },
         onkeydown: (e: KeyboardEvent) => {
           if (e.key === 'F2') a.editSession(s);
@@ -161,10 +229,16 @@ export class SessionTree {
         },
       },
         h('span', { class: `dot${a.isConnected(s.id) ? ' on' : ''} ${a.health(s.id).cls}`, title: a.health(s.id).title }),
-        h('span', { class: 'grow ellipsis' }, s.name),
+        opts.sub
+          ? h('span', { class: 'grow session-names' }, h('span', { class: 'ellipsis' }, s.name),
+            h('span', { class: 'session-sub ellipsis' }, [a.target(s), s.folder.split('/').join(' › ')].filter(Boolean).join(' · ')))
+          : h('span', { class: 'grow ellipsis' }, s.name),
         a.hasNote(s.id) && h('span', { class: 'note-mark', title: t('This session has a note', 'Cette session a une note') }, icon('edit', 12)),
+        pinned && !opts.flat && h('span', { class: 'pin-mark', title: t('Pinned', 'Épinglée') }, icon('star', 11)),
+        opts.when && h('span', { class: 'when' }, opts.when),
         badge(s.protocol)),
       h('div', { class: 'row-actions' },
+        h('button', { class: `icon-btn sm${pinned ? ' on' : ''}`, 'aria-label': pinned ? t(`Unpin ${s.name}`, `Désépingler ${s.name}`) : t(`Pin ${s.name}`, `Épingler ${s.name}`), title: pinned ? t('Unpin', 'Désépingler') : t('Pin to the top', 'Épingler en haut'), onclick: () => a.togglePin(s) }, icon('star', 14)),
         h('button', { class: 'icon-btn sm', 'aria-label': t(`Edit ${s.name}`, `Modifier ${s.name}`), title: t('Edit', 'Modifier'), onclick: () => a.editSession(s) }, icon('edit', 14)),
         h('button', { class: 'icon-btn sm', 'aria-label': `Actions de ${s.name}`, title: t('More actions', 'Plus d\'actions'), onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, menu()) }, icon('more', 14))));
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu()); });
@@ -236,6 +310,17 @@ export class SessionTree {
       window.addEventListener('pointerup', up, { once: true });
     });
   }
+}
+
+const section = (label: string) => h('div', { class: 'tree-section' }, label);
+
+/** « 5 min », « 3 h », « hier », « 12 j ». */
+function ago(at: number): string {
+  const min = Math.max(1, Math.round((Date.now() - at) / 60000));
+  if (min < 60) return `${min} min`;
+  if (min < 1440) return `${Math.round(min / 60)} h`;
+  if (min < 2880) return t('yesterday', 'hier');
+  return t(`${Math.round(min / 1440)} d`, `${Math.round(min / 1440)} j`);
 }
 
 export const parentOf = (path: string) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '');

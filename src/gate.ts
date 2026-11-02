@@ -29,6 +29,8 @@ export interface GateHost {
   /** Extension de protocole activée (Bureau à distance pour les serveurs RDP). */
   protocolEnabled(id: string): boolean;
   filter(): string;
+  /** Efface le filtre des sessions, qui s'applique aussi aux Gates. */
+  clearFilter(): void;
 }
 
 const MODE_LABEL: Record<GateServer['mode'], string> = { coffre: t('Vault', 'Coffre'), enregistre: t('Recorded', 'Enregistré'), rebond: t('Jump', 'Rebond') };
@@ -86,6 +88,11 @@ export class GatePanel {
     this.render();
   }
 
+  /** Serveurs des Gates connectées que le filtre retient. */
+  countMatches(filter: string): number {
+    return this.list.filter((b) => b.connected).reduce((n, b) => n + b.servers.filter((s) => s.nom.toLowerCase().includes(filter) || s.dossier.toLowerCase().includes(filter)).length, 0);
+  }
+
   /** Active ou coupe le panneau (extension activée ou non). */
   show(on: boolean) {
     this.root.hidden = !on;
@@ -131,6 +138,10 @@ export class GatePanel {
       h('div', { class: 'head-actions' },
         h('button', { class: 'icon-btn', 'aria-label': t('Add a Gate', 'Ajouter une Gate'), title: t('Add a Gate', 'Ajouter une Gate'), onclick: () => this.add() }, icon('plus'))));
     const body = h('div', { class: 'gate-list' });
+    if (filter) {
+      body.append(h('p', { class: 'gate-filter muted small' }, t(`Filtered by « ${filter} »`, `Filtrées par « ${filter} »`), ' ',
+        h('button', { class: 'link-btn', onclick: () => this.host.clearFilter() }, t('Clear', 'Effacer'))));
+    }
     if (!this.list.length) {
       body.append(h('div', { class: 'empty-tree' },
         h('span', { class: 'small' }, t('No Gate. A Gate protects access to your servers.', 'Aucune Gate. Une Gate protège l\'accès à vos serveurs.')),

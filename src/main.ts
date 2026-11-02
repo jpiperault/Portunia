@@ -21,6 +21,7 @@ import { FilePanel } from './files';
 import type { Opener, TerminalView, TermState } from './terminal';
 import type { ScreenView } from './screen';
 import { leafOf, parentOf, SessionTree } from './tree';
+import { SessionLibrary } from './library';
 import { showMenu } from './menu';
 import { openPalette, openSnippetManager, SnippetContext } from './snippets';
 import { openTunnels } from './tunnels';
@@ -41,7 +42,7 @@ import { LOCALE, t as tr } from './i18n';
 
 interface Tab {
   id: string;
-  kind: 'session' | 'local' | 'extensions' | 'replay' | 'tools' | 'multi' | 'admin';
+  kind: 'session' | 'local' | 'extensions' | 'replay' | 'tools' | 'multi' | 'admin' | 'library';
   /** Shell local (onglet « local »). */
   shell?: ShellSpec;
   title: string;
@@ -63,6 +64,8 @@ interface Tab {
   recording?: string;
   /** Notes de la session (panneau de droite). */
   notes?: NotesPanel;
+  /** Toutes les sessions en tableau (onglet « library »). */
+  library?: SessionLibrary;
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
   /** Relecture d'une session de Gate (onglet « replay »). */
@@ -150,6 +153,13 @@ const sessionTree = new SessionTree(tree, {
   setFolderColor: (path, color) => act(() => folderColors.set(path, color)),
   activeSessionId: () => activeTab()?.sessionId,
   hasNote: (id) => state.noteIds.has(id),
+  isPinned: (id) => settings().favorites.includes(id),
+  togglePin: (s) => {
+    const list = settings().favorites;
+    updateSettings({ favorites: list.includes(s.id) ? list.filter((id) => id !== s.id) : [...list, s.id] });
+    renderTree();
+  },
+  target: (s) => sessionTarget(s),
   netTools: (s) => openNetTools(typeof s.values.host === 'string' ? s.values.host : '', s),
   wake: (s) => wakeSession(s, toast),
   multiExec: (folder) => openMultiExec(folder),
@@ -183,6 +193,7 @@ const sessionTree = new SessionTree(tree, {
   moveFolder: (path, parent) => act(() => api.renameFolder(path, parent ? `${parent}/${leafOf(path)}` : leafOf(path))),
 });
 tree.addEventListener('tree-change', () => renderTree());
+tree.addEventListener('tree-top', () => search.focus());
 
 // ---------- Extension Portunia Gate (Gates) ----------
 
@@ -202,6 +213,7 @@ const gatePanel = new GatePanel($('gates'), {
   protocolEnabled: (id) => extensionEnabled(id),
   allowsAdmin: () => allows('gateAdmin'),
   filter: () => state.filter,
+  clearFilter: () => { search.value = ''; state.filter = ''; renderTree(); },
 });
 
 /** Serveur d'une Gate : session SSH par la Gate, avec un jeton à usage unique par connexion. */
@@ -392,9 +404,131 @@ async function act(action: () => Promise<unknown>) {
   await reload();
 }
 
+// ---------- Barre latérale : rail et panneaux ----------
+
+type Pane = 'sessions' | 'gates' | 'pc';
+const PANE_KEY = 'portunia.panneau';
+const RECENT_KEY = 'portunia.recentes';
+let pane: Pane = (() => { try { return (localStorage.getItem(PANE_KEY) as Pane | null) ?? 'sessions'; } catch { return 'sessions'; } })();
+/** Puce de filtre active : all, up, fav, p:<protocole>, t:<étiquette>. */
+let chip = 'all';
+
+/** Affiche un panneau ; un clic sur l'icône du panneau ouvert replie la barre. */
+function showPane(next: Pane, fromRail = false) {
+  const app = document.querySelector<HTMLElement>('.app')!;
+  if (next === 'gates' && !extensionEnabled('gate')) next = 'sessions';
+  const fold = fromRail && next === pane && !app.classList.contains('folded');
+  app.classList.toggle('folded', fold);
+  pane = next;
+  try { localStorage.setItem(PANE_KEY, next); } catch { /* stockage indisponible */ }
+  for (const p of ['sessions', 'gates', 'pc'] as Pane[]) {
+    $(`pane-${p}`).hidden = p !== next;
+    $(`rail-${p}`).classList.toggle('on', p === next && !fold);
+    $(`rail-${p}`).setAttribute('aria-pressed', String(p === next && !fold));
+  }
+}
+
+function syncRail() {
+  $('rail-gates').hidden = !extensionEnabled('gate');
+  showPane(pane);
+}
+
+function recentSessions(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) ?? '{}'); } catch { return {}; }
+}
+
+function markRecent(id: string) {
+  const list = Object.entries({ ...recentSessions(), [id]: Date.now() }).sort((a, b) => b[1] - a[1]).slice(0, 20);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(Object.fromEntries(list))); } catch { /* stockage indisponible */ }
+}
+
+function chipMatches(s: Session): boolean {
+  if (chip === 'up') return isConnected(s.id);
+  if (chip === 'fav') return settings().favorites.includes(s.id);
+  if (chip.startsWith('p:')) return s.protocol === chip.slice(2);
+  if (chip.startsWith('t:')) return s.tags.includes(chip.slice(2));
+  return true;
+}
+
+/** Puces sous le filtre : connectées, épinglées, protocoles, étiquettes les plus utilisées. */
+function renderChips() {
+  const all = state.sessions;
+  const up = all.filter((s) => isConnected(s.id)).length;
+  const pinned = all.filter((s) => settings().favorites.includes(s.id)).length;
+  const protocols = [...new Set(all.map((s) => s.protocol))].filter(extensionEnabled).sort();
+  const tagCount = new Map<string, number>();
+  all.forEach((s) => s.tags.forEach((tag) => tagCount.set(tag, (tagCount.get(tag) ?? 0) + 1)));
+  const tags = [...tagCount].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([tag]) => tag);
+  const defs: [string, string][] = [
+    ['all', tr('All', 'Toutes')],
+    ...(up ? [['up', tr(`Connected · ${up}`, `Connectées · ${up}`)] as [string, string]] : []),
+    ...(pinned ? [['fav', tr('Pinned', 'Épinglées')] as [string, string]] : []),
+    ...(protocols.length > 1 ? protocols.map((p) => [`p:${p}`, p.toUpperCase()] as [string, string]) : []),
+    ...tags.map((tag) => [`t:${tag}`, `#${tag}`] as [string, string]),
+  ];
+  if (!defs.some(([id]) => id === chip)) chip = 'all';
+  $('session-chips').replaceChildren(...(defs.length > 1 ? defs.map(([id, label]) => h('button', {
+    type: 'button', class: `fchip${chip === id ? ' on' : ''}`, 'aria-pressed': String(chip === id),
+    onclick: () => { chip = chip === id ? 'all' : id; renderTree(); },
+  }, label)) : []));
+}
+
 function renderTree() {
-  sessionTree.render(state.folders, state.sessions, state.filter);
+  renderChips();
+  const all = state.sessions;
+  const pinnedIds = settings().favorites;
+  const recent = recentSessions();
+  const q = state.filter.trim().toLowerCase();
+  const gateHits = q && extensionEnabled('gate') ? gatePanel.countMatches(q) : 0;
+  sessionTree.render(state.folders, chip === 'all' ? all : all.filter(chipMatches), state.filter, {
+    narrowed: chip !== 'all' || q !== '',
+    pinned: all.filter((s) => pinnedIds.includes(s.id)).sort((a, b) => a.name.localeCompare(b.name, 'fr', { sensitivity: 'base' })),
+    recent: all.filter((s) => recent[s.id] && !pinnedIds.includes(s.id)).sort((a, b) => recent[b.id] - recent[a.id]).slice(0, 5).map((s) => ({ session: s, at: recent[s.id] })),
+    footer: gateHits > 0 && h('button', { class: 'tree-item gate-hits', onclick: () => showPane('gates') },
+      icon('shield', 14), h('span', { class: 'grow' }, tr(`${gateHits} server(s) in the Gates`, `${gateHits} serveur(s) dans les Gates`)), icon('chevronRight', 12)),
+  });
+  $('session-count').textContent = String(all.length);
   if (extensionEnabled('gate')) gatePanel.render();
+  state.tabs.find((t) => t.kind === 'library')?.library?.render();
+}
+
+/** Onglet « Toutes les sessions » : tableau triable, facettes, sélection multiple. */
+function openLibrary() {
+  const existing = state.tabs.find((t) => t.kind === 'library');
+  if (existing) {
+    existing.library?.render();
+    activate(existing.id);
+    existing.library?.focus();
+    return;
+  }
+  const library = new SessionLibrary({
+    sessions: () => state.sessions,
+    isConnected,
+    isPinned: (id) => settings().favorites.includes(id),
+    target: (s) => sessionTarget(s),
+    lastOpened: (id) => recentSessions()[id],
+    folderColor: (path) => colorOf(path, state.folderColors),
+    open: (list) => {
+      if (list.length > 8 && !confirm(tr(`Open ${list.length} sessions?`, `Ouvrir ${list.length} sessions ?`))) return;
+      list.forEach((s) => openSession(s));
+    },
+    edit: (s) => editSession(s),
+    multiExec: (ids) => openMultiExec(null, ids),
+    newSession: () => newSession(),
+  });
+  const view = h('div', { class: 'page-view' }, library.el);
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'library', title: tr('All sessions', 'Toutes les sessions'), view, state: 'connected', receive: false, library };
+  state.tabs.push(tab);
+  activate(tab.id);
+  library.focus();
+}
+
+/** Adresse d'une session : user@hôte, ou l'URL. */
+function sessionTarget(s: Session): string {
+  const v = s.values;
+  if (typeof v.url === 'string' && v.url) return v.url;
+  return [v.username && `${v.username}@`, v.host].filter(Boolean).join('');
 }
 
 // ---------- Onglets ----------
@@ -498,7 +632,7 @@ function renderTabs() {
       const shown = isSplit() && visibleTabs().includes(t);
       const tabEl = h('div', { class: `tab${selected ? ' active' : ''}${shown && !selected ? ' shown' : ''}` },
         h('button', { role: 'tab', 'aria-selected': String(selected), class: 'tab-main', onclick: () => activate(t.id) },
-          t.kind === 'local' && t.shell ? shellIcon(t.shell, 14) : t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon(t.kind === 'replay' ? 'play' : 'puzzle', 14),
+          t.kind === 'local' && t.shell ? shellIcon(t.shell, 14) : t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon(t.kind === 'replay' ? 'play' : t.kind === 'library' ? 'files' : 'puzzle', 14),
           h('span', { class: 'ellipsis' }, t.title),
           t.protocol && badge(t.protocol)),
         h('button', { class: 'icon-btn sm', 'aria-label': tr(`Close ${t.title}`, `Fermer ${t.title}`), title: tr('Close (Ctrl Shift W)', 'Fermer (Ctrl Maj W)'), onclick: () => closeTab(t.id) }, icon('close', 13)));
@@ -856,6 +990,7 @@ interface CustomOpen {
 }
 
 async function openSession(session: Session, quick?: QuickTarget, custom?: CustomOpen) {
+  if (session.id && !quick && !custom) markRecent(session.id);
   const proto = protocolOf(session.protocol);
   if (!proto) return toast(tr(`Extension « ${session.protocol} » not installed`, `Extension « ${session.protocol} » non installée`), 'error');
   if (!extensionEnabled(proto.id)) {
@@ -1067,24 +1202,31 @@ $('new-session').append(icon('plus'));
 $('new-session').addEventListener('click', () => newSession());
 $('quick-connect').append(icon('link'));
 $('quick-connect').addEventListener('click', () => quickConnect());
-$('open-extensions').append(icon('puzzle'), h('span', { class: 'grow' }, 'Extensions'));
-$('open-extensions').addEventListener('click', openExtensions);
-$('open-settings').append(icon('settings'), h('span', { class: 'grow' }, tr('Settings', 'Paramètres')));
-$('open-settings').addEventListener('click', () => openSettingsDialog(toast));
-$('open-snippets').append(icon('commands'), h('span', { class: 'grow' }, tr('Saved commands', 'Commandes enregistrées')));
-$('open-snippets').addEventListener('click', () => openSnippetManager(snippetContext()));
-$('open-recordings').append(icon('play'), h('span', { class: 'grow' }, tr('Recordings', 'Enregistrements')));
-$('open-recordings').addEventListener('click', () => openRecordings(toast));
-$('open-nettools').append(icon('broadcast'), h('span', { class: 'grow' }, tr('Network tools', 'Outils réseau')));
-$('open-nettools').addEventListener('click', () => openNetTools());
-$('open-credentials').append(icon('user'), h('span', { class: 'grow' }, tr('Shared credentials', 'Identifiants partagés')));
-$('open-credentials').addEventListener('click', () => openCredentialManager(toast, () => reload()));
+/** Bouton du rail : icône seule, nom en infobulle. */
+function railButton(id: string, ico: string, label: string, run: () => void) {
+  const b = $(id);
+  b.append(icon(ico, 20));
+  b.title = label;
+  b.setAttribute('aria-label', label);
+  b.addEventListener('click', run);
+}
+railButton('rail-sessions', 'server', tr('Sessions (Ctrl Shift K)', 'Sessions (Ctrl Maj K)'), () => showPane('sessions', true));
+railButton('rail-gates', 'shield', 'Gates', () => showPane('gates', true));
+railButton('rail-pc', 'prompt', tr('This PC: local shells', 'Ce PC : shells locaux'), () => showPane('pc', true));
+railButton('open-snippets', 'commands', tr('Saved commands', 'Commandes enregistrées'), () => openSnippetManager(snippetContext()));
+railButton('open-credentials', 'user', tr('Shared credentials', 'Identifiants partagés'), () => openCredentialManager(toast, () => reload()));
+railButton('open-recordings', 'play', tr('Recordings', 'Enregistrements'), () => openRecordings(toast));
+railButton('open-assist', 'lifebuoy', tr('Remote assistance', 'Assistance à distance'), () => openAssistDialog({ open: openAssist, toast }));
+railButton('open-nettools', 'broadcast', tr('Network tools', 'Outils réseau'), () => openNetTools());
+railButton('open-import', 'upload', tr('Import / export', 'Importer / exporter'), () => openImportExport((msg) => { toast(msg); reload(); }, toast));
+railButton('open-extensions', 'puzzle', 'Extensions', openExtensions);
+railButton('open-settings', 'settings', tr('Settings', 'Paramètres'), () => openSettingsDialog(toast));
+$('title-sessions').textContent = tr('Sessions', 'Sessions');
+$('open-library').replaceChildren(icon('files', 14), h('span', { class: 'grow' }, tr('All sessions in a table', 'Toutes les sessions en tableau')), icon('chevronRight', 12));
+$('open-library').addEventListener('click', () => openLibrary());
+$('title-pc').textContent = tr('This PC', 'Ce PC');
 setPlayerHandler(openReplay);
-$('open-assist').append(icon('lifebuoy'), h('span', { class: 'grow' }, tr('Remote assistance', 'Assistance à distance')));
-$('open-assist').addEventListener('click', () => openAssistDialog({ open: openAssist, toast }));
 showAssist();
-$('open-import').append(icon('upload'), h('span', { class: 'grow' }, tr('Import / export', 'Importer / exporter')));
-$('open-import').addEventListener('click', () => openImportExport((msg) => { toast(msg); reload(); }, toast));
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });
 
 // Glisser-déposer depuis l'Explorateur Windows sur le panneau Fichiers = envoi au serveur.
@@ -1107,7 +1249,7 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
 document.addEventListener('keydown', (e) => {
   if (!e.ctrlKey || !e.shiftKey || document.querySelector('dialog[open]') || isLocked()) return;
   const key = e.key.toLowerCase();
-  if (key === 'k') { e.preventDefault(); search.focus(); search.select(); }
+  if (key === 'k') { e.preventDefault(); document.querySelector('.app')?.classList.remove('folded'); showPane('sessions'); search.focus(); search.select(); }
   else if (key === 'n') { e.preventDefault(); newSession(); }
   else if (key === 'q') { e.preventDefault(); quickConnect(); }
   else if (key === 't') { e.preventDefault(); const def = defaultShell(); if (def) openLocalShell(def); else toast(tr('No local shell found', 'Aucun shell local trouvé'), 'error'); }
@@ -1137,7 +1279,7 @@ onSettingsChange((s) => {
   const key = s.disabledExtensions.join(',');
   if (key === extensionsKey) return;
   extensionsKey = key;
-  gatePanel.show(extensionEnabled('gate'));
+  gatePanel.show(extensionEnabled('gate')); syncRail();
   showAssist();
   state.tabs.find((t) => t.kind === 'extensions')?.view.replaceChildren(extensionsPage());
   renderAll();
@@ -1152,8 +1294,8 @@ onSettingsChange((s) => {
   if (key !== monitorKey) { monitorKey = key; monitor.start(); renderAll(); }
 });
 monitorKey = `${settings().monitoring}|${settings().monitorInterval}`;
-initLock(() => { reload(); gatePanel.show(extensionEnabled('gate')); });
-gatePanel.show(extensionEnabled('gate'));
+initLock(() => { reload(); gatePanel.show(extensionEnabled('gate')); syncRail(); });
+gatePanel.show(extensionEnabled('gate')); syncRail();
 
 /** Nom du dossier coloré le plus proche (affiché en étiquette dans la barre d'outils). */
 function envFolder(folder: string): string {
@@ -1282,6 +1424,7 @@ function paletteEntries(): PaletteEntry[] {
   }));
   const actions: PaletteEntry[] = [
     { label: tr('New session', 'Nouvelle session'), group: 'Action', icon: 'plus', hint: tr('Ctrl+Shift+N', 'Ctrl+Maj+N'), action: () => newSession() },
+    { label: tr('All sessions in a table', 'Toutes les sessions en tableau'), group: 'Action', icon: 'files', keywords: tr('library list table sort select', 'bibliothèque liste tableau trier sélection'), action: () => openLibrary() },
     { label: tr('Quick connect', 'Connexion rapide'), group: 'Action', icon: 'link', hint: tr('Ctrl+Shift+Q', 'Ctrl+Maj+Q'), keywords: tr('address server login password unsaved adresse serveur identifiant mot de passe sans enregistrer', 'adresse serveur identifiant mot de passe sans enregistrer'), action: () => quickConnect() },
     { label: tr('Saved commands', 'Commandes enregistrées'), group: 'Action', icon: 'commands', hint: tr('Ctrl+Shift+P', 'Ctrl+Maj+P'), action: () => openSnippetManager(snippetContext()) },
     { label: tr('Recordings', 'Enregistrements'), group: 'Action', icon: 'play', action: () => openRecordings(toast) },
@@ -1302,9 +1445,20 @@ function openGlobalPalette(initial = '') {
   openCommandPalette(paletteEntries(), (target) => openQuick(target), initial, (address) => quickConnect(address));
 }
 
-// Entrée dans la recherche : « user@hôte », « rdp srv-01 »… = connexion rapide.
+// ↓ : parcourir la liste. Entrée : la première session trouvée, ou une connexion rapide
+// (« user@hôte », « rdp srv-01 »…, et toute adresse qui ne correspond à aucune session).
 search.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); sessionTree.focusFirst(); return; }
+  if (e.key === 'Escape' && search.value) { e.preventDefault(); search.value = ''; state.filter = ''; renderTree(); return; }
   if (e.key !== 'Enter') return;
+  const typed = search.value.trim();
+  const firstId = sessionTree.first();
+  if (firstId && (!/[@\s]|:\/\//.test(typed) || chip !== 'all')) {
+    e.preventDefault();
+    const s = sessionOf(firstId);
+    if (s) openSession(s);
+    return;
+  }
   const target = parseQuick(search.value);
   if (!target) {
     // Adresse seule : fenêtre de connexion rapide (identifiant et mot de passe à la main).
