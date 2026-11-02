@@ -250,7 +250,7 @@ unsafe fn render(main: HWND) {
             show(primary, true);
         }
         Screen::Consent(who) => {
-            set_text(msg, &format!("{who}\n{}", tr("wants to help you. Nobody sees your screen until you accept.", "veut vous aider. Personne ne voit votre écran avant que vous acceptiez.")));
+            set_text(msg, &format!("{who}\n{}", tr("wants to help you. Nobody sees your screen until you accept. Only accept if you know this server: nobody from Microsoft or your bank will ever ask you this.", "veut vous aider. Personne ne voit votre écran avant que vous acceptiez. N'acceptez que si vous connaissez ce serveur : ni Microsoft ni votre banque ne vous le demanderont jamais.")));
             set_text(check, tr("Let them use the mouse and keyboard (otherwise they only see the screen)", "Lui laisser utiliser la souris et le clavier (sinon, il voit seulement l'écran)"));
             SendMessageW(check, BM_SETCHECK, Some(WPARAM(1)), None);
             show(check, true);
@@ -492,6 +492,7 @@ unsafe extern "system" fn escape_hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRES
 }
 
 /// Démonstration (essais de mise en page) : chaque écran, photographié dans `dir`.
+#[cfg(feature = "essai")]
 pub fn demo(dir: &str) {
     let shots: [(&str, Screen); 5] = [
         ("1-code", Screen::Code("483 216 907".into())),
@@ -529,6 +530,7 @@ pub fn demo(dir: &str) {
 }
 
 /// Contenu de notre fenêtre (BGRA, de haut en bas).
+#[cfg(feature = "essai")]
 unsafe fn snapshot(h: HWND) -> anyhow::Result<(u32, u32, Vec<u8>)> {
     use windows::Win32::Graphics::Gdi::{
         CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, GetDIBits, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,

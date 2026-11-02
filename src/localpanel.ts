@@ -7,6 +7,13 @@ import { t } from './i18n';
 /** Marque « caché » (attribut Windows) transmise par le cœur dans `permissions`. */
 const HIDDEN = 0x8000_0000;
 
+/** Nom venu d'un serveur, rendu sûr pour Windows : ni caractère interdit, ni « .. », ni point final. */
+export function windowsName(name: string): string {
+  // eslint-disable-next-line no-control-regex
+  const cleaned = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, '');
+  return cleaned || '_';
+}
+
 export const localJoin = (dir: string, name: string) => (/[\\/]$/.test(dir) ? dir + name : `${dir}\\${name}`);
 /** « C:\Users\moi » → « C:\Users » ; « C:\ » → « » (liste des lecteurs). */
 const localParent = (path: string) => (/^[A-Za-z]:\\?$/.test(path) ? '' : path.replace(/[\\/][^\\/]+[\\/]?$/, '').replace(/^([A-Za-z]:)$/, '$1\\'));

@@ -8,7 +8,7 @@ Portunia was called **Termoria** until version 0.39. The update to Portunia remo
 
 ## Installing Portunia
 
-Download `Portunia_x.y.z_x64-setup.exe` from the [Releases](https://github.com/jpiperault/Portunia-releases/releases) and run it (installs for the current user, no administrator rights). Portunia then updates itself: a banner offers each new version.
+Download `Portunia_x.y.z_x64-setup.exe` from the [Releases](https://github.com/jpiperault/Portunia-releases/releases) and run it. The installer asks whether to install for yourself only (no administrator rights) or for all users of the PC (one administrator prompt); an update keeps the mode chosen the first time. Portunia then updates itself: a banner offers each new version.
 
 ## Installing the development tools (once)
 
@@ -50,14 +50,19 @@ To build the installer locally: set `TAURI_SIGNING_PRIVATE_KEY` (path or content
 | Telnet | Terminal tab | Unencrypted: keep it to the local network. |
 | VNC | Screen tab | Keyboard, mouse, wheel, clipboard both ways, Ctrl+Alt+Del, fit to window. Tight, ZRLE, CopyRect, Raw encodings. |
 | Local shell | Terminal tab | PowerShell 7, Windows PowerShell, Command Prompt, WSL distributions, Git Bash and custom shells, through the Windows Terminal console shipped with Portunia (OpenConsole, faster than the system's: keystroke echo 47 → 17 ms, large outputs 11 → 38 MB/s). "This PC" section, "+" menu, Ctrl+Shift+T. |
-| Gate (extension) | Terminal or screen tab | "Gates" section of the sidebar: add a [Portunia Gate](https://github.com/jpiperault/Portunia-Gate) Gate (certificate fingerprint checked, password and code, first sign-in with a temporary password and code enrolment by QR code). Allowed servers are shown by folder; each opening uses a one-time token, without typing the code again. Vault (account supplied by the Gate), recorded (credentials asked in the terminal) and jump (end-to-end) modes. Windows servers (RDP badge): opened in a Remote Desktop tab through the Gate, in jump mode (Gate 0.6, end-to-end encrypted) or recorded mode (Gate 0.8, RDCleanPath gateway: the Gate relays and records the session without seeing the password); Windows credentials asked when opening and never kept. Flags sessions that bypass the Gate. In Portunia Teams: Gate administration (servers and vault, accounts, groups, rules, settings) and audit ("Audit" menu of the Gate): video-like session replay, with keystrokes as subtitles, idle time skipped, sensitive commands highlighted, search across all sessions, typed passwords masked (an administrator can reveal them), .cast or transcript export, and the verified audit log. Gate option: each account replays its own sessions ("My sessions"). Gate web portal (Portunia Gate 0.7 and later): Administer › Web portal, a switch to turn it on or off (open web sessions close), public address, allowed group, durations, copy and paste, Turnstile keys, Cloudflare tunnel status and a "Close all web sessions" button. Enabled in Extensions. Installing the Gate (`installer.sh` wizard) and adding it to Portunia step by step: [Portunia Gate README](https://github.com/jpiperault/Portunia-Gate#install). |
+| Gate (extension) | Terminal or screen tab | "Gates" section of the sidebar: add a [Portunia Gate](https://github.com/jpiperault/Portunia-Gate) Gate (certificate fingerprint checked, password and code, first sign-in with a temporary password and code enrolment by QR code). Allowed servers are shown by folder; each opening uses a one-time token, without typing the code again. Vault (account supplied by the Gate), recorded (credentials asked in the terminal) and jump (end-to-end) modes. Windows servers (RDP badge): opened in a Remote Desktop tab through the Gate, in jump mode (Gate 0.6, end-to-end encrypted) or recorded mode (Gate 0.8, RDCleanPath gateway: the Gate relays and records the session without seeing the password); Windows credentials asked when opening and never kept. Flags sessions that bypass the Gate. In Portunia Teams: Gate administration (servers and vault, accounts, groups, rules, settings) and audit ("Audit" menu of the Gate): video-like session replay, with keystrokes as subtitles, idle time skipped, sensitive commands highlighted, search across all sessions, typed passwords masked (an administrator can reveal them), .cast or transcript export, and the verified audit log. Gate option: each account replays its own sessions ("My sessions"). Gate web portal (Portunia Gate 0.7 and later): Administer › Web portal, a switch to turn it on or off (open web sessions close), public address, allowed group, durations, copy and paste, Turnstile keys and a "Close all web sessions" button. Exposure modes (internal or VPN, Cloudflare Tunnel run by the Gate, direct HTTPS, proxy or WAF, dedicated relay in a DMZ), HTTPS listener, portal certificate (imported PEM or PFX, or Let's Encrypt with renewal) and the Gate's optional hardening status are all set from this screen (Gate 0.17 to 0.21). Enabled in Extensions. Installing the Gate (`installer.sh` wizard) and adding it to Portunia step by step: [Portunia Gate README](https://github.com/jpiperault/Portunia-Gate#install). |
 | Remote assistance (extension, needs Portunia Gate 0.11) | Remote Desktop tab | Take control of a relative's or a customer's PC. They go to the Gate page (`https://your-portal/assistance`), download **Portunia Assistance** (no install, no account) and read you a 9-digit code; you type it in "Remote assistance" in the sidebar. They see your name and choose: view only, or view and control. A frame and a "Stop" bar stay on their screen; Esc three times also stops. The Gate only relays: the link is encrypted end to end from the code (SPAKE2, ChaCha20-Poly1305), and the code is single use. Administer › Assistance: switch, group of helpers, maximum duration, audit log of each assistance. |
-| FTP / FTPS | Files tab | Full-width browser (upload, download, drag and drop, rename, delete). Explicit FTPS by default, with TLS session resumption (required by FileZilla Server and vsftpd) and certificates checked by Windows; self-signed certificate accepted on request. Connection reopened by itself after inactivity. `ftps://user@host` in quick connect. |
-| S3 storage (Pro) | Files tab | Amazon S3 and compatible services (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…): buckets, folders, upload and download (up to 5 GB per file), renaming and deleting whole folders. Path-style addressing for MinIO / Ceph. Built-in client (AWS SigV4 signing), without Amazon's SDK. |
+| SFTP (catalogue) | Two-pane files tab | Files over SSH without a terminal: same authentication as SSH (key, agent, password, shared credentials), jump host and Gate, start folders on the server and on this PC. Right click on an SSH session › "Open as files only (SFTP)" reuses its settings. Install it from Extensions › Catalogue. |
+| FTP / FTPS (catalogue) | Two-pane files tab | Explicit FTPS by default, implicit FTPS (port 990), passive or active mode, Windows-1252 file names for old servers. TLS session resumption (required by FileZilla Server and vsftpd), certificates checked by Windows; self-signed certificate accepted on request. Connection reopened by itself after inactivity. `ftps://user@host` in quick connect. Installed automatically for those who already have FTP sessions. |
+| S3 storage (Pro) | Two-pane files tab | Amazon S3 and compatible services (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…): buckets, folders, upload and download (up to 5 GB per file), renaming and deleting whole folders. Path-style addressing for MinIO / Ceph. Built-in client (AWS SigV4 signing), without Amazon's SDK. |
 | Serial port | Terminal tab | COM ports detected automatically, speed, parity, flow control, line ending. |
 
 Other features:
 
+- two-pane file sessions (SFTP, FTP, S3): this PC on the left, the server on the right, → / F5 to upload and ← / F6 to download, multiple selection, hidden files, Unix permissions, transfer queue with speed, pause and an "if the file exists" rule (ask, replace if newer, replace, skip); copies keep the original's date (SFTP, FTP with MFMT);
+- compare and synchronise two folders (Pro): recursive comparison by date and size or size only, exclusion patterns, upload, download or both ways, items to decide highlighted, optional deletion on the server, nothing copied before you confirm;
+- extensions catalogue (Extensions page): SFTP and FTP are installed in one click; WebDAV, Windows shares, Azure Blob and Google Cloud Storage will follow;
+- sidebar: activity rail (Sessions, Gates, This PC, tools), filter chips by protocol and state, pinned and recent sessions, "All sessions in a table" tab (sort, filters, multiple selection); session toolbar on one line that folds into a "⋯" menu on small screens, side panels (files, notes, server, containers) per tab and closed when a session opens;
 - "Quick connect" window (button next to "New session", Ctrl+Shift+Q, or just an address such as `10.0.0.12` in the search box, then Enter): only the address is required; protocol, login, port, password, key and jump host are optional. With SSH, what is missing is typed in the terminal as with PuTTY (`login as:`, then the hidden password if the key and agent are refused). Nothing is saved;
 - saved SSH session without a login or password: they are typed in the terminal on each connection (Ctrl+C cancels);
 - quick connect without creating a session: type `ssh deploy@10.0.1.12`, `rdp srv-01`, `vnc nas:5901`, `https://nas:5001` or `COM3@9600` in the search box then Enter, or in the palette (Ctrl+Shift+O). With SSH, default key then agent, otherwise the password is asked (and never saved). History of recent connections, "Save as session" button;
@@ -111,8 +116,8 @@ Shortcuts: Ctrl+Shift+N new session, Ctrl+Shift+W close tab, Ctrl+Shift+F search
 src-tauri/src/       core (Rust)
   connector.rs       extension contract (Connector trait, manifest, fields, views)
   registry.rs        list of available extensions
-  connectors/        one extension per file: ssh, rdp, vnc, web, telnet, serial, local
-                     (+ sftp.rs: files, forward.rs: tunnels)
+  connectors/        one extension per file: ssh (and SFTP only), rdp, vnc, web, telnet, serial,
+                     ftp, s3, local (+ sftp.rs: files over SSH, forward.rs: tunnels)
   commands.rs        commands called by the interface
   store.rs           saved sessions, folders, colours and commands (JSON)
   secrets.rs         Windows Credential Manager
@@ -122,13 +127,20 @@ src-tauri/src/       core (Rust)
   recording.rs       session recording (asciicast, text)
   monitor.rs         monitoring (TCP connection test)
   transfer.rs        whole-folder transfers, remote file editing
-  Gate.rs         Gates (API with pinned certificate, one-time tokens)
+  localfs.rs         files of this PC (left pane of file sessions)
+  filesync.rs        compare a folder of this PC with a server folder (Pro)
+  gate.rs            Gates (API with pinned certificate, one-time tokens)
 src/                 interface (TypeScript, no framework)
   main.ts            tree, tabs, split screen, toolbar
   dialog.ts          form generated from the extension's manifest
   terminal.ts        terminal view (xterm.js)
   screen.ts          remote screen view (canvas, keyboard, mouse)
-  files.ts           server file browser
+  files.ts           server file browser (side panel, or right pane)
+  filesview.ts       two-pane file sessions (SFTP, FTP, S3)
+  localpanel.ts      "This PC" pane
+  transfers.ts       transfer queue
+  syncdialog.ts      "Compare and synchronise" window (Pro)
+  library.ts         "All sessions in a table" tab
   tree.ts            session tree (folders, drag and drop)
   menu.ts            context menu
   settings.ts        interface settings
@@ -141,8 +153,8 @@ src/                 interface (TypeScript, no framework)
   monitoring.ts      monitoring: dots, overview, alerts
   theme.ts           themes, terminal palettes, folder colours
   localshells.ts     local shells: "This PC" section and settings
-  extensions.ts      Extensions page
-  Gate.ts         Portunia Gate extension: sidebar, sign-in, administration
+  extensions.ts      Extensions page and catalogue
+  gate.ts            Portunia Gate extension: sidebar, sign-in, administration
   audit.ts           Portunia Gate audit: sessions and log
   assist.ts          remote assistance: "New assistance" dialog (code)
   auditplayer.ts     session player (subtitles, markers, skipped idle time)
@@ -161,7 +173,7 @@ screenshot.html      demo with fake data for screenshots
 The core knows no protocol. An extension:
 
 1. describes its fields (`Manifest.fields`): the interface builds the form by itself;
-2. states its view: `terminal`, `screen` (remote screen in a tab), `desktop` (external app) or `web`;
+2. states its view: `terminal`, `screen` (remote screen in a tab), `desktop` (external app), `web` or `files` (two-pane files tab);
 3. implements `connect()`, which returns either a terminal connection or "opened elsewhere".
 
 ### Adding a protocol
@@ -176,4 +188,5 @@ The core knows no protocol. An extension:
 
 ## Ideas for later
 
-- External extensions loaded without rebuilding (WASM modules).
+- External extensions downloaded from the catalogue and loaded without rebuilding (signed, isolated WASM modules).
+- Linux, then macOS versions.

@@ -7,19 +7,22 @@ use std::{
     time::UNIX_EPOCH,
 };
 
-use crate::commands::{err, CmdResult};
+use tauri::State;
+
+use crate::commands::{err, AppState, CmdResult};
 use crate::connector::RemoteEntry;
 
 /// Dossier utilisateur, ou celui demandé s'il existe.
 #[tauri::command]
-pub fn local_home(start: Option<String>) -> String {
+pub fn local_home(state: State<'_, AppState>, start: Option<String>) -> CmdResult<String> {
+    state.unlocked()?;
     if let Some(dir) = start.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
         let expanded = expand(&dir);
         if expanded.is_dir() {
-            return expanded.display().to_string();
+            return Ok(expanded.display().to_string());
         }
     }
-    std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into())
+    Ok(std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into()))
 }
 
 /// « %USERPROFILE%\Projets » ou « ~\Projets » → chemin complet.
@@ -32,8 +35,14 @@ fn expand(dir: &str) -> PathBuf {
     }
 }
 
+/// Liste d'un dossier de ce PC : refusée tant que Portunia est verrouillé, comme les fichiers du serveur.
 #[tauri::command]
-pub fn local_list(path: String) -> CmdResult<Vec<RemoteEntry>> {
+pub fn local_list(state: State<'_, AppState>, path: String) -> CmdResult<Vec<RemoteEntry>> {
+    state.unlocked()?;
+    list(path)
+}
+
+fn list(path: String) -> CmdResult<Vec<RemoteEntry>> {
     if path.is_empty() {
         return Ok(drives());
     }
@@ -91,12 +100,18 @@ fn drives() -> Vec<RemoteEntry> {
 }
 
 #[tauri::command]
-pub fn local_mkdir(path: String) -> CmdResult<()> {
+pub fn local_mkdir(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    state.unlocked()?;
     fs::create_dir(&path).map_err(err)
 }
 
 #[tauri::command]
-pub fn local_rename(from: String, to: String) -> CmdResult<()> {
+pub fn local_rename(state: State<'_, AppState>, from: String, to: String) -> CmdResult<()> {
+    state.unlocked()?;
+    rename(from, to)
+}
+
+fn rename(from: String, to: String) -> CmdResult<()> {
     if Path::new(&to).exists() {
         return Err(t!(format!("{to} already exists"), format!("{to} existe déjà")));
     }
@@ -105,7 +120,8 @@ pub fn local_rename(from: String, to: String) -> CmdResult<()> {
 
 /// Montre le fichier dans l'Explorateur Windows (sélectionné), ou ouvre le dossier.
 #[tauri::command]
-pub fn local_reveal(path: String) -> CmdResult<()> {
+pub fn local_reveal(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    state.unlocked()?;
     let mut command = std::process::Command::new("explorer.exe");
     if Path::new(&path).is_dir() {
         command.arg(&path);
@@ -124,10 +140,10 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("portunia-localfs-{}", std::process::id()));
         fs::create_dir_all(dir.join("sous")).unwrap();
         fs::write(dir.join("b.txt"), "abc").unwrap();
-        let list = local_list(dir.display().to_string()).unwrap();
+        let list = list(dir.display().to_string()).unwrap();
         assert_eq!(list.iter().map(|e| (e.name.as_str(), e.is_dir, e.size)).collect::<Vec<_>>(), [("sous", true, 0), ("b.txt", false, 3)]);
-        local_rename(dir.join("b.txt").display().to_string(), dir.join("c.txt").display().to_string()).unwrap();
-        assert!(local_rename(dir.join("c.txt").display().to_string(), dir.join("sous").display().to_string()).is_err());
+        rename(dir.join("b.txt").display().to_string(), dir.join("c.txt").display().to_string()).unwrap();
+        assert!(rename(dir.join("c.txt").display().to_string(), dir.join("sous").display().to_string()).is_err());
         fs::remove_dir_all(&dir).unwrap();
         assert!(!drives().is_empty());
     }

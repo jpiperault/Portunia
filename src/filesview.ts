@@ -4,15 +4,13 @@ import { handleConfirm } from './confirm';
 import { api, errorText, remoteFiles, RemoteEntry, TermEvent } from './api';
 import { h, icon } from './dom';
 import { FilePanel } from './files';
-import { LocalPanel, localJoin } from './localpanel';
+import { LocalPanel, localJoin, windowsName } from './localpanel';
 import type { Opener, TermState } from './terminal';
 import { t } from './i18n';
 import { proChip } from './security';
 import { openSyncDialog } from './syncdialog';
 import { ExistsRule, TransferQueue } from './transfers';
 
-/** Nom de fichier accepté par Windows (« : », « ? »… remplacés). */
-const windowsName = (name: string) => name.replace(/[<>:"/\\|?*]/g, '_');
 
 /** Faut-il copier, d'après la règle « si le fichier existe » ? `null` : à demander. */
 function decide(rule: ExistsRule, source: RemoteEntry, existing: RemoteEntry | undefined): boolean | null {

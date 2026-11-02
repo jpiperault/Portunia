@@ -1,9 +1,13 @@
 [package]
 name = "portunia-assistance"
-version = "0.50.0"
+version = "0.62.0"
 description = "Portunia Assistance : programme de la personne aidée (assistance à distance)"
 
 edition = "2021"
+
+[features]
+# Modes d'essai (serveur RDP direct, accord automatique, démonstration) : jamais dans la version publiée.
+essai = []
 
 [dependencies]
 ironrdp-server = "0.13"

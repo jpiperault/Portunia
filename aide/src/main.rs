@@ -7,6 +7,10 @@
 //!   portunia-assistance --ecoute 127.0.0.1:13390                            essai : serveur RDP local direct
 //! Options d'essai : --mire (mire au lieu de l'écran), --saisie-notee (souris et clavier notés,
 //! pas rejoués).
+//!
+//! Les modes d'essai (--ecoute, --console, --accord-auto, --demo, --mire, --saisie-notee) n'existent
+//! qu'avec la fonctionnalité Cargo « essai » : la version publiée ne peut pas être détournée en
+//! serveur de prise en main sans accord (`cargo build --features essai` pour les essais).
 
 mod display;
 mod input;
@@ -15,7 +19,9 @@ mod ui;
 
 use std::{net::SocketAddr, sync::Arc};
 
-use anyhow::{Context, Result};
+#[cfg(feature = "essai")]
+use anyhow::Context;
+use anyhow::Result;
 use ironrdp_server::{
     tokio_rustls::{
         rustls::{
@@ -53,10 +59,12 @@ fn server(opts: &Options, addr: SocketAddr, control: bool) -> Result<RdpServer> 
 }
 
 /// Fenêtre provisoire en ligne de commande (la vraie fenêtre vient ensuite).
+#[cfg(feature = "essai")]
 struct Console {
     auto: bool,
 }
 
+#[cfg(feature = "essai")]
 impl relay::Ui for Console {
     fn code(&mut self, code: &str) {
         eprintln!("CODE {code}");
@@ -119,17 +127,20 @@ fn main() -> Result<()> {
     // Diagnostic : RUST_LOG=ironrdp=debug.
     tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::from_default_env()).with_writer(std::io::stderr).init();
     let _ = rustls::crypto::ring::default_provider().install_default();
-    let opts = Options { source: if flag("--mire") { display::Source::Pattern } else { display::Source::Screen }, noted: flag("--saisie-notee") };
+    let essai = cfg!(feature = "essai");
+    let opts = Options { source: if essai && flag("--mire") { display::Source::Pattern } else { display::Source::Screen }, noted: essai && flag("--saisie-notee") };
     let any: SocketAddr = ([127, 0, 0, 1], 0).into();
     let runtime = || tokio::runtime::Builder::new_current_thread().enable_all().build();
 
     // Essai : serveur RDP local direct.
+    #[cfg(feature = "essai")]
     if let Some(addr) = value("--ecoute") {
         let addr: SocketAddr = addr.parse().context("adresse d'écoute")?;
         eprintln!("Portunia Assistance : serveur RDP d'essai sur {addr}");
         return runtime()?.block_on(async { server(&opts, addr, true)?.run().await });
     }
     // Essai en ligne de commande, sans fenêtre.
+    #[cfg(feature = "essai")]
     if flag("--console") {
         let url = value("--relais").context("--relais attendu")?;
         let mut ui = Console { auto: flag("--accord-auto") };
@@ -138,6 +149,7 @@ fn main() -> Result<()> {
         return runtime()?.block_on(local.run_until(relay::run(&url, None, &mut ui, |control| server(&opts, any, control).expect("serveur RDP"), stop)));
     }
     // Démonstration : les écrans à la suite, chacun photographié (fenêtre seule) dans le dossier donné.
+    #[cfg(feature = "essai")]
     if let Some(dir) = value("--demo") {
         let (stop_tx, _stop) = tokio::sync::watch::channel(false);
         std::thread::spawn(move || ui::demo(&dir));

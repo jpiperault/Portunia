@@ -827,6 +827,7 @@ pub fn license_status(state: State<'_, AppState>) -> crate::license::LicenseStat
 
 #[tauri::command]
 pub fn license_activate(state: State<'_, AppState>, text: String) -> CmdResult<crate::license::LicenseStatus> {
+    state.unlocked()?;
     let mut license = state.license.lock().unwrap();
     license.activate(&text).map_err(full)?;
     Ok(license.status())
@@ -834,6 +835,7 @@ pub fn license_activate(state: State<'_, AppState>, text: String) -> CmdResult<c
 
 #[tauri::command]
 pub fn license_remove(state: State<'_, AppState>) -> CmdResult<crate::license::LicenseStatus> {
+    state.unlocked()?;
     let mut license = state.license.lock().unwrap();
     license.remove().map_err(full)?;
     Ok(license.status())
@@ -1027,6 +1029,10 @@ pub fn monitor_alerts_allowed(state: State<'_, AppState>) -> bool {
 
 #[tauri::command]
 pub fn folder_colors(state: State<'_, AppState>) -> HashMap<String, String> {
+    // Verrouillé : les noms des dossiers ne sont pas montrés.
+    if state.unlocked().is_err() {
+        return HashMap::new();
+    }
     state.store.lock().unwrap().folder_colors()
 }
 
@@ -1278,7 +1284,8 @@ fn jump_values(state: &AppState, hop: &str, visited: &mut Vec<String>) -> CmdRes
 // ---------- Clés SSH ----------
 
 #[tauri::command]
-pub fn ssh_keys_list() -> CmdResult<Vec<keys::KeyInfo>> {
+pub fn ssh_keys_list(state: State<'_, AppState>) -> CmdResult<Vec<keys::KeyInfo>> {
+    state.unlocked()?;
     keys::list().map_err(full)
 }
 

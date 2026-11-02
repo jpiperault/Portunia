@@ -4,6 +4,7 @@ import { api, Comparison, errorText, remoteFiles, SyncDiff, TransferProgress } f
 import { h, icon } from './dom';
 import { formatDate, formatSize } from './files';
 import { t } from './i18n';
+import { windowsName } from './localpanel';
 import { proChip } from './security';
 import type { TransferQueue } from './transfers';
 
@@ -32,7 +33,6 @@ interface Row {
 }
 
 const DEFAULT_EXCLUDE = '.git/  node_modules/  Thumbs.db  desktop.ini';
-const windowsName = (name: string) => name.replace(/[<>:"/\\|?*]/g, '_');
 
 /** Action proposée pour un écart, selon le sens choisi. */
 function plan(d: SyncDiff, sense: Sense, deleteExtra: boolean): Omit<Row, 'diff'> {

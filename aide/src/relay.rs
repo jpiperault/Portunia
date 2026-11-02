@@ -24,6 +24,13 @@ pub trait Ui: Send {
 const TRIES: u32 = 3;
 
 /// Une assistance : se met en attente sur le relais, puis sert l'écran au dépanneur.
+/// Nom du serveur d'assistance, tiré de son adresse (wss://acces.exemple.fr/assistance/relais).
+fn server_host(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    host.rsplit_once('@').map_or(host, |(_, h)| h)
+}
+
 pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl Fn(bool) -> crate::Server, mut stop: tokio::sync::watch::Receiver<bool>) -> Result<()> {
     let mut failures = 0;
     loop {
@@ -82,8 +89,10 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
                 continue;
             }
         };
-        // Accord de la personne.
-        let Some(control) = ui.consent(&who) else {
+        // Accord de la personne. Le nom vient du relais : l'adresse du serveur, elle, ne peut pas
+        // être choisie par un escroc qui n'a pas ce nom de domaine.
+        let asking = format!("{who}\n{} {}", crate::t("through the server", "par le serveur"), server_host(url));
+        let Some(control) = ui.consent(&asking) else {
             let msg = sealer.seal(Kind::Control, json!({ "type": "refus" }).to_string().as_bytes());
             ws.send(Message::Binary(msg.into())).await?;
             let _ = ws.close(None).await;
@@ -147,5 +156,16 @@ where
             Some(Ok(Message::Text(_))) | Some(Ok(Message::Ping(_))) | Some(Ok(Message::Pong(_))) => {}
             _ => bail!(crate::t("Connection lost while checking the code", "Connexion perdue pendant la vérification du code")),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_serveur {
+    use super::server_host;
+
+    #[test]
+    fn adresse_du_serveur() {
+        assert_eq!(server_host("wss://acces.exemple.fr/assistance/relais"), "acces.exemple.fr");
+        assert_eq!(server_host("wss://x:y@pirate.fr:8443/a?b"), "pirate.fr:8443");
     }
 }

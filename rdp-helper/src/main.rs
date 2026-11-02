@@ -45,6 +45,9 @@ struct Settings {
     password: String,
     width: u16,
     height: u16,
+    /// N'accepter que NLA (CredSSP) : le serveur ne peut pas imposer le TLS simple.
+    #[serde(default, rename = "nlaOnly")]
+    nla_only: bool,
     /// Passage RDCleanPath d'une Gate (mode enregistré).
     #[serde(default)]
     rdcleanpath: Option<RdCleanPath>,
@@ -123,6 +126,9 @@ async fn run() -> Result<()> {
         .with_platform(ironrdp_pdu::rdp::capability_sets::MajorPlatformType::WINDOWS);
     if !s.domain.is_empty() {
         builder = builder.with_domain(s.domain.clone());
+    }
+    if s.nla_only {
+        builder = builder.with_tls(false);
     }
     if let Some(rdcp) = &s.rdcleanpath {
         let url = rdcp.url.parse().map_err(|e| anyhow::anyhow!("adresse du passage invalide : {e}"))?;
@@ -290,7 +296,9 @@ fn handle_other(event: RdpOutputEvent) -> bool {
 /// Messages d'erreur plus parlants pour les cas courants.
 fn explain(raw: &str) -> String {
     let lower = raw.to_lowercase();
-    if lower.contains("logon") || lower.contains("credential") || lower.contains("credssp") || lower.contains("0xc000006d") || lower.contains("authentication") {
+    if lower.contains("client advertised") {
+        format!("Le serveur refuse NLA. S'il s'agit d'un serveur de confiance qui ne le propose pas (xrdp, ancien Windows), cochez « Accepter les serveurs sans NLA » dans la session. ({raw})")
+    } else if lower.contains("logon") || lower.contains("credential") || lower.contains("credssp") || lower.contains("0xc000006d") || lower.contains("authentication") {
         format!("Identifiant ou mot de passe refusé. Pour un compte de domaine, écrivez DOMAINE\\utilisateur. ({raw})")
     } else if lower.contains("connection refused") || lower.contains("10061") || lower.contains("tcp connect") {
         format!("Connexion impossible : serveur injoignable, Bureau à distance désactivé ou port fermé ({raw})")

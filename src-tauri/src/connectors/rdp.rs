@@ -47,6 +47,13 @@ impl Connector for RdpConnector {
                 )
                 .default("tab"),
                 Field::new("password", t!("Password", "Mot de passe"), FieldKind::Secret).show_if("client", "tab").hidden_by("credential"),
+                Field::new(
+                    "allowNoNla",
+                    t!("Accept servers without NLA (xrdp, old systems): less secure", "Accepter les serveurs sans NLA (xrdp, anciens systèmes) : moins sûr"),
+                    FieldKind::Bool,
+                )
+                .default(false)
+                .show_if("client", "tab"),
                 Field::new("fullscreen", t!("Full screen", "Plein écran"), FieldKind::Bool).default(false).show_if("client", "mstsc"),
                 Field::new("multimon", t!("Use all screens", "Utiliser tous les écrans"), FieldKind::Bool)
                     .default(false)
@@ -117,6 +124,9 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
         "host": host, "port": port, "username": username, "domain": domain, "password": password,
         "width": ctx.cols, "height": ctx.rows,
     });
+    // NLA exigé par défaut : un faux serveur ne peut pas faire passer la connexion en TLS simple,
+    // où le mot de passe serait envoyé au serveur lui-même.
+    settings["nlaOnly"] = json!(!ctx.bool("allowNoNla"));
     // Gate, mode enregistré : passage RDCleanPath avec un jeton à usage unique.
     if let (Some(url), Some(token)) = (ctx.str("rdcleanpathUrl"), ctx.raw("rdcleanpathToken")) {
         settings["rdcleanpath"] = json!({ "url": url, "token": token });

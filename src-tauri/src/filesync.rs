@@ -136,6 +136,12 @@ async fn walk_remote(files: &dyn RemoteFiles, root: &str, patterns: &[String], e
     while let Some(rel) = stack.pop() {
         let dir = if rel.is_empty() { root.to_string() } else { format!("{}/{rel}", root.trim_end_matches('/')) };
         for entry in files.list(dir).await? {
+            // Un serveur malveillant peut renvoyer « .. » ou un nom avec « / » : le chemin relatif
+            // sortirait du dossier de ce PC à la récupération. Ces noms sont ignorés.
+            if !safe_name(&entry.name) {
+                *excluded_count += 1;
+                continue;
+            }
             let child = if rel.is_empty() { entry.name.clone() } else { format!("{rel}/{}", entry.name) };
             if excluded(patterns, &child, entry.is_dir) {
                 *excluded_count += 1;
@@ -151,6 +157,11 @@ async fn walk_remote(files: &dyn RemoteFiles, root: &str, patterns: &[String], e
         }
     }
     Ok(tree)
+}
+
+/// Nom d'un seul élément, sans moyen de remonter ni de changer de dossier.
+fn safe_name(name: &str) -> bool {
+    !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\']) && !name.chars().any(char::is_control)
 }
 
 /// Mêmes dates, à la précision près : 2 s, ou la minute quand un serveur FTP ne donne pas les secondes.
@@ -296,6 +307,31 @@ mod tests {
         let (diffs, _) = compare(&local, &remote, true);
         assert!(diffs.iter().any(|d| d.path == "app.js" && d.status == Status::Different));
         assert!(!diffs.iter().any(|d| d.path == "site/index.html"));
+    }
+
+    /// Serveur malveillant : les noms qui sortiraient du dossier ne remontent pas dans les écarts.
+    #[tokio::test]
+    async fn noms_piegés_du_serveur() {
+        use crate::connector::{BoxFuture, Progress, RemoteEntry};
+        struct Evil;
+        impl RemoteFiles for Evil {
+            fn home(&self) -> BoxFuture<'_, String> { Box::pin(async { Ok("/".into()) }) }
+            fn list(&self, path: String) -> BoxFuture<'_, Vec<RemoteEntry>> {
+                Box::pin(async move {
+                    let e = |name: &str| RemoteEntry { name: name.into(), path: format!("{path}/{name}"), is_dir: false, is_link: false, size: 1, modified: None, permissions: None };
+                    Ok(vec![e(".."), e("../../evil.txt"), e("..\\evil.txt"), e("a\nb"), e("ok.txt")])
+                })
+            }
+            fn download(&self, _: String, _: std::path::PathBuf, _: Progress) -> BoxFuture<'_, ()> { Box::pin(async { Ok(()) }) }
+            fn upload(&self, _: std::path::PathBuf, _: String, _: Progress) -> BoxFuture<'_, ()> { Box::pin(async { Ok(()) }) }
+            fn mkdir(&self, _: String) -> BoxFuture<'_, ()> { Box::pin(async { Ok(()) }) }
+            fn remove(&self, _: String, _: bool) -> BoxFuture<'_, ()> { Box::pin(async { Ok(()) }) }
+            fn rename(&self, _: String, _: String) -> BoxFuture<'_, ()> { Box::pin(async { Ok(()) }) }
+        }
+        let mut excluded = 0;
+        let tree = walk_remote(&Evil, "/srv", &[], &mut excluded).await.unwrap();
+        assert_eq!(tree.keys().collect::<Vec<_>>(), ["ok.txt"]);
+        assert_eq!(excluded, 4);
     }
 
     #[test]

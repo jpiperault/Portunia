@@ -8,7 +8,7 @@ Portunia s'appelait **Termoria** jusqu'à la version 0.39. La mise à jour vers 
 
 ## Installer Portunia
 
-Téléchargez `Portunia_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Portunia-releases/releases) et lancez-le (installation pour l'utilisateur courant, sans droits administrateur). Portunia se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
+Téléchargez `Portunia_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Portunia-releases/releases) et lancez-le. L'installateur demande s'il faut installer pour vous seul (sans droits administrateur) ou pour tous les utilisateurs du PC (une demande administrateur) ; une mise à jour garde le mode choisi la première fois. Portunia se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
 
 ## Installer les outils de développement (une seule fois)
 
@@ -50,14 +50,19 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |
 | Shell local | Onglet terminal | PowerShell 7, Windows PowerShell, Invite de commandes, distributions WSL, Git Bash et shells personnalisés, via la console de Windows Terminal livrée avec Portunia (OpenConsole, plus rapide que celle du système : écho de la frappe 47 → 17 ms, sorties volumineuses 11 → 38 Mo/s). Section « Ce PC », menu « + », Ctrl+Maj+T. |
-| Gate (extension) | Onglet terminal | Section « Gates » de la barre latérale : on ajoute une Gate [Portunia Gate](https://github.com/jpiperault/Portunia-Gate) (empreinte du certificat vérifiée, mot de passe et code, première connexion avec mot de passe provisoire et enrôlement du code par code QR). Les serveurs autorisés s'affichent par dossier ; chaque ouverture utilise un jeton à usage unique, sans retaper le code. Modes coffre (compte fourni par la Gate), enregistré (identifiants demandés dans le terminal) et rebond (de bout en bout). Serveurs Windows (badge RDP) : ouverts dans un onglet Bureau à distance à travers la Gate, en rebond (Gate 0.6, connexion chiffrée de bout en bout) ou enregistré (Gate 0.8, passage RDCleanPath : la Gate relaie et enregistre la session sans voir le mot de passe) ; identifiants Windows demandés à l'ouverture et jamais gardés. Signale les sessions qui contournent la Gate. Dans Portunia Équipes : administration de la Gate (serveurs et coffre, comptes, groupes, règles, réglages) et audit (menu « Audit » de la Gate) : relecture des sessions comme une vidéo, avec la frappe en sous-titres, les pauses sautées, les commandes sensibles repérées, la recherche dans toutes les sessions, les mots de passe tapés masqués (révélables par un administrateur), l’export .cast ou en transcription, et le journal vérifié. Option de la Gate : chaque compte relit ses propres sessions (« Mes sessions »). Portail web de la Gate (Portunia Gate 0.7 et suivants) : Administrer › Portail web, un interrupteur pour l’activer ou le couper (les sessions web en cours se ferment), l’adresse publique, le groupe autorisé, les durées, le copier-coller, les clés Turnstile, l’état du tunnel Cloudflare et le bouton « Fermer toutes les sessions web ». Activable dans Extensions. Installation de la Gate (assistant `installer.sh`) et ajout dans Portunia pas à pas : [README de Portunia Gate](https://github.com/jpiperault/Portunia-Gate/blob/main/README.fr.md#installer). |
+| Gate (extension) | Onglet terminal | Section « Gates » de la barre latérale : on ajoute une Gate [Portunia Gate](https://github.com/jpiperault/Portunia-Gate) (empreinte du certificat vérifiée, mot de passe et code, première connexion avec mot de passe provisoire et enrôlement du code par code QR). Les serveurs autorisés s'affichent par dossier ; chaque ouverture utilise un jeton à usage unique, sans retaper le code. Modes coffre (compte fourni par la Gate), enregistré (identifiants demandés dans le terminal) et rebond (de bout en bout). Serveurs Windows (badge RDP) : ouverts dans un onglet Bureau à distance à travers la Gate, en rebond (Gate 0.6, connexion chiffrée de bout en bout) ou enregistré (Gate 0.8, passage RDCleanPath : la Gate relaie et enregistre la session sans voir le mot de passe) ; identifiants Windows demandés à l'ouverture et jamais gardés. Signale les sessions qui contournent la Gate. Dans Portunia Équipes : administration de la Gate (serveurs et coffre, comptes, groupes, règles, réglages) et audit (menu « Audit » de la Gate) : relecture des sessions comme une vidéo, avec la frappe en sous-titres, les pauses sautées, les commandes sensibles repérées, la recherche dans toutes les sessions, les mots de passe tapés masqués (révélables par un administrateur), l’export .cast ou en transcription, et le journal vérifié. Option de la Gate : chaque compte relit ses propres sessions (« Mes sessions »). Portail web de la Gate (Portunia Gate 0.7 et suivants) : Administrer › Portail web, un interrupteur pour l’activer ou le couper (les sessions web en cours se ferment), l’adresse publique, le groupe autorisé, les durées, le copier-coller, les clés Turnstile et le bouton « Fermer toutes les sessions web ». Modes d'exposition (interne ou VPN, tunnel Cloudflare lancé par la Gate, HTTPS direct, proxy ou WAF, relais dédié en DMZ), écoute HTTPS, certificat du portail (PEM ou PFX importé, ou Let's Encrypt avec renouvellement) et état du durcissement facultatif de la Gate se règlent depuis ce même écran (Gate 0.17 à 0.21). Activable dans Extensions. Installation de la Gate (assistant `installer.sh`) et ajout dans Portunia pas à pas : [README de Portunia Gate](https://github.com/jpiperault/Portunia-Gate/blob/main/README.fr.md#installer). |
 | Assistance à distance (extension, demande Portunia Gate 0.11) | Onglet Bureau à distance | Prendre la main sur le PC d'un proche ou d'un client. La personne va sur la page de la Gate (`https://votre-portail/assistance`), télécharge **Portunia Assistance** (sans installation ni compte) et vous lit un code à 9 chiffres ; vous le tapez dans « Assistance à distance » de la barre latérale. Elle voit votre nom et choisit : voir seulement, ou voir et contrôler. Un cadre et une barre « Arrêter » restent sur son écran ; Échap trois fois arrête aussi. La Gate ne fait que relayer : la liaison est chiffrée de bout en bout à partir du code (SPAKE2, ChaCha20-Poly1305), et le code ne sert qu'une fois. Administrer › Assistance : interrupteur, groupe des dépanneurs, durée maximale, journal d'audit de chaque assistance. |
-| FTP / FTPS | Onglet fichiers | Explorateur en pleine largeur (envoi, téléchargement, glisser-déposer, renommage, suppression). FTPS explicite par défaut, avec reprise de session TLS (exigée par FileZilla Server et vsftpd) et certificats vérifiés par Windows ; certificat auto-signé accepté sur demande. Connexion rouverte d'elle-même après inactivité. `ftps://user@hôte` en connexion rapide. |
-| Stockage S3 (Pro) | Onglet fichiers | Amazon S3 et services compatibles (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…) : compartiments, dossiers, envoi et téléchargement (jusqu'à 5 Go par fichier), renommage et suppression de dossiers entiers. Adressage par chemin pour MinIO / Ceph. Client intégré (signature AWS SigV4), sans le SDK d'Amazon. |
+| SFTP (catalogue) | Onglet fichiers à deux volets | Fichiers par SSH sans terminal : mêmes authentifications que SSH (clé, agent, mot de passe, identifiants partagés), rebond et Gate, dossiers de départ sur le serveur et sur ce PC. Clic droit sur une session SSH › « Ouvrir en fichiers seulement (SFTP) » reprend ses réglages. À installer depuis Extensions › Catalogue. |
+| FTP / FTPS (catalogue) | Onglet fichiers à deux volets | FTPS explicite par défaut, FTPS implicite (port 990), mode passif ou actif, noms en Windows-1252 pour les anciens serveurs. Reprise de session TLS (exigée par FileZilla Server et vsftpd), certificats vérifiés par Windows ; certificat auto-signé accepté sur demande. Connexion rouverte d'elle-même après inactivité. `ftps://user@hôte` en connexion rapide. Installée d'office pour qui a déjà des sessions FTP. |
+| Stockage S3 (Pro) | Onglet fichiers à deux volets | Amazon S3 et services compatibles (MinIO, Scaleway, OVH, Wasabi, Cloudflare R2…) : compartiments, dossiers, envoi et téléchargement (jusqu'à 5 Go par fichier), renommage et suppression de dossiers entiers. Adressage par chemin pour MinIO / Ceph. Client intégré (signature AWS SigV4), sans le SDK d'Amazon. |
 | Port série | Onglet terminal | Ports COM détectés automatiquement, vitesse, parité, contrôle de flux, fin de ligne. |
 
 Autres fonctions :
 
+- sessions de fichiers à deux volets (SFTP, FTP, S3) : ce PC à gauche, le serveur à droite, → / F5 pour envoyer et ← / F6 pour récupérer, sélection multiple, fichiers masqués, droits Unix, file de transferts avec débit, pause et règle « si le fichier existe » (demander, remplacer si plus récent, remplacer, ignorer) ; les copies gardent la date de l'original (SFTP, FTP avec MFMT) ;
+- comparer et synchroniser deux dossiers (Pro) : comparaison récursive par date et taille ou taille seule, motifs d'exclusion, envoi, récupération ou les deux sens, écarts à trancher signalés, suppression facultative sur le serveur, rien n'est copié avant confirmation ;
+- catalogue d'extensions (page Extensions) : SFTP et FTP s'installent en un clic ; WebDAV, partages Windows, Azure Blob et Google Cloud Storage suivront ;
+- barre latérale : rail d'activités (Sessions, Gates, Ce PC, outils), puces de filtre par protocole et état, sessions épinglées et récentes, onglet « Toutes les sessions en tableau » (tri, filtres, sélection multiple) ; barre de session sur une ligne, repliée dans un menu « ⋯ » sur petit écran, panneaux latéraux (fichiers, notes, serveur, conteneurs) propres à chaque onglet et fermés à l'ouverture d'une session ;
 - fenêtre « Connexion rapide » (bouton à côté de « Nouvelle session », Ctrl+Maj+Q, ou une adresse seule comme `10.0.0.12` dans la recherche puis Entrée) : seule l’adresse est obligatoire ; protocole, identifiant, port, mot de passe, clé et rebond sont des options facultatives. En SSH, ce qui manque se tape dans le terminal comme avec PuTTY (`login as:`, puis le mot de passe masqué si la clé et l’agent sont refusés). Rien n’est enregistré ;
 - session SSH enregistrée sans identifiant ou sans mot de passe : ils se tapent dans le terminal à chaque connexion (Ctrl+C annule) ;
 - connexion rapide sans créer de session : tapez `ssh deploy@10.0.1.12`, `rdp srv-01`, `vnc nas:5901`, `https://nas:5001` ou `COM3@9600` dans la recherche puis Entrée, ou dans la palette (Ctrl+Maj+O). En SSH, clé par défaut puis agent, sinon le mot de passe est demandé (et jamais enregistré). Historique des connexions récentes, bouton « Enregistrer comme session » ;
@@ -111,8 +116,8 @@ Raccourcis : Ctrl+Maj+N nouvelle session, Ctrl+Maj+W fermer l'onglet, Ctrl+Maj+F
 src-tauri/src/       cœur (Rust)
   connector.rs       contrat d'une extension (trait Connector, manifeste, champs, vues)
   registry.rs        liste des extensions disponibles
-  connectors/        une extension par fichier : ssh, rdp, vnc, web, telnet, serial, local
-                     (+ sftp.rs : fichiers, forward.rs : tunnels)
+  connectors/        une extension par fichier : ssh (et SFTP seul), rdp, vnc, web, telnet, serial,
+                     ftp, s3, local (+ sftp.rs : fichiers par SSH, forward.rs : tunnels)
   commands.rs        commandes appelées par l'interface
   store.rs           sessions, dossiers, couleurs et commandes enregistrés (JSON)
   secrets.rs         Gestionnaire d'identifiants Windows
@@ -122,13 +127,20 @@ src-tauri/src/       cœur (Rust)
   recording.rs       enregistrement des sessions (asciicast, texte)
   monitor.rs         supervision (test de connexion TCP)
   transfer.rs        transferts de dossiers entiers, édition de fichiers distants
-  Gate.rs         Gates (API à certificat épinglé, jetons à usage unique)
+  localfs.rs         fichiers de ce PC (volet gauche des sessions de fichiers)
+  filesync.rs        comparer un dossier de ce PC et un dossier du serveur (Pro)
+  gate.rs            Gates (API à certificat épinglé, jetons à usage unique)
 src/                 interface (TypeScript, sans framework)
   main.ts            arbre, onglets, écran partagé, barre d'outils
   dialog.ts          formulaire généré à partir du manifeste de l'extension
   terminal.ts        vue terminal (xterm.js)
   screen.ts          vue écran distant (canvas, clavier, souris)
-  files.ts           explorateur de fichiers du serveur
+  files.ts           explorateur de fichiers du serveur (panneau latéral, ou volet droit)
+  filesview.ts       sessions de fichiers à deux volets (SFTP, FTP, S3)
+  localpanel.ts      volet « Ce PC »
+  transfers.ts       file de transferts
+  syncdialog.ts      fenêtre « Comparer et synchroniser » (Pro)
+  library.ts         onglet « Toutes les sessions en tableau »
   tree.ts            arbre des sessions (dossiers, glisser-déposer)
   menu.ts            menu contextuel
   settings.ts        paramètres de l'interface
@@ -141,8 +153,8 @@ src/                 interface (TypeScript, sans framework)
   monitoring.ts      supervision : pastilles, vue d'ensemble, alertes
   theme.ts           thèmes, palettes du terminal, couleurs de dossier
   localshells.ts     shells locaux : section « Ce PC » et réglages
-  extensions.ts      page Extensions
-  Gate.ts         extension Portunia Gate : barre latérale, connexion, administration
+  extensions.ts      page Extensions et catalogue
+  gate.ts            extension Portunia Gate : barre latérale, connexion, administration
   audit.ts           audit Portunia Gate : sessions et journal
   assist.ts          assistance à distance : fenêtre « Nouvelle assistance » (code)
   auditplayer.ts     lecteur des sessions (sous-titres, repères, pauses sautées)
@@ -161,7 +173,7 @@ screenshot.html      démonstration avec données fictives pour les captures d'�
 Le cœur ne connaît aucun protocole. Une extension :
 
 1. décrit ses champs (`Manifest.fields`) : l'interface génère le formulaire toute seule ;
-2. indique sa vue : `terminal`, `screen` (écran distant dans un onglet), `desktop` (application externe) ou `web` ;
+2. indique sa vue : `terminal`, `screen` (écran distant dans un onglet), `desktop` (application externe), `web` ou `files` (onglet fichiers à deux volets) ;
 3. implémente `connect()`, qui renvoie soit une connexion terminal, soit « ouvert ailleurs ».
 
 ### Ajouter un protocole
@@ -176,5 +188,6 @@ Le cœur ne connaît aucun protocole. Une extension :
 
 ## Pistes pour la suite
 
-- Extensions externes chargées sans recompiler (modules WASM).
+- Extensions externes téléchargées depuis le catalogue et chargées sans recompiler (modules WASM signés et isolés).
+- Versions Linux, puis macOS.
 

@@ -355,6 +355,7 @@ pub async fn gate_login(state: State<'_, AppState>, request: LoginRequest) -> Cm
 
 #[tauri::command]
 pub async fn gate_logout(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.unlocked()?;
     let mut b = find(&state.data_dir, &id).map_err(full)?;
     if let Ok(t) = token(&b) {
         let _ = call(&b.host, b.api_port, &b.api_fingerprint, Some(&t), reqwest::Method::DELETE, "/connexion", None).await;
@@ -366,6 +367,7 @@ pub async fn gate_logout(state: State<'_, AppState>, id: String) -> CmdResult<()
 
 #[tauri::command]
 pub async fn gate_remove(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    state.unlocked()?;
     let _ = gate_logout(state.clone(), id.clone()).await;
     let b = find(&state.data_dir, &id).map_err(full)?;
     let _ = crate::secrets::delete(&b.secret_id(), "mot_de_passe");
@@ -763,6 +765,9 @@ pub async fn gate_assist(
     values.insert("host".into(), json!("127.0.0.1"));
     values.insert("port".into(), json!(port));
     values.insert("client".into(), json!("tab"));
+    // Assistance : pont local chiffré de bout en bout, sans mot de passe ; le programme de la
+    // personne aidée ne propose pas NLA.
+    values.insert("allowNoNla".into(), json!(true));
     let name = if control {
         t!(format!("Assistance · {}", code.display()), format!("Assistance · {}", code.display()))
     } else {
