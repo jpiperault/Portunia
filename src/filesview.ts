@@ -7,6 +7,8 @@ import { FilePanel } from './files';
 import { LocalPanel, localJoin } from './localpanel';
 import type { Opener, TermState } from './terminal';
 import { t } from './i18n';
+import { proChip } from './security';
+import { openSyncDialog } from './syncdialog';
 import { ExistsRule, TransferQueue } from './transfers';
 
 /** Nom de fichier accepté par Windows (« : », « ? »… remplacés). */
@@ -40,6 +42,7 @@ export class DualFiles {
     this.el = h('div', { class: 'dual-files' },
       h('div', { class: 'dual-bar' },
         this.hiddenBtn,
+        h('button', { type: 'button', class: 'btn sm', onclick: () => this.synchronise() }, icon('refresh', 14), t('Compare and synchronise', 'Comparer et synchroniser'), proChip('fileSync')),
         h('span', { class: 'grow' }),
         h('span', { class: 'muted small' }, t('F5 upload · F6 download · Ctrl+click to select several', 'F5 envoyer · F6 récupérer · Ctrl+clic pour en choisir plusieurs'))),
       h('div', { class: 'dual-panes' },
@@ -55,6 +58,17 @@ export class DualFiles {
       else if (e.key === 'F6') { e.preventDefault(); this.download(); }
     });
     this.local.start(start.local);
+  }
+
+  /** Fenêtre « Comparer et synchroniser » (Pro) sur les deux dossiers ouverts. */
+  private synchronise() {
+    const id = this.remote.connection;
+    if (!id) return this.toast(t('Server disconnected.', 'Serveur déconnecté.'), 'error');
+    if (!this.local.dir) return this.toast(t('Open a folder of this PC first (left pane).', 'Ouvrez d\'abord un dossier de ce PC (volet de gauche).'));
+    openSyncDialog({
+      connectionId: id, localDir: this.local.dir, remoteDir: this.remote.dir, queue: this.queue, toast: this.toast,
+      done: () => { this.local.load(this.local.dir); this.remote.load(this.remote.dir); },
+    });
   }
 
   /** Dépôt depuis l'Explorateur Windows : seulement sur le volet du serveur. */
@@ -112,7 +126,7 @@ export class DualFiles {
       const local = localJoin(dir, windowsName(e.name));
       this.queue.add({
         name: e.isDir ? `${e.name}/` : e.name, direction: 'down', target: dir,
-        run: (cb) => (e.isDir ? remoteFiles.downloadDir(id, e.path, local, cb) : api.fsDownload(id, e.path, local, cb)),
+        run: (cb) => (e.isDir ? remoteFiles.downloadDir(id, e.path, local, cb) : api.fsDownload(id, e.path, local, cb, e.modified)),
         after: () => this.local.refreshIf(dir),
       });
     }

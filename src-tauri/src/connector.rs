@@ -322,6 +322,11 @@ pub trait RemoteFiles: Send + Sync {
     /// Supprime un fichier, ou un dossier et tout son contenu.
     fn remove(&self, path: String, is_dir: bool) -> BoxFuture<'_, ()>;
     fn rename(&self, from: String, to: String) -> BoxFuture<'_, ()>;
+    /// Change la date de modification (secondes Unix), pour qu'une copie garde celle de l'original.
+    /// Sans effet si le protocole ne le permet pas.
+    fn set_modified(&self, _path: String, _secs: u64) -> BoxFuture<'_, ()> {
+        Box::pin(async { Ok(()) })
+    }
 }
 
 pub enum Outcome {

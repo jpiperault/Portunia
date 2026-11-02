@@ -48,12 +48,14 @@ pub enum Feature {
     Containers,
     /// Stockage objet S3.
     CloudStorage,
+    /// Comparer et synchroniser deux dossiers (sessions de fichiers).
+    FileSync,
     /// Administration d'une Gate depuis Portunia.
     GateAdmin,
 }
 
 impl Feature {
-    pub const ALL: [Feature; 10] = [
+    pub const ALL: [Feature; 11] = [
         Feature::SessionRecording,
         Feature::MonitoringAlerts,
         Feature::Sync,
@@ -63,6 +65,7 @@ impl Feature {
         Feature::MultiExec,
         Feature::Containers,
         Feature::CloudStorage,
+        Feature::FileSync,
         Feature::GateAdmin,
     ];
 
@@ -86,6 +89,7 @@ impl Feature {
             Feature::Containers => t!("Docker and Kubernetes containers", "Conteneurs Docker et Kubernetes"),
             Feature::CloudStorage => t!("S3 storage", "Stockage S3"),
             Feature::GateAdmin => t!("Gate administration", "Administration des Gates"),
+            Feature::FileSync => t!("Compare and synchronise folders", "Comparer et synchroniser des dossiers"),
         }
     }
 }

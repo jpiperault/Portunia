@@ -2,7 +2,7 @@
 
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
@@ -454,7 +454,7 @@ pub fn disconnect(state: State<'_, AppState>, connection_id: String) {
 
 // ---------- Explorateur de fichiers distant ----------
 
-fn files_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteFiles>> {
+pub(crate) fn files_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteFiles>> {
     let connections = state.connections.lock().unwrap();
     let connection = connections.get(connection_id).ok_or(t!("Session closed", "Session fermée"))?;
     connection
@@ -497,13 +497,20 @@ pub async fn fs_download(
     remote: String,
     local: String,
     on_progress: Channel<TransferProgress>,
+    modified: Option<u64>,
 ) -> CmdResult<()> {
     state.unlocked()?;
     let files = files_of(&state, &connection_id)?;
     let progress = Arc::new(move |done, total| {
         let _ = on_progress.send(TransferProgress { done, total });
     });
-    files.download(remote, PathBuf::from(local), progress).await.map_err(full)
+    files.download(remote, PathBuf::from(&local), progress).await.map_err(full)?;
+    // La copie garde la date du serveur : une comparaison suivante la voit identique.
+    if let Some(secs) = modified {
+        let time = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
+        let _ = std::fs::File::options().write(true).open(&local).and_then(|f| f.set_modified(time));
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -519,7 +526,13 @@ pub async fn fs_upload(
     let progress = Arc::new(move |done, total| {
         let _ = on_progress.send(TransferProgress { done, total });
     });
-    files.upload(PathBuf::from(local), remote, progress).await.map_err(full)
+    let modified = transfer::modified(Path::new(&local)).map(|(time, _)| time);
+    files.upload(PathBuf::from(local), remote.clone(), progress).await.map_err(full)?;
+    // Le fichier envoyé garde la date de l'original, si le protocole le permet.
+    if let Some(secs) = modified.and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()) {
+        let _ = files.set_modified(remote, secs.as_secs()).await;
+    }
+    Ok(())
 }
 
 #[tauri::command]

@@ -12,7 +12,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use suppaftp::{list::ListParser, types::{FileType, Mode}, Encoding, FtpError, RustlsConnector, RustlsFtpStream};
+use suppaftp::{list::ListParser, types::{FileType, Mode}, Encoding, FtpError, RustlsConnector, RustlsFtpStream, Status};
 
 use crate::connector::*;
 use crate::tls::tls_config;
@@ -334,6 +334,17 @@ impl RemoteFiles for FtpFiles {
     fn rename(&self, from: String, to: String) -> BoxFuture<'_, ()> {
         let inner = self.inner.clone();
         blocking(move || inner.with(|ftp| Ok(ftp.rename(&from, &to)?)))
+    }
+
+    /// MFMT (proposé par la plupart des serveurs récents) ; ignoré par les autres.
+    fn set_modified(&self, path: String, secs: u64) -> BoxFuture<'_, ()> {
+        let inner = self.inner.clone();
+        blocking(move || {
+            let Some(time) = chrono::DateTime::from_timestamp(secs as i64, 0) else { return Ok(()) };
+            let line = format!("MFMT {} {path}", time.format("%Y%m%d%H%M%S"));
+            let _ = inner.with(|ftp| Ok(ftp.custom_command(&line, &[Status::File])?));
+            Ok(())
+        })
     }
 }
 

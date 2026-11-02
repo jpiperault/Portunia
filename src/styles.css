@@ -942,3 +942,27 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
   .dual-mid { flex-direction: row; padding: 6px; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .dual-arrow svg { transform: rotate(90deg); }
 }
+
+/* Fenêtre « Comparer et synchroniser » (Pro) */
+.sync-dialog { width: min(1100px, calc(100vw - 32px)); }
+.sync-dialog .dlg-head h2 { display: flex; align-items: center; gap: 8px; }
+.sync-dirs { display: grid; grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr); gap: 10px; align-items: end; }
+.sync-arrow { height: 36px; display: grid; place-items: center; color: var(--muted); }
+.sync-opts { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 18px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.sync-opts .fld.grow { min-width: 220px; }
+.sync-opts select { height: 36px; }
+.danger-text { color: var(--danger); }
+.warn-text { color: var(--warn); }
+.sync-table { border: 1px solid var(--line); border-radius: 10px; overflow: auto; max-height: 46vh; }
+.sync-table:empty { display: none; }
+.sync-table > p { margin: 0; padding: 14px; }
+.sync-row { display: grid; grid-template-columns: 22px 120px minmax(160px, 1.6fr) minmax(120px, 1fr) minmax(120px, 1fr) minmax(160px, 1.3fr); gap: 10px; align-items: center; min-height: 34px; padding: 3px 12px; border-top: 1px solid var(--line); font-size: 13px; }
+.sync-row.head { position: sticky; top: 0; z-index: 1; border-top: 0; background: var(--card); font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.sync-row.conflict { background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.sync-row.off > :not(input) { opacity: .55; }
+.sync-act { display: inline-grid; place-items: center; width: 26px; height: 22px; border-radius: 5px; background: var(--chip-bg); color: var(--muted); }
+.sync-act.up, .sync-act.down { color: var(--accent); }
+.sync-act.delete { color: var(--danger); }
+.sync-choice { height: 28px; max-width: 100%; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--field); color: var(--text); font: inherit; font-size: 12px; }
+.sync-empty { display: flex; align-items: center; gap: 8px; color: var(--ok); }
+.sync-summary { font-size: 13px; color: var(--text-2); align-self: center; }

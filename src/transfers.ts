@@ -37,6 +37,8 @@ export class TransferQueue {
   private paused = false;
   private running = false;
   private frame = 0;
+  /** Appelés une fois quand la file est vide. */
+  private idle: (() => void)[] = [];
 
   constructor(private readonly toast: (msg: string, kind?: 'info' | 'error') => void) {
     this.render();
@@ -48,10 +50,22 @@ export class TransferQueue {
     this.next();
   }
 
+  /** Appelle `f` quand tous les transferts en cours et en attente sont finis. */
+  whenIdle(f: () => void) {
+    this.idle.push(f);
+    if (!this.running && !this.jobs.some((j) => j.state === 'waiting')) this.flushIdle();
+  }
+
+  private flushIdle() {
+    const callbacks = this.idle;
+    this.idle = [];
+    for (const f of callbacks) f();
+  }
+
   private async next() {
     if (this.running || this.paused) return;
     const job = this.jobs.find((j) => j.state === 'waiting');
-    if (!job) return;
+    if (!job) return this.flushIdle();
     this.running = true;
     job.state = 'running';
     job.started = performance.now();

@@ -103,6 +103,16 @@ impl<H: client::Handler> SftpFiles<H> {
 }
 
 impl<H: client::Handler> RemoteFiles for SftpFiles<H> {
+    fn set_modified(&self, path: String, secs: u64) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            let sftp = self.session().await?;
+            let time = u32::try_from(secs).unwrap_or(u32::MAX);
+            let attrs = russh_sftp::protocol::FileAttributes { atime: Some(time), mtime: Some(time), ..Default::default() };
+            sftp.set_metadata(path, attrs).await.map_err(err)?;
+            Ok(())
+        })
+    }
+
     fn home(&self) -> BoxFuture<'_, String> {
         Box::pin(async move {
             let sftp = self.session().await?;

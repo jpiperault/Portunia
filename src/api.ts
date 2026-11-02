@@ -59,6 +59,12 @@ export interface RemoteEntry {
   permissions: number | null;
 }
 
+export interface SyncSide { size: number; modified: number | null; isDir: boolean }
+export type SyncStatus = 'onlyLocal' | 'onlyRemote' | 'localNewer' | 'remoteNewer' | 'different' | 'conflict';
+/** Écart entre les deux côtés ; `path` est relatif, séparé par « / ». */
+export interface SyncDiff { path: string; local: SyncSide | null; remote: SyncSide | null; status: SyncStatus }
+export interface Comparison { diffs: SyncDiff[]; same: number; excluded: number }
+
 export interface TransferProgress { done: number; total: number }
 
 export interface TunnelSpec {
@@ -185,8 +191,12 @@ export const api = {
 
   fsHome: (connectionId: string) => invoke<string>('fs_home', { connectionId }),
   fsList: (connectionId: string, path: string) => invoke<RemoteEntry[]>('fs_list', { connectionId, path }),
-  fsDownload: (connectionId: string, remote: string, local: string, onProgress: (p: TransferProgress) => void) =>
-    invoke<void>('fs_download', { connectionId, remote, local, onProgress: progressChannel(onProgress) }),
+  /** `modified` : date du fichier sur le serveur, donnée à la copie (secondes Unix). */
+  fsDownload: (connectionId: string, remote: string, local: string, onProgress: (p: TransferProgress) => void, modified?: number | null) =>
+    invoke<void>('fs_download', { connectionId, remote, local, onProgress: progressChannel(onProgress), modified: modified ?? null }),
+  /** Écarts entre un dossier de ce PC et un dossier du serveur (Pro). */
+  fsCompare: (connectionId: string, local: string, remote: string, bySize: boolean, exclude: string[]) =>
+    invoke<Comparison>('fs_compare', { connectionId, local, remote, bySize, exclude }),
   fsUpload: (connectionId: string, local: string, remote: string, onProgress: (p: TransferProgress) => void) =>
     invoke<void>('fs_upload', { connectionId, local, remote, onProgress: progressChannel(onProgress) }),
   fsMkdir: (connectionId: string, path: string) => invoke<void>('fs_mkdir', { connectionId, path }),

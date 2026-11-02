@@ -8,6 +8,7 @@ mod containers;
 mod credentials;
 mod importers;
 mod keys;
+mod filesync;
 mod license;
 mod localfs;
 mod lock;
@@ -130,6 +131,7 @@ pub fn run() {
             commands::fs_mkdir,
             commands::fs_remove,
             commands::fs_rename,
+            filesync::fs_compare,
             localfs::local_home,
             localfs::local_list,
             localfs::local_mkdir,
