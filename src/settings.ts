@@ -47,6 +47,8 @@ export interface Settings {
   highlight: { enabled: boolean; rules: HighlightRule[] };
   /** Extensions désactivées : absentes des menus, leurs sessions restent (grisées). */
   disabledExtensions: string[];
+  /** Extensions du catalogue installées (les autres n'apparaissent que dans le catalogue). */
+  installedExtensions: string[];
   /** Langue de l'interface : celle de Windows, anglais ou français (appliquée au prochain démarrage). */
   language: 'auto' | 'en' | 'fr';
   /** Sessions épinglées en tête de la barre latérale. */
@@ -75,6 +77,7 @@ export const DEFAULTS: Settings = {
   confirmMultilinePaste: true,
   highlight: { enabled: true, rules: DEFAULT_RULES },
   disabledExtensions: [],
+  installedExtensions: [],
   language: 'auto',
   favorites: [],
 };

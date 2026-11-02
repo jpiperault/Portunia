@@ -378,7 +378,7 @@ pub(crate) async fn start_connection(
     if let Some(feature) = connector.required_feature() {
         state.license.lock().unwrap().require(feature).map_err(full)?;
     }
-    if protocol == "ssh" {
+    if protocol == "ssh" || protocol == "sftp" {
         resolve_jump(state, &mut values, &mut Vec::new())?;
     }
     let view = connector.manifest().view;
@@ -1723,10 +1723,17 @@ pub async fn connect_with(
     cols: u16,
     rows: u16,
     on_event: Channel,
+    protocol: Option<String>,
 ) -> CmdResult<ConnectResponse> {
     state.unlocked()?;
     let session = state.store.lock().unwrap().get(&session_id).ok_or(t!("Session not found", "Session introuvable"))?;
+    // Une session SSH peut s'ouvrir en fichiers seulement (SFTP), avec les mêmes réglages.
+    let protocol = match protocol {
+        Some(p) if p == "sftp" && session.protocol == "ssh" => p,
+        Some(p) if p != session.protocol => return Err(t!(format!("« {} » cannot be opened as {p}", session.name), format!("« {} » ne s'ouvre pas en {p}", session.name))),
+        _ => session.protocol.clone(),
+    };
     let mut values = session_values(&state, &session)?;
     values.extend(extra);
-    start_connection(&app, &state, &session.protocol, label, values, cols, rows, on_event).await
+    start_connection(&app, &state, &protocol, label, values, cols, rows, on_event).await
 }

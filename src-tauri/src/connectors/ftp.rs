@@ -1,4 +1,4 @@
-//! FTP et FTPS (TLS explicite) : un explorateur de fichiers dans un onglet.
+//! FTP et FTPS (TLS explicite ou implicite) : un explorateur de fichiers dans un onglet.
 //! La connexion de contrôle est rouverte d'elle-même si le serveur l'a fermée
 //! (inactivité), puis l'opération est relancée une fois.
 
@@ -12,7 +12,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Result};
-use suppaftp::{list::ListParser, types::FileType, FtpError, RustlsConnector, RustlsFtpStream};
+use suppaftp::{list::ListParser, types::{FileType, Mode}, Encoding, FtpError, RustlsConnector, RustlsFtpStream};
 
 use crate::connector::*;
 use crate::tls::tls_config;
@@ -28,35 +28,64 @@ impl Connector for FtpConnector {
             description: t!("Files on an FTP server, encrypted (FTPS) or not.", "Fichiers d'un serveur FTP, chiffré (FTPS) ou non.").into(),
             view: ViewKind::Files,
             builtin: true,
+            catalog: false,
             file_browser: true,
             port_forwarding: false,
             fields: vec![
                 Field::new("host", t!("Host", "Hôte"), FieldKind::Text).required().placeholder(t!("ftp.example.com", "ftp.exemple.fr")),
-                Field::new("port", "Port", FieldKind::Number).default(21),
+                Field::new("port", "Port", FieldKind::Number).placeholder(t!("21, or 990 for implicit FTPS", "21, ou 990 en FTPS implicite")),
                 Field::new(
                     "security",
                     t!("Encryption", "Chiffrement"),
-                    choice(&[("explicit", t!("FTPS (explicit TLS)", "FTPS (TLS explicite)")), ("none", t!("None (FTP)", "Aucun (FTP)"))]),
+                    choice(&[
+                        ("explicit", t!("FTPS (explicit TLS)", "FTPS (TLS explicite)")),
+                        ("implicit", t!("FTPS (implicit TLS, port 990)", "FTPS (TLS implicite, port 990)")),
+                        ("none", t!("None (FTP)", "Aucun (FTP)"))]),
                 )
                 .default("explicit"),
                 Field::new("insecureTls", t!("Accept an unverified certificate (self-signed)", "Accepter un certificat non vérifié (auto-signé)"), FieldKind::Bool)
                     .default(false)
-                    .show_if("security", "explicit"),
+                    .show_if("security", "!none"),
                 Field::new("credential", t!("Shared credentials", "Identifiants partagés"), FieldKind::Suggest { source: "credentials".into() })
                     .placeholder(t!("Empty = this session's own credentials", "Vide = identifiants propres à cette session")),
                 Field::new("username", t!("User", "Utilisateur"), FieldKind::Text)
                     .placeholder(t!("Empty = anonymous", "Vide = anonymous"))
                     .hidden_by("credential"),
                 Field::new("password", t!("Password", "Mot de passe"), FieldKind::Secret).hidden_by("credential"),
+                Field::new(
+                    "mode",
+                    t!("Connection mode", "Mode de connexion"),
+                    choice(&[
+                        ("passive", t!("Passive (recommended)", "Passif (conseillé)")),
+                        ("active", t!("Active (the server connects back to this PC)", "Actif (le serveur se connecte à ce PC)")),
+                    ]),
+                )
+                .default("passive"),
+                Field::new(
+                    "encoding",
+                    t!("File name encoding", "Encodage des noms de fichiers"),
+                    choice(&[
+                        ("utf8", "UTF-8"),
+                        ("windows-1252", t!("Windows-1252 (older servers, wrong accents)", "Windows-1252 (anciens serveurs, accents mal affichés)")),
+                    ]),
+                )
+                .default("utf8"),
+                super::ssh::start_dirs()[0].clone(),
+                super::ssh::start_dirs()[1].clone(),
             ],
         }
     }
 
     fn connect(&self, ctx: ConnectContext) -> Result<Outcome> {
+        let security = ctx.str("security").unwrap_or_else(|| "explicit".into());
+        let implicit = security == "implicit";
         let params = Params {
             host: ctx.require("host", t!("Host", "Hôte"))?,
-            port: ctx.port(21)?,
-            tls: ctx.str("security").as_deref() != Some("none"),
+            port: ctx.port(if implicit { 990 } else { 21 })?,
+            tls: security != "none",
+            implicit,
+            active: ctx.str("mode").as_deref() == Some("active"),
+            windows_1252: ctx.str("encoding").as_deref() == Some("windows-1252"),
             insecure: ctx.bool("insecureTls"),
             user: ctx.str("username").unwrap_or_else(|| "anonymous".into()),
             password: ctx.raw("password").unwrap_or_default(),
@@ -72,6 +101,10 @@ struct Params {
     host: String,
     port: u16,
     tls: bool,
+    /// TLS dès la connexion (port 990), sans AUTH TLS.
+    implicit: bool,
+    active: bool,
+    windows_1252: bool,
     insecure: bool,
     user: String,
     password: String,
@@ -84,9 +117,19 @@ impl Params {
             .with_context(|| format!("Nom introuvable : {}", self.host))?
             .next()
             .ok_or_else(|| anyhow!("{}", t!(format!("Name not found: {}", self.host), format!("Nom introuvable : {}", self.host))))?;
-        let mut stream = RustlsFtpStream::connect_timeout(addr, Duration::from_secs(15))
-            .map_err(|e| anyhow!("{}", t!(format!("Cannot connect to {}:{}: {e}", self.host, self.port), format!("Connexion impossible à {}:{} : {e}", self.host, self.port))))?;
-        if self.tls {
+        let unreachable = |e: FtpError| anyhow!("{}", t!(format!("Cannot connect to {}:{}: {e}", self.host, self.port), format!("Connexion impossible à {}:{} : {e}", self.host, self.port)));
+        let mut stream = if self.implicit {
+            RustlsFtpStream::connect_secure_implicit(addr, RustlsConnector::from(tls_config(self.insecure)?), &self.host).map_err(unreachable)?
+        } else {
+            RustlsFtpStream::connect_timeout(addr, Duration::from_secs(15)).map_err(unreachable)?
+        };
+        if self.windows_1252 {
+            stream.set_encoding(Windows1252);
+        }
+        if self.active {
+            stream.set_mode(Mode::Active);
+        }
+        if self.tls && !self.implicit {
             stream = stream.into_secure(RustlsConnector::from(tls_config(self.insecure)?), &self.host).map_err(|e| {
                 anyhow!("{}", t!(format!("The server refuses encryption (FTPS): {e}. Choose « None » if it does not offer it, or accept its certificate if it is self-signed."), format!("Le serveur refuse le chiffrement (FTPS) : {e}. Choisissez « Aucun » s'il ne le propose pas, ou acceptez son certificat s'il est auto-signé.")))
             })?;
@@ -97,6 +140,35 @@ impl Params {
     }
 }
 
+/// Noms de fichiers des anciens serveurs Windows (accents en Windows-1252).
+#[derive(Debug)]
+struct Windows1252;
+
+/// Caractères 0x80 à 0x9F de Windows-1252 (les autres octets valent leur point de code).
+const CP1252_HIGH: [char; 32] = [
+    '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž', '\u{8F}',
+    '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}', 'ž', 'Ÿ',
+];
+
+impl Encoding for Windows1252 {
+    fn decode(&self, bytes: &[u8]) -> String {
+        bytes
+            .iter()
+            .map(|&b| if (0x80..0xA0).contains(&b) { CP1252_HIGH[(b - 0x80) as usize] } else { char::from(b) })
+            .collect()
+    }
+
+    fn encode(&self, text: &str) -> std::io::Result<Vec<u8>> {
+        text.chars()
+            .map(|c| match CP1252_HIGH.iter().position(|&x| x == c) {
+                Some(i) => Ok(0x80 + i as u8),
+                None => u8::try_from(u32::from(c)).map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, t!(format!("« {c} » cannot be written in Windows-1252"), format!("« {c} » ne s'écrit pas en Windows-1252")))
+                }),
+            })
+            .collect()
+    }
+}
 
 struct Inner {
     params: Params,
@@ -297,6 +369,13 @@ mod tests {
     use super::*;
 
     #[test]
+    fn windows_1252() {
+        assert_eq!(Windows1252.decode(b"caf\xE9 \x80"), "café €");
+        assert_eq!(Windows1252.encode("été €").unwrap(), b"\xE9t\xE9 \x80");
+        assert!(Windows1252.encode("日").is_err());
+    }
+
+    #[test]
     fn chemins() {
         assert_eq!(join("/", "pub"), "/pub");
         assert_eq!(join("/pub", "a.txt"), "/pub/a.txt");
@@ -323,7 +402,7 @@ mod reseau {
     #[ignore = "nécessite Internet"]
     fn ftps_reel() {
         for tls in [true, false] {
-            let params = Params { host: "test.rebex.net".into(), port: 21, tls, insecure: false, user: "demo".into(), password: "password".into() };
+            let params = Params { host: "test.rebex.net".into(), port: 21, tls, implicit: false, active: false, windows_1252: false, insecure: false, user: "demo".into(), password: "password".into() };
             let inner = Inner { stream: Mutex::new(Some(params.open().unwrap())), params };
             let home = inner.with(|ftp| Ok(ftp.pwd()?)).unwrap();
             let list = inner.list(&home).unwrap();

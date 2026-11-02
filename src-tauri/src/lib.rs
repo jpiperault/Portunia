@@ -9,6 +9,7 @@ mod credentials;
 mod importers;
 mod keys;
 mod license;
+mod localfs;
 mod lock;
 mod monitor;
 mod nettools;
@@ -129,6 +130,11 @@ pub fn run() {
             commands::fs_mkdir,
             commands::fs_remove,
             commands::fs_rename,
+            localfs::local_home,
+            localfs::local_list,
+            localfs::local_mkdir,
+            localfs::local_rename,
+            localfs::local_reveal,
             commands::list_folders,
             commands::create_folder,
             commands::rename_folder,

@@ -21,6 +21,7 @@ impl Connector for TelnetConnector {
             description: t!("Older network equipment. Unencrypted: keep it to the local network.", "Équipements réseau anciens. Non chiffré : à réserver au réseau local.").into(),
             view: ViewKind::Terminal,
             builtin: true,
+            catalog: false,
             file_browser: false,
             port_forwarding: false,
             fields: vec![

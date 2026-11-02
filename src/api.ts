@@ -42,6 +42,8 @@ export interface Manifest {
   description: string;
   view: ViewKind;
   builtin: boolean;
+  /** Proposée dans le catalogue : à installer d'abord (sauf si des sessions l'utilisent déjà). */
+  catalog: boolean;
   fileBrowser: boolean;
   portForwarding: boolean;
   fields: Field[];
@@ -190,6 +192,12 @@ export const api = {
   fsMkdir: (connectionId: string, path: string) => invoke<void>('fs_mkdir', { connectionId, path }),
   fsRemove: (connectionId: string, path: string, isDir: boolean) => invoke<void>('fs_remove', { connectionId, path, isDir }),
   fsRename: (connectionId: string, from: string, to: string) => invoke<void>('fs_rename', { connectionId, from, to }),
+  // Fichiers de ce PC (volet gauche des sessions de fichiers) ; chemin vide = lecteurs.
+  localHome: (start?: string) => invoke<string>('local_home', { start: start ?? null }),
+  localList: (path: string) => invoke<RemoteEntry[]>('local_list', { path }),
+  localMkdir: (path: string) => invoke<void>('local_mkdir', { path }),
+  localRename: (from: string, to: string) => invoke<void>('local_rename', { from, to }),
+  localReveal: (path: string) => invoke<void>('local_reveal', { path }),
 };
 
 /** Les erreurs Rust arrivent sous forme de texte. */
@@ -527,10 +535,10 @@ export const containers = {
 };
 
 /** Session enregistrée ouverte avec des valeurs en plus (commande distante…). */
-export function connectWith(sessionId: string, extra: Record<string, unknown>, label: string, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+export function connectWith(sessionId: string, extra: Record<string, unknown>, label: string, cols: number, rows: number, onEvent: (e: TermEvent) => void, protocol?: string) {
   const channel = new Channel<TermEvent>();
   channel.onmessage = onEvent;
-  return invoke<ConnectResponse>('connect_with', { sessionId, extra, label, cols, rows, onEvent: channel });
+  return invoke<ConnectResponse>('connect_with', { sessionId, extra, label, cols, rows, onEvent: channel, protocol: protocol ?? null });
 }
 
 /** Question posée pendant une connexion (empreinte d'un nouveau serveur…). */

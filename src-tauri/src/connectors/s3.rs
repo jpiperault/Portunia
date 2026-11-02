@@ -33,6 +33,7 @@ impl Connector for S3Connector {
             description: t!("Files on S3 object storage: AWS, MinIO, Scaleway, OVH, Wasabi…", "Fichiers d'un stockage objet S3 : AWS, MinIO, Scaleway, OVH, Wasabi…").into(),
             view: ViewKind::Files,
             builtin: true,
+            catalog: false,
             file_browser: true,
             port_forwarding: false,
             fields: vec![
@@ -44,6 +45,8 @@ impl Connector for S3Connector {
                 Field::new("secretKey", t!("Secret key", "Clé secrète"), FieldKind::Secret),
                 Field::new("pathStyle", t!("Path-style addressing (MinIO, Ceph…)", "Adressage par chemin (MinIO, Ceph…)"), FieldKind::Bool).default(false),
                 Field::new("insecureTls", t!("Accept an unverified certificate (self-signed)", "Accepter un certificat non vérifié (auto-signé)"), FieldKind::Bool).default(false),
+                super::ssh::start_dirs()[0].clone(),
+                super::ssh::start_dirs()[1].clone(),
             ],
         }
     }

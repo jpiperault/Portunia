@@ -224,6 +224,7 @@ impl Connector for LocalShellConnector {
             description: t!("PowerShell, Command Prompt, WSL, Git Bash… of this PC, in a tab.", "PowerShell, Invite de commandes, WSL, Git Bash… de ce PC, dans un onglet.").into(),
             view: ViewKind::Terminal,
             builtin: true,
+            catalog: false,
             file_browser: false,
             port_forwarding: false,
             fields: vec![

@@ -37,7 +37,9 @@ export function openSessionDialog({ protocols, folders, existing, defaultFolder,
     const filled = (key: string) => String(values[key] ?? '').trim() !== '';
     const visible = (f: Field) =>
       !(f.hiddenBy && filled(f.hiddenBy))
-      && (!f.showIf || String(fieldValue(protocol.fields.find((x) => x.key === f.showIf!.key)!) ?? '') === f.showIf.equals);
+      && (!f.showIf || matches(String(fieldValue(protocol.fields.find((x) => x.key === f.showIf!.key)!) ?? ''), f.showIf.equals));
+    // « !x » : toute valeur sauf x.
+    const matches = (value: string, equals: string) => (equals.startsWith('!') ? value !== equals.slice(1) : value === equals);
 
     function renderPicker() {
       picker.replaceChildren(

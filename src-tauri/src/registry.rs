@@ -14,6 +14,7 @@ impl Registry {
             connectors: Vec::new(),
         };
         registry.register(Arc::new(connectors::ssh::SshConnector));
+        registry.register(Arc::new(connectors::ssh::SftpConnector));
         registry.register(Arc::new(connectors::rdp::RdpConnector));
         registry.register(Arc::new(connectors::web::WebConnector));
         registry.register(Arc::new(connectors::telnet::TelnetConnector));

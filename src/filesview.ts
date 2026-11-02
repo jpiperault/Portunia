@@ -1,10 +1,123 @@
-// Onglet « fichiers seulement » (FTP, S3…) : l'explorateur en pleine largeur, sans terminal.
+// Onglet « fichiers seulement » (SFTP, FTP, S3) : Ce PC à gauche, le serveur à droite,
+// la file de transferts en bas. Pas de terminal.
 import { handleConfirm } from './confirm';
-import { api, errorText, TermEvent } from './api';
-import { h } from './dom';
-import type { FilePanel } from './files';
+import { api, errorText, remoteFiles, RemoteEntry, TermEvent } from './api';
+import { h, icon } from './dom';
+import { FilePanel } from './files';
+import { LocalPanel, localJoin } from './localpanel';
 import type { Opener, TermState } from './terminal';
 import { t } from './i18n';
+import { ExistsRule, TransferQueue } from './transfers';
+
+/** Nom de fichier accepté par Windows (« : », « ? »… remplacés). */
+const windowsName = (name: string) => name.replace(/[<>:"/\\|?*]/g, '_');
+
+/** Faut-il copier, d'après la règle « si le fichier existe » ? `null` : à demander. */
+function decide(rule: ExistsRule, source: RemoteEntry, existing: RemoteEntry | undefined): boolean | null {
+  if (!existing || existing.isDir || source.isDir) return true;
+  if (rule === 'overwrite') return true;
+  if (rule === 'skip') return false;
+  if (rule === 'newer') return (source.modified ?? 0) > (existing.modified ?? 0);
+  return null;
+}
+
+/** Les deux volets, les flèches entre eux et la file de transferts. */
+export class DualFiles {
+  readonly el: HTMLElement;
+  readonly queue: TransferQueue;
+  readonly local: LocalPanel;
+  readonly remote: FilePanel;
+  private showHidden = false;
+  private readonly hiddenBtn: HTMLButtonElement;
+
+  constructor(private readonly toast: (msg: string, kind?: 'info' | 'error') => void, protocolLabel: string, start: { remote?: string; local?: string }) {
+    this.queue = new TransferQueue(toast);
+    this.local = new LocalPanel(toast, (entries) => this.upload(entries));
+    this.remote = new FilePanel(toast, protocolLabel, { queue: this.queue, startDir: start.remote, transfer: (entries) => this.download(entries) });
+    const arrow = (name: string, label: string, onclick: () => void) =>
+      h('button', { type: 'button', class: 'dual-arrow', 'aria-label': label, title: label, onclick }, icon(name, 18));
+    this.hiddenBtn = h('button', { type: 'button', class: 'btn sm', 'aria-pressed': 'false', onclick: () => this.toggleHidden() }, icon('eye', 14), t('Hidden files', 'Fichiers masqués')) as HTMLButtonElement;
+    this.el = h('div', { class: 'dual-files' },
+      h('div', { class: 'dual-bar' },
+        this.hiddenBtn,
+        h('span', { class: 'grow' }),
+        h('span', { class: 'muted small' }, t('F5 upload · F6 download · Ctrl+click to select several', 'F5 envoyer · F6 récupérer · Ctrl+clic pour en choisir plusieurs'))),
+      h('div', { class: 'dual-panes' },
+        this.local.el,
+        h('div', { class: 'dual-mid' },
+          arrow('arrowRight', t('Upload the selection to the server (F5)', 'Envoyer la sélection sur le serveur (F5)'), () => this.upload()),
+          arrow('arrowLeft', t('Download the selection to this PC (F6)', 'Récupérer la sélection sur ce PC (F6)'), () => this.download())),
+        this.remote.el),
+      this.queue.el);
+    this.el.addEventListener('keydown', (e) => {
+      // F5 rechargerait la fenêtre : il sert ici à envoyer.
+      if (e.key === 'F5') { e.preventDefault(); this.upload(); }
+      else if (e.key === 'F6') { e.preventDefault(); this.download(); }
+    });
+    this.local.start(start.local);
+  }
+
+  /** Dépôt depuis l'Explorateur Windows : seulement sur le volet du serveur. */
+  acceptsDrop(x: number, y: number): boolean {
+    const r = this.remote.el.getBoundingClientRect();
+    return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  }
+
+  private toggleHidden() {
+    this.showHidden = !this.showHidden;
+    this.hiddenBtn.setAttribute('aria-pressed', String(this.showHidden));
+    this.hiddenBtn.classList.toggle('on', this.showHidden);
+    this.local.toggleHidden(this.showHidden);
+    this.remote.toggleHidden(this.showHidden);
+  }
+
+  /** Garde les éléments à copier : la règle de la file, ou une seule question pour tous les fichiers déjà présents. */
+  private filter(entries: RemoteEntry[], existing: RemoteEntry[], where: string): RemoteEntry[] {
+    const byName = new Map(existing.map((e) => [e.name.toLowerCase(), e]));
+    const keep: RemoteEntry[] = [];
+    const ask: RemoteEntry[] = [];
+    for (const e of entries) {
+      const verdict = decide(this.queue.rule, e, byName.get(e.name.toLowerCase()));
+      if (verdict === null) ask.push(e);
+      else if (verdict) keep.push(e);
+    }
+    if (ask.length) {
+      const names = ask.slice(0, 8).map((e) => e.name).join(', ') + (ask.length > 8 ? '…' : '');
+      if (confirm(t(`Already ${where}: ${names}.\nReplace? (Cancel = skip them)`, `Déjà ${where} : ${names}.\nRemplacer ? (Annuler = les ignorer)`))) keep.push(...ask);
+    }
+    return keep;
+  }
+
+  upload(entries = this.local.picked) {
+    const id = this.remote.connection;
+    if (!id) return this.toast(t('Server disconnected.', 'Serveur déconnecté.'), 'error');
+    if (!entries.length) return this.toast(t('Select files of this PC first (left pane).', 'Sélectionnez d\'abord des fichiers de ce PC (volet de gauche).'));
+    const dir = this.remote.dir;
+    for (const e of this.filter(entries, this.remote.listed, t('on the server', 'sur le serveur'))) {
+      this.queue.add({
+        name: e.isDir ? `${e.name}/` : e.name, direction: 'up', target: dir,
+        run: (cb) => remoteFiles.uploadAny(id, e.path, dir, cb),
+        after: () => this.remote.refreshIf(dir),
+      });
+    }
+  }
+
+  download(entries = this.remote.picked) {
+    const id = this.remote.connection;
+    if (!id) return this.toast(t('Server disconnected.', 'Serveur déconnecté.'), 'error');
+    if (!entries.length) return this.toast(t('Select files of the server first (right pane).', 'Sélectionnez d\'abord des fichiers du serveur (volet de droite).'));
+    const dir = this.local.dir;
+    if (!dir) return this.toast(t('Open a folder of this PC first (left pane).', 'Ouvrez d\'abord un dossier de ce PC (volet de gauche).'));
+    for (const e of this.filter(entries, this.local.listed, t('on this PC', 'sur ce PC'))) {
+      const local = localJoin(dir, windowsName(e.name));
+      this.queue.add({
+        name: e.isDir ? `${e.name}/` : e.name, direction: 'down', target: dir,
+        run: (cb) => (e.isDir ? remoteFiles.downloadDir(id, e.path, local, cb) : api.fsDownload(id, e.path, local, cb)),
+        after: () => this.local.refreshIf(dir),
+      });
+    }
+  }
+}
 
 export class FilesView {
   private connectionId: string | null = null;
@@ -18,9 +131,10 @@ export class FilesView {
     container: HTMLElement,
     private readonly panel: FilePanel,
     private readonly onState: (state: TermState, reason?: string) => void,
+    readonly dual?: DualFiles,
   ) {
     container.classList.add('files-view');
-    container.append(panel.el, this.status);
+    container.append(dual?.el ?? panel.el, this.status);
     this.status.addEventListener('click', () => this.reconnectNow());
   }
 

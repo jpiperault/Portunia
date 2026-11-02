@@ -119,7 +119,7 @@ impl Field {
         self
     }
 
-    /// N'affiche le champ que si un autre champ vaut `equals`.
+    /// N'affiche le champ que si un autre champ vaut `equals` (« !x » : tout sauf x).
     pub fn show_if(mut self, key: &str, equals: &str) -> Self {
         self.show_if = Some(ShowIf {
             key: key.into(),
@@ -150,6 +150,8 @@ pub struct Manifest {
     pub description: String,
     pub view: ViewKind,
     pub builtin: bool,
+    /// Proposée dans le catalogue : à installer avant de servir (sauf si des sessions l'utilisent déjà).
+    pub catalog: bool,
     /// La connexion propose un explorateur de fichiers distant (voir `RemoteFiles`).
     pub file_browser: bool,
     /// La connexion sait ouvrir des tunnels (voir `PortForwarder`).

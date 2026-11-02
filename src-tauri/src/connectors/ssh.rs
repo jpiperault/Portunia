@@ -41,6 +41,7 @@ impl Connector for SshConnector {
             description: t!("Secure terminal: private key, password or agent.", "Terminal sécurisé : clé privée, mot de passe ou agent.").into(),
             view: ViewKind::Terminal,
             builtin: true,
+            catalog: false,
             file_browser: true,
             port_forwarding: true,
             fields: vec![
@@ -181,6 +182,86 @@ impl TerminalConnection for SshConnection {
     }
 }
 
+
+/// SFTP seul : la connexion SSH (clé, agent, rebond, Gate) sans terminal, en vue fichiers à deux volets.
+pub struct SftpConnector;
+
+/// Dossiers ouverts au démarrage d'une session de fichiers (SFTP, FTP, S3).
+pub fn start_dirs() -> [Field; 2] {
+    [
+        Field::new("remoteDir", t!("Server folder at start", "Dossier du serveur au démarrage"), FieldKind::Text)
+            .placeholder(t!("Empty = home folder", "Vide = dossier personnel")),
+        Field::new("localDir", t!("Folder of this PC at start", "Dossier de ce PC au démarrage"), FieldKind::Text)
+            .placeholder(t!("Empty = my user folder", "Vide = mon dossier utilisateur")),
+    ]
+}
+
+impl Connector for SftpConnector {
+    fn manifest(&self) -> Manifest {
+        // Mêmes champs que SSH, sans ce qui ne sert qu'au terminal.
+        let mut fields: Vec<Field> = SshConnector
+            .manifest()
+            .fields
+            .into_iter()
+            .filter(|f| !matches!(f.key.as_str(), "x11" | "x11Display" | "tunnels" | "mac"))
+            .collect();
+        for field in &mut fields {
+            if field.key == "username" || field.key == "password" {
+                field.placeholder = Some(t!("Empty = asked at every connection", "Vide = demandé à chaque connexion").into());
+            }
+        }
+        fields.extend(start_dirs());
+        Manifest {
+            id: "sftp".into(),
+            name: "SFTP".into(),
+            version: "0.1.0".into(),
+            description: t!("Files over SSH, in two panes: this PC and the server.", "Fichiers par SSH, en deux volets : ce PC et le serveur.").into(),
+            view: ViewKind::Files,
+            builtin: true,
+            catalog: true,
+            file_browser: true,
+            port_forwarding: false,
+            fields,
+        }
+    }
+
+    fn connect(&self, ctx: ConnectContext) -> Result<Outcome> {
+        let (handle, hops) = tauri::async_runtime::block_on(session(&ctx, 0, None))?;
+        let handle = Arc::new(handle);
+        let files = Arc::new(SftpFiles::new(handle.clone()));
+        Ok(Outcome::Terminal(Box::new(SftpConnection { handle, files, hops: Mutex::new(Some(hops)) })))
+    }
+}
+
+struct SftpConnection {
+    handle: Arc<Handle>,
+    files: Arc<SftpFiles<Handler>>,
+    /// Les serveurs de rebond restent ouverts aussi longtemps que la session.
+    hops: Mutex<Option<Hops>>,
+}
+
+impl TerminalConnection for SftpConnection {
+    fn write(&self, _data: &[u8]) -> Result<()> {
+        bail!(t!("This tab has no terminal", "Cet onglet n'a pas de terminal"))
+    }
+
+    fn resize(&self, _cols: u16, _rows: u16) -> Result<()> {
+        Ok(())
+    }
+
+    fn close(&self) {
+        let handle = self.handle.clone();
+        let hops = self.hops.lock().unwrap().take();
+        tauri::async_runtime::spawn(async move {
+            let _ = handle.disconnect(Disconnect::ByApplication, "", "fr").await;
+            drop(hops);
+        });
+    }
+
+    fn files(&self) -> Option<Arc<dyn RemoteFiles>> {
+        Some(self.files.clone())
+    }
+}
 
 /// Commandes sur un canal séparé de la même connexion.
 struct SshExec {

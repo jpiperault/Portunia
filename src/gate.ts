@@ -13,6 +13,7 @@ export const GATE_EXTENSION: Manifest = {
   description: t('Servers protected by a Gate: sign-in with a code, servers in the sidebar, sessions recorded by the Gate, administration.', 'Serveurs protégés par une Gate : connexion avec code, serveurs dans la barre latérale, sessions enregistrées par la Gate, administration.'),
   view: 'terminal',
   builtin: true,
+  catalog: false,
   fileBrowser: false,
   portForwarding: false,
   fields: [],

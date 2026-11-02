@@ -28,6 +28,8 @@ export interface TreeActions {
   /** Adresse affichée sous le nom dans les résultats (user@hôte, URL…). */
   target(s: Session): string;
   /** Outils réseau sur l'hôte de la session. */
+  /** Session SSH ouverte en fichiers seulement (SFTP, deux volets). */
+  openFiles(s: Session): void;
   netTools(s: Session): void;
   /** Wake-on-LAN (adresse MAC de la session). */
   wake(s: Session): void;
@@ -207,6 +209,7 @@ export class SessionTree {
     const menu = (): (MenuItem | 'separator')[] => [
       ...(enabled ? [] : [{ label: t('Enable the extension', 'Activer l’extension'), icon: 'puzzle', action: () => a.enableProtocol(s.protocol) }, 'separator' as const]),
       { label: t('Open', 'Ouvrir'), icon: 'play', action: () => a.openSession(s) },
+      ...(s.protocol === 'ssh' ? [{ label: t('Open as files only (SFTP)', 'Ouvrir en fichiers seulement (SFTP)'), icon: 'files', action: () => a.openFiles(s) }] : []),
       { label: pinned ? t('Unpin', 'Désépingler') : t('Pin to the top', 'Épingler en haut'), icon: 'star', action: () => a.togglePin(s) },
       { label: t('Edit', 'Modifier'), icon: 'edit', action: () => a.editSession(s) },
       { label: t('Duplicate', 'Dupliquer'), icon: 'copy', action: () => a.duplicateSession(s) },

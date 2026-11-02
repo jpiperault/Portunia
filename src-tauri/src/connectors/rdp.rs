@@ -29,6 +29,7 @@ impl Connector for RdpConnector {
             description: t!("Windows desktop in a tab (IronRDP), or in the Windows Remote Desktop client.", "Bureau Windows dans un onglet (IronRDP), ou dans le client Bureau à distance de Windows.").into(),
             view: ViewKind::Screen,
             builtin: true,
+            catalog: false,
             file_browser: false,
             port_forwarding: false,
             fields: vec![

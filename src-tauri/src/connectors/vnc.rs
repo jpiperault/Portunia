@@ -23,6 +23,7 @@ impl Connector for VncConnector {
             description: t!("Remote screen (Linux, macOS, Raspberry Pi…) shown in a tab.", "Écran distant (Linux, macOS, Raspberry Pi…) affiché dans un onglet.").into(),
             view: ViewKind::Screen,
             builtin: true,
+            catalog: false,
             file_browser: false,
             port_forwarding: false,
             fields: vec![

@@ -8,7 +8,7 @@ import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
 import { ContainersPanel } from './containers';
-import { FilesView } from './filesview';
+import { DualFiles, FilesView } from './filesview';
 import { createMultiExec, MultiExecView } from './multiexec';
 import { openCredentialManager } from './credentials';
 import { createNetTools, NetToolsView, wakeSession } from './nettools';
@@ -114,8 +114,19 @@ const statusBar = $('status');
 const search = $<HTMLInputElement>('search');
 
 const protocolOf = (id?: string) => state.protocols.find((p) => p.id === id);
+/** Extension installée : intégrée d'office, ou prise dans le catalogue, ou déjà utilisée par des sessions. */
+const extensionInstalled = (id: string) =>
+  !protocolOf(id)?.catalog || settings().installedExtensions.includes(id) || state.sessions.some((s) => s.protocol === id);
 /** Extension activée (Paramètres › Extensions). */
-const extensionEnabled = (id: string) => !settings().disabledExtensions.includes(id);
+const extensionEnabled = (id: string) => extensionInstalled(id) && !settings().disabledExtensions.includes(id);
+/** Catalogue : installer (ou retirer) une extension. Ses sessions éventuelles restent. */
+function installExtension(id: string, on: boolean) {
+  const others = settings().installedExtensions.filter((x) => x !== id);
+  updateSettings({
+    installedExtensions: on ? [...others, id] : others,
+    disabledExtensions: settings().disabledExtensions.filter((x) => x !== id),
+  });
+}
 const enabledProtocols = () => state.protocols.filter((p) => extensionEnabled(p.id));
 function setExtension(id: string, on: boolean) {
   const others = settings().disabledExtensions.filter((x) => x !== id);
@@ -162,6 +173,7 @@ const sessionTree = new SessionTree(tree, {
   },
   target: (s) => sessionTarget(s),
   netTools: (s) => openNetTools(typeof s.values.host === 'string' ? s.values.host : '', s),
+  openFiles: (s) => openSessionFiles(s),
   wake: (s) => wakeSession(s, toast),
   multiExec: (folder) => openMultiExec(folder),
   openSession: (s) => openSession(s),
@@ -957,8 +969,11 @@ function renderStatus() {
   statusBar.replaceChildren(
     h('span', {}, h('span', { class: `dot${open ? ' on' : ''}` }), tr(`${open} session(s) connected${localCount ? ` · ${localCount} local shell(s)` : ''}`, `${open} session(s) connectée(s)${localCount ? ` · ${localCount} shell(s) local(aux)` : ''}`)),
     h('span', {}, tr(`${state.sessions.length} saved`, `${state.sessions.length} enregistrée(s)`)),
-    h('span', { class: 'push' }, enabledProtocols().length < state.protocols.length
-      ? `${enabledProtocols().length}/${state.protocols.length} extensions` : `${state.protocols.length} extensions`),
+    h('span', { class: 'push' }, (() => {
+      const installed = state.protocols.filter((p) => extensionInstalled(p.id)).length;
+      const on = enabledProtocols().length;
+      return on < installed ? `${on}/${installed} extensions` : `${installed} extensions`;
+    })()),
     ...(settings().monitoring && monitor.summary().total ? [h('button', {
       class: `status-btn${monitor.summary().up < monitor.summary().total ? ' warn' : ''}`, title: tr('Server monitoring', 'Supervision des serveurs'),
       onclick: () => monitor.openOverview((s) => openSession(s)),
@@ -1133,11 +1148,50 @@ async function sshLogin(tab: Tab, session: Session, typed: Record<string, unknow
       return await connect();
     } catch (e) {
       const reason = errorText(e);
-      if (!/Authentification refusée/.test(reason) || reason.includes(tr('Jump server', 'Serveur de rebond')) || attempt >= 4) throw e;
+      if (!authRefused(reason) || reason.includes(tr('Jump server', 'Serveur de rebond')) || attempt >= 4) throw e;
       // Laisse s'afficher les messages en route (« Nouveau serveur mémorisé… ») avant la question.
       await new Promise((r) => setTimeout(r, 80));
       if (typed.password !== undefined) term.write(tr('\x1b[31mAccess denied.\x1b[0m\r\n', '\x1b[31mAccès refusé.\x1b[0m\r\n'));
       await askPassword();
+    }
+  }
+}
+
+/** Session SSH ouverte en fichiers seulement (SFTP, deux volets), avec ses réglages : clé, rebond, Gate. */
+function openSessionFiles(s: Session) {
+  const files: Session = { ...s, protocol: 'sftp', name: tr(`${s.name} · files`, `${s.name} · fichiers`) };
+  openSession(files, undefined, {
+    connect: (typed, cols, rows, onEvent) => connectWith(s.id, typed, files.name, cols, rows, onEvent, 'sftp'),
+    typing: false,
+  });
+}
+
+const authRefused = (reason: string) => /Authentication refused|Authentification refusée/.test(reason);
+
+/**
+ * SFTP : pas de terminal, l'identifiant et le mot de passe manquants sont demandés dans une fenêtre,
+ * avant la connexion s'ils ne sont pas enregistrés, puis après un refus. Rien n'est enregistré.
+ */
+async function filesLogin(session: Session, typed: Record<string, unknown>, connect: () => Promise<ConnectResponse>): Promise<ConnectResponse> {
+  const v = { ...session.values, ...typed };
+  const shared = typeof v.credential === 'string' && v.credential.trim();
+  const ask = async (reason: string) => {
+    const values = { ...session.values, ...typed };
+    const cred = await askCredentials({ protocol: session.protocol, name: session.name, values }, reason, values.auth !== 'password');
+    if (!cred) throw new Error(tr('Connection cancelled.', 'Connexion annulée.'));
+    typed.username = cred.username;
+    if (cred.password) Object.assign(typed, { password: cred.password, auth: 'password' });
+  };
+  if (!shared && typed.username === undefined && (!String(v.username ?? '').trim() || (v.auth === 'password' && !session.secretKeys.includes('password')))) {
+    await ask(tr('Login and password for this server (not saved).', 'Identifiant et mot de passe de ce serveur (non enregistrés).'));
+  }
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await connect();
+    } catch (e) {
+      const reason = errorText(e);
+      if (shared || !authRefused(reason) || reason.includes(tr('Jump server', 'Serveur de rebond')) || attempt >= 4) throw e;
+      await ask(reason);
     }
   }
 }
@@ -1153,8 +1207,13 @@ async function openSession(session: Session, quick?: QuickTarget, custom?: Custo
   const proto = protocolOf(session.protocol);
   if (!proto) return toast(tr(`Extension « ${session.protocol} » not installed`, `Extension « ${session.protocol} » non installée`), 'error');
   if (!extensionEnabled(proto.id)) {
-    if (!confirm(tr(`The extension « ${proto.name} » is disabled. Enable it and open « ${session.name} »?`, `L'extension « ${proto.name} » est désactivée. L'activer et ouvrir « ${session.name} » ?`))) return;
-    setExtension(proto.id, true);
+    if (!extensionInstalled(proto.id)) {
+      if (!confirm(tr(`The extension « ${proto.name} » is in the catalogue. Install it and open « ${session.name} »?`, `L'extension « ${proto.name} » est dans le catalogue. L'installer et ouvrir « ${session.name} » ?`))) return;
+      installExtension(proto.id, true);
+    } else {
+      if (!confirm(tr(`The extension « ${proto.name} » is disabled. Enable it and open « ${session.name} »?`, `L'extension « ${proto.name} » est désactivée. L'activer et ouvrir « ${session.name} » ?`))) return;
+      setExtension(proto.id, true);
+    }
   }
   // SSH : identifiant et mot de passe manquants saisis dans le terminal (connexion rapide,
   // ou session enregistrée sans eux). `typed` garde les réponses pour les reconnexions.
@@ -1166,7 +1225,9 @@ async function openSession(session: Session, quick?: QuickTarget, custom?: Custo
     : Object.keys(typed).length ? connectWith(session.id, typed, session.name, cols, rows, onEvent)
     : api.connect(session.id, cols, rows, onEvent);
   const typing = custom ? custom.typing : session.protocol === 'ssh' && (quick ? true : needsTyping(session));
-  const opener = !typing ? connectOnce : (cols: number, rows: number, onEvent: (e: TermEvent) => void) =>
+  const opener = session.protocol === 'sftp'
+    ? (cols: number, rows: number, onEvent: (e: TermEvent) => void) => filesLogin(session, typed, () => connectOnce(cols, rows, onEvent))
+    : !typing ? connectOnce : (cols: number, rows: number, onEvent: (e: TermEvent) => void) =>
     sshLogin(tab, session, typed, () => connectOnce(cols, rows, onEvent), (user) => {
       if (!quick) return;
       quick.name = `${user}@${quick.values.host}${quick.values.port ? `:${quick.values.port}` : ''}${quick.values.jump ? ` via ${quick.values.jump}` : ''}`;
@@ -1200,7 +1261,12 @@ async function openSession(session: Session, quick?: QuickTarget, custom?: Custo
   view.addEventListener('pointerdown', (e) => {
     if (state.active !== tab.id && !(e.target as HTMLElement).closest('.pane-head')) activate(tab.id);
   }, true);
-  if (proto.fileBrowser) tab.files = new FilePanel(toast, session.protocol === 'ftp' ? (session.values.security === 'none' ? 'FTP' : 'FTPS') : session.protocol === 's3' ? 'S3' : 'SFTP');
+  const filesLabel = session.protocol === 'ftp' ? (session.values.security === 'none' ? 'FTP' : 'FTPS') : session.protocol === 's3' ? 'S3' : 'SFTP';
+  // Session « fichiers seulement » : deux volets (Ce PC, le serveur) et une file de transferts.
+  const dual = proto.view === 'files'
+    ? new DualFiles(toast, filesLabel, { remote: String(session.values.remoteDir ?? ''), local: String(session.values.localDir ?? '') })
+    : undefined;
+  if (proto.fileBrowser) tab.files = dual?.remote ?? new FilePanel(toast, filesLabel);
   const onState = (s: TermState, reason?: string) => {
     tab.state = s;
     if (s === 'closed' && reason && tab.id !== state.active) toast(`${session.name} : ${reason}`, 'error');
@@ -1221,7 +1287,7 @@ async function openSession(session: Session, quick?: QuickTarget, custom?: Custo
   };
   state.tabs.push(tab);
   if (proto.view === 'files' && tab.files) {
-    tab.filesView = new FilesView(termEl, tab.files, onState);
+    tab.filesView = new FilesView(termEl, tab.files, onState, dual);
     activate(tab.id);
     await tab.filesView.connectWith(opener, session.name);
     return;
@@ -1334,9 +1400,17 @@ function extensionsPage(): HTMLElement {
   for (const s of state.sessions) usage[s.protocol] = (usage[s.protocol] ?? 0) + 1;
   usage.gate = gatePanel.list.length;
   const nameOf = (id: string) => protocolOf(id)?.name ?? (id === 'gate' ? GATE_EXTENSION.name : id === 'assistance' ? ASSIST_EXTENSION.name : id);
-  return renderExtensions([...state.protocols, GATE_EXTENSION, ASSIST_EXTENSION], usage, extensionEnabled, (id, on) => {
-    setExtension(id, on);
-    toast(tr(`Extension « ${nameOf(id)} » ${on ? 'enabled' : 'disabled'}`, `Extension « ${nameOf(id)} » ${on ? 'activée' : 'désactivée'}`));
+  return renderExtensions([...state.protocols, GATE_EXTENSION, ASSIST_EXTENSION], usage, {
+    installed: extensionInstalled,
+    enabled: extensionEnabled,
+    setEnabled: (id, on) => {
+      setExtension(id, on);
+      toast(tr(`Extension « ${nameOf(id)} » ${on ? 'enabled' : 'disabled'}`, `Extension « ${nameOf(id)} » ${on ? 'activée' : 'désactivée'}`));
+    },
+    install: (id, on) => {
+      installExtension(id, on);
+      toast(on ? tr(`Extension « ${nameOf(id)} » installed`, `Extension « ${nameOf(id)} » installée`) : tr(`Extension « ${nameOf(id)} » removed`, `Extension « ${nameOf(id)} » retirée`));
+    },
   });
 }
 
@@ -1400,7 +1474,9 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
   const files = activeTab()?.files;
   if (!files) return;
   if (payload.type === 'leave') return files.setDropping(false);
-  const inside = !!activeTab()?.filesView || overFiles(payload.position);
+  // Deux volets : seul le volet du serveur reçoit les fichiers déposés.
+  const fv = activeTab()?.filesView;
+  const inside = fv ? (fv.dual?.acceptsDrop(payload.position.x / devicePixelRatio, payload.position.y / devicePixelRatio) ?? true) : overFiles(payload.position);
   files.setDropping(payload.type !== 'drop' && inside);
   if (payload.type === 'drop' && inside) files.uploadPaths(payload.paths);
 });
@@ -1433,9 +1509,9 @@ loadShells().then(() => {
 });
 onSettingsChange(() => renderShells());
 // Extension activée ou désactivée : menus, arborescence et page Extensions.
-let extensionsKey = settings().disabledExtensions.join(',');
+let extensionsKey = `${settings().disabledExtensions.join(',')}|${settings().installedExtensions.join(',')}`;
 onSettingsChange((s) => {
-  const key = s.disabledExtensions.join(',');
+  const key = `${s.disabledExtensions.join(',')}|${s.installedExtensions.join(',')}`;
   if (key === extensionsKey) return;
   extensionsKey = key;
   gatePanel.show(extensionEnabled('gate')); syncRail();

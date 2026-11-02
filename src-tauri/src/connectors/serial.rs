@@ -23,6 +23,7 @@ impl Connector for SerialConnector {
             description: t!("COM ports: microcontrollers, switch and router consoles.", "Ports COM : microcontrôleurs, consoles de switchs et de routeurs.").into(),
             view: ViewKind::Terminal,
             builtin: true,
+            catalog: false,
             file_browser: false,
             port_forwarding: false,
             fields: vec![

@@ -3,6 +3,45 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { api, errorText, remoteFiles, RemoteEntry } from './api';
 import { h, icon } from './dom';
 import { LOCALE, t } from './i18n';
+import type { TransferQueue } from './transfers';
+
+/** Sélection multiple : clic, Ctrl+clic, Maj+clic, Ctrl+A. */
+export class Selection {
+  readonly paths = new Set<string>();
+  private anchor: string | null = null;
+
+  click(entry: RemoteEntry, all: RemoteEntry[], e: MouseEvent | KeyboardEvent) {
+    if (e.shiftKey && this.anchor) {
+      const a = all.findIndex((x) => x.path === this.anchor);
+      const b = all.findIndex((x) => x.path === entry.path);
+      if (!e.ctrlKey) this.paths.clear();
+      for (const x of all.slice(Math.min(a, b), Math.max(a, b) + 1)) this.paths.add(x.path);
+      return;
+    }
+    if (e.ctrlKey) {
+      if (!this.paths.delete(entry.path)) this.paths.add(entry.path);
+    } else {
+      this.paths.clear();
+      this.paths.add(entry.path);
+    }
+    this.anchor = entry.path;
+  }
+
+  all(entries: RemoteEntry[]) { for (const e of entries) this.paths.add(e.path); }
+  clear() { this.paths.clear(); this.anchor = null; }
+  has(path: string) { return this.paths.has(path); }
+  of(entries: RemoteEntry[]) { return entries.filter((e) => this.paths.has(e.path)); }
+}
+
+/** Options d'un volet « serveur » dans une session de fichiers à deux volets. */
+export interface DualOptions {
+  /** File commune aux deux volets. */
+  queue: TransferQueue;
+  /** Dossier du serveur au démarrage. */
+  startDir?: string;
+  /** Récupérer ces éléments dans le dossier ouvert à gauche. */
+  transfer: (entries: RemoteEntry[]) => void;
+}
 
 /** Fichier distant ouvert dans un éditeur local. */
 interface Editing {
@@ -35,7 +74,13 @@ export function formatSize(bytes: number): string {
   return `${value.toLocaleString(LOCALE, { maximumFractionDigits: value < 10 ? 1 : 0 })} ${units[i]}`;
 }
 
-const formatDate = (secs: number | null) =>
+/** Droits Unix « rwxr-xr-x ». */
+export function formatPerms(mode: number | null): string {
+  if (mode == null) return '';
+  return [6, 3, 0].map((shift) => ['r', 'w', 'x'].map((c, i) => ((mode >> shift) & (4 >> i) ? c : '-')).join('')).join('');
+}
+
+export const formatDate = (secs: number | null) =>
   secs == null ? '' : new Date(secs * 1000).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' });
 
 export class FilePanel {
@@ -43,7 +88,9 @@ export class FilePanel {
   private connectionId: string | null = null;
   private cwd = '';
   private entries: RemoteEntry[] = [];
-  private selected: string | null = null;
+  private readonly selection = new Selection();
+  /** Fichiers commençant par un point. */
+  showHidden = false;
   private loading = false;
   private error = '';
   private transfers: Transfer[] = [];
@@ -55,15 +102,40 @@ export class FilePanel {
     private readonly toast: (msg: string, kind?: 'info' | 'error') => void,
     /** Protocole affiché dans l'en-tête (SFTP, FTPS, S3…). */
     private readonly protocolLabel = 'SFTP',
+    private readonly dual?: DualOptions,
   ) {
+    if (dual) this.el.classList.add('dual');
     this.render();
+  }
+
+  get dir(): string { return this.cwd; }
+  get connection(): string | null { return this.connectionId; }
+  get listed(): RemoteEntry[] { return this.entries; }
+  /** Éléments sélectionnés (dans l'ordre de la liste). */
+  get picked(): RemoteEntry[] { return this.selection.of(this.visible()); }
+
+  private visible(): RemoteEntry[] {
+    return this.showHidden ? this.entries : this.entries.filter((e) => !e.name.startsWith('.'));
+  }
+
+  refreshIf(dir: string) {
+    if (dir === this.cwd) this.load(this.cwd);
+  }
+
+  toggleHidden(on: boolean) {
+    this.showHidden = on;
+    this.render();
+  }
+
+  focusList() {
+    (this.el.querySelector<HTMLElement>('.file-row.selected .file-main') ?? this.el.querySelector<HTMLElement>('.file-main'))?.focus();
   }
 
   /** Nouvelle connexion (ou reconnexion) : on garde le dossier courant. */
   async attach(connectionId: string) {
     this.connectionId = connectionId;
     try {
-      if (!this.cwd) this.cwd = await api.fsHome(connectionId);
+      if (!this.cwd) this.cwd = this.dual?.startDir?.trim() || await api.fsHome(connectionId);
       await this.load(this.cwd);
     } catch (e) {
       this.error = errorText(e);
@@ -85,7 +157,7 @@ export class FilePanel {
     try {
       this.entries = await api.fsList(this.connectionId, path);
       this.cwd = path;
-      this.selected = null;
+      this.selection.clear();
     } catch (e) {
       this.error = errorText(e);
     }
@@ -118,6 +190,7 @@ export class FilePanel {
 
   private async download(entry: RemoteEntry) {
     if (!this.connectionId) return;
+    if (this.dual) return this.dual.transfer([entry]);
     const id = this.connectionId;
     if (entry.isDir) {
       const parent = await open({ directory: true, multiple: false, title: t(`Download the folder « ${entry.name} » to…`, `Télécharger le dossier « ${entry.name} » dans…`) });
@@ -168,6 +241,11 @@ export class FilePanel {
     run: (cb: (p: { done: number; total: number }) => void) => Promise<void>,
     refreshDir?: string,
   ) {
+    if (this.dual) {
+      const target = refreshDir ?? '';
+      this.dual.queue.add({ ...info, target, run, after: () => { if (refreshDir) this.refreshIf(refreshDir); } });
+      return;
+    }
     const t: Transfer = { ...info, done: 0, total: 0, state: 'waiting' };
     this.transfers.unshift(t);
     this.transfers = this.transfers.slice(0, 20);
@@ -234,7 +312,7 @@ export class FilePanel {
 
     this.el.replaceChildren(
       h('div', { class: 'files-head' },
-        h('strong', {}, t('Files', 'Fichiers')), h('span', { class: 'muted small grow' }, this.protocolLabel),
+        h('strong', {}, this.dual ? t('Server', 'Serveur') : t('Files', 'Fichiers')), h('span', { class: 'muted small grow' }, this.protocolLabel),
         btn('home', t('Home folder', 'Dossier personnel'), async () => { if (this.connectionId) this.load(await api.fsHome(this.connectionId)); }),
         btn('up', t('Parent folder', 'Dossier parent'), () => this.load(parent(this.cwd))),
         btn('refresh', t('Refresh', 'Actualiser'), () => this.load(this.cwd)),
@@ -245,6 +323,7 @@ export class FilePanel {
       this.renderList(connected),
       h('div', { class: 'transfers' }),
     );
+    if (this.dual) (this.el.querySelector('.transfers') as HTMLElement).hidden = !this.editing.length;
     this.renderTransfers();
   }
 
@@ -262,17 +341,21 @@ export class FilePanel {
       list.append(h('p', { class: 'files-msg muted' }, t('Loading…', 'Chargement…')));
       return list;
     }
-    if (!this.entries.length) list.append(h('p', { class: 'files-msg muted' }, t('Empty folder. Drop files here to upload them.', 'Dossier vide. Glissez des fichiers ici pour les envoyer.')));
+    list.addEventListener('keydown', (e) => {
+      if (e.key === 'a' && e.ctrlKey) { e.preventDefault(); this.selection.all(this.visible()); this.render(); this.focusList(); }
+    });
+    const shown = this.visible();
+    if (!shown.length) list.append(h('p', { class: 'files-msg muted' }, t('Empty folder. Drop files here to upload them.', 'Dossier vide. Glissez des fichiers ici pour les envoyer.')));
 
-    for (const entry of this.entries) {
-      const selected = entry.path === this.selected;
+    for (const entry of shown) {
+      const selected = this.selection.has(entry.path);
       const kindIcon = entry.isDir ? 'folder' : entry.isLink ? 'link' : 'file';
       list.append(
         h('div', { class: `file-row${selected ? ' selected' : ''}` },
           h('button', {
             class: 'file-main', role: 'option', 'aria-selected': String(selected),
             title: entry.isDir ? t('Double-click to open', 'Double-clic pour ouvrir') : t('Double-click to download', 'Double-clic pour télécharger'),
-            onclick: () => { this.selected = entry.path; this.render(); },
+            onclick: (e: MouseEvent) => { this.selection.click(entry, shown, e); this.render(); this.focusRow(entry.path); },
             ondblclick: () => this.openEntry(entry),
             onkeydown: (e: KeyboardEvent) => {
               if (e.key === 'Enter') this.openEntry(entry);
@@ -284,15 +367,22 @@ export class FilePanel {
             h('span', { class: `file-ico${entry.isDir ? ' dir' : ''}` }, icon(kindIcon, 16)),
             h('span', { class: 'grow ellipsis' }, entry.name),
             h('span', { class: 'file-meta' }, entry.isDir ? '' : formatSize(entry.size)),
+            this.dual && h('span', { class: 'file-meta perms' }, formatPerms(entry.permissions)),
             h('span', { class: 'file-meta date' }, formatDate(entry.modified))),
           h('div', { class: 'row-actions' },
-            h('button', { class: 'icon-btn sm', 'aria-label': t(`Download ${entry.name}`, `Télécharger ${entry.name}`), title: entry.isDir ? t('Download the whole folder', 'Télécharger le dossier entier') : t('Download', 'Télécharger'), onclick: () => this.download(entry) }, icon('download', 14)),
+            h('button', { class: 'icon-btn sm', 'aria-label': t(`Download ${entry.name}`, `Télécharger ${entry.name}`), title: this.dual ? t('Download to the folder open on the left (F6)', 'Récupérer dans le dossier ouvert à gauche (F6)') : entry.isDir ? t('Download the whole folder', 'Télécharger le dossier entier') : t('Download', 'Télécharger'), onclick: () => this.download(entry) }, icon('download', 14)),
             !entry.isDir && h('button', { class: 'icon-btn sm', 'aria-label': t(`Edit ${entry.name}`, `Éditer ${entry.name}`), title: t('Open in my editor (uploaded again at every save)', 'Ouvrir dans mon éditeur (renvoi automatique à chaque enregistrement)'), onclick: () => this.edit(entry) }, icon('fileEdit', 14)),
             h('button', { class: 'icon-btn sm', 'aria-label': `Renommer ${entry.name}`, title: t('Rename (F2)', 'Renommer (F2)'), onclick: () => this.rename(entry) }, icon('edit', 14)),
             h('button', { class: 'icon-btn sm', 'aria-label': t(`Delete ${entry.name}`, `Supprimer ${entry.name}`), title: t('Delete (Del)', 'Supprimer (Suppr)'), onclick: () => this.remove(entry) }, icon('trash', 14)))),
       );
     }
     return list;
+  }
+
+  private focusRow(path: string) {
+    const rows = [...this.el.querySelectorAll<HTMLElement>('.file-row')];
+    const i = this.visible().findIndex((e) => e.path === path);
+    rows[i]?.querySelector<HTMLElement>('.file-main')?.focus();
   }
 
   private renderTransfers() {

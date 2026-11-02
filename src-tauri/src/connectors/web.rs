@@ -15,6 +15,7 @@ impl Connector for WebConnector {
             description: t!("Opens an administration console in a dedicated window, isolated from the app.", "Ouvre une console d'administration dans une fenêtre dédiée, isolée de l'application.").into(),
             view: ViewKind::Web,
             builtin: true,
+            catalog: false,
             file_browser: false,
             port_forwarding: false,
             fields: vec![Field::new("url", t!("Address", "Adresse"), FieldKind::Text)

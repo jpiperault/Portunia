@@ -13,6 +13,7 @@ export const ASSIST_EXTENSION: Manifest = {
   description: t('Take control of a relative\'s or a customer\'s PC: they open Portunia Assistance and read you a code. Goes through your Gate, encrypted end to end.', 'Prendre la main sur le PC d\'un proche ou d\'un client : la personne ouvre Portunia Assistance et vous lit un code. Passe par votre Gate, chiffré de bout en bout.'),
   view: 'screen',
   builtin: true,
+  catalog: false,
   fileBrowser: false,
   portForwarding: false,
   fields: [],
