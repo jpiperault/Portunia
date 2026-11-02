@@ -806,21 +806,20 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const cloudflareBody = () => {
         const g = managed;
         drawTunnelState(g);
-        const target = g.service.replace(/^http:\/\//, '');
         return h('div', { class: 'admin-section' }, ...[
           g.jeton_defini && tunnelState,
           !g.jeton_defini && g.externe && h('p', { class: 'muted small' }, t(
             `A cloudflared installed beside the Gate serves the tunnel (${g.externe_relie ? 'connected' : 'not connected'}). To manage it from here, paste the same token, then remove the old one (sudo cloudflared service uninstall).`,
             `Un cloudflared installé à côté de la Gate sert le tunnel (${g.externe_relie ? 'relié' : 'non relié'}). Pour le gérer d'ici, collez le même jeton, puis retirez l'ancien (sudo cloudflared service uninstall).`)),
           h('ol', { class: 'tunnel-steps' },
-            h('li', {}, t('In Cloudflare Zero Trust › Networks › Tunnels, create a « Cloudflared » tunnel and copy the install command it shows: it holds the token.', 'Dans Cloudflare Zero Trust › Networks › Tunnels, créez un tunnel « Cloudflared » et copiez la commande d\'installation affichée : elle contient le jeton.')),
+            h('li', {}, t('In Cloudflare: Networking › Tunnels › Create a tunnel, give it a name, then copy the installation command shown (any system): it holds the token. No need to run it.', 'Dans Cloudflare : Networking › Tunnels › Create a tunnel, donnez-lui un nom, puis copiez la commande d\'installation affichée (n\'importe quel système) : elle contient le jeton. Inutile de l\'exécuter.')),
             h('li', {}, g.jeton_defini
               ? h('div', { class: 'tunnel-token' }, h('span', {}, t('Tunnel', 'Tunnel'), ' ', h('code', {}, g.tunnel_id ?? '?')),
                 small(t('Replace', 'Remplacer'), () => { tokenRow.hidden = false; tunnelToken.focus(); }),
                 small(t('Remove', 'Effacer'), () => { if (confirm(t('Remove the token? The Gate stops the tunnel and the portal is no longer reachable through Cloudflare.', 'Effacer le jeton ? La Gate arrête le tunnel et le portail n\'est plus joignable par Cloudflare.'))) saveToken(''); }, true))
               : h('span', {}, t('Paste it here:', 'Collez-la ici :')),
               tokenRow),
-            h('li', {}, t('In the tunnel\'s « Public hostname » tab: your public address, type HTTP, URL:', 'Dans l\'onglet « Public hostname » du tunnel : votre adresse publique, type HTTP, URL :'), copyBox(target)),
+            h('li', {}, t('Once the tunnel shows Healthy (Continue): Routes tab › Add route › Published application, your subdomain and domain, then Service URL:', 'Une fois le tunnel « Healthy » (Continue) : onglet Routes › Add route › Published application, votre sous-domaine et votre domaine, puis Service URL :'), copyBox(g.service)),
             h('li', {}, t('Fill in the public address below, save, then test:', 'Renseignez l\'adresse publique ci-dessous, enregistrez, puis testez :'), ' ',
               small(t('Test the public address', 'Tester l\'adresse publique'), async () => {
                 checkResult.className = 'muted small';
