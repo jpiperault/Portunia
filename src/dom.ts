@@ -51,7 +51,7 @@ const ICONS: Record<string, string> = {
   home: 'M3 11l9-7 9 7M5 10v10h14V10',
   up: 'M12 19V5M5 12l7-7 7 7',
   files: 'M8 3h7l4 4v11H8zM15 3v4h4M5 7v14h11',
-  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  more: 'M5 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2ZM12 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2ZM19 11a1 1 0 1 0 0 2a1 1 0 1 0 0-2Z',
   copy: 'M9 9h11v11H9zM5 15V4h11',
   play: 'M7 5l12 7-12 7z',
   move: 'M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20',
