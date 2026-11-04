@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Logo Portunia « >_ » en silhouette blanche (icône de notification). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="1024" android:viewportHeight="1024">
+    <path android:pathData="M262,318 L486,512 L262,706"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="112"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M591,640 L739,640 A51,51 0 0 1 739,742 L591,742 A51,51 0 0 1 591,640 Z" />
+</vector>
