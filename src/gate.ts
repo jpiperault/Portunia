@@ -733,7 +733,9 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const duree = select('p-duree', [['1', '1 heure'], ['4', '4 heures'], ['8', '8 heures']].concat([1, 4, 8].includes(p.duree_h) ? [] : [[String(p.duree_h), `${p.duree_h} heures`]]) as [string, string][], String(p.duree_h));
       const idle = select('p-idle', [['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 heure']].concat([15, 30, 60].includes(p.inactivite_min) ? [] : [[String(p.inactivite_min), `${p.inactivite_min} minutes`]]) as [string, string][], String(p.inactivite_min));
       const clip = checkbox('p-clip', t('Copy-paste text in the terminal', 'Copier-coller du texte dans le terminal'), p.presse_papiers);
-      const site = input({ id: 'p-site', value: p.turnstile_site, placeholder: '0x4AAAAAA…' });
+      // Gate antérieure : code toujours exigé, sans réglage.
+      const hasCodeSetting = p.code_toujours !== undefined;
+      const codeAlways = checkbox('p-code', t('Require the authenticator code', 'Exiger le code d\'authentification'), p.code_toujours ?? true);      const site = input({ id: 'p-site', value: p.turnstile_site, placeholder: '0x4AAAAAA…' });
       const secret = input({ id: 'p-secret', type: 'password', placeholder: p.turnstile_secret_defini ? t('Keep the current secret key', 'Garder la clé secrète actuelle') : '0x4AAAAAA…' });
       const groupMissing = !p.groupes.includes(p.groupe);
 
@@ -1064,6 +1066,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           url: url.value.trim(), groupe: groupe.value, duree_h: Number(duree.value), inactivite_min: Number(idle.value),
           presse_papiers: clip.box.checked, turnstile_site: site.value.trim(),
         };
+        if (hasCodeSetting) body.code_toujours = codeAlways.box.checked;
         if (secret.value.trim()) body.turnstile_secret = secret.value.trim();
         if (!site.value.trim() && p.turnstile_secret_defini) body.turnstile_secret = '';
         if (hasModes) Object.assign(body, { mode, proxys: [proxys.value], entete: entete.value.trim(), reseaux: [reseaux.value] });
@@ -1089,7 +1092,10 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         field(t('Allowed group', 'Groupe autorisé'), groupe, groupMissing ? t(`the group « ${p.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${p.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can sign in to the portal', 'seuls ses membres peuvent se connecter au portail')),
         h('div', { class: 'row2' }, field(t('Web session duration', 'Durée d\'une session web'), duree), field(t('Close after inactivity', 'Fermeture après inactivité'), idle)),
         clip.row,
-        h('p', { class: 'muted small' }, t('Always required on the portal: password and code. First sign-in and lost code are handled in Portunia. Servers in jump mode: only with Portunia for now.', 'Toujours exigés sur le portail : mot de passe et code. Première connexion et code perdu se font dans Portunia. Serveurs en mode rebond et Bureau à distance : seulement avec Portunia pour l\'instant.')),
+        hasCodeSetting && codeAlways.row,
+        h('p', { class: 'muted small' }, hasCodeSetting
+          ? t('Password always required. Code: this box applies to accounts that follow the general setting; an account with its own sign-in combinations follows them (« password »: no code, « password+totp »: code). First sign-in and lost code are handled in Portunia. Servers in jump mode: only with Portunia for now.', 'Mot de passe toujours exigé. Code : cette case vaut pour les comptes qui suivent le réglage général ; un compte qui a ses propres combinaisons de connexion les suit (« password » : sans code, « password+totp » : avec code). Première connexion et code perdu se font dans Portunia. Serveurs en mode rebond et Bureau à distance : seulement avec Portunia pour l\'instant.')
+          : t('Always required on the portal: password and code. First sign-in and lost code are handled in Portunia. Servers in jump mode: only with Portunia for now.', 'Toujours exigés sur le portail : mot de passe et code. Première connexion et code perdu se font dans Portunia. Serveurs en mode rebond et Bureau à distance : seulement avec Portunia pour l\'instant.')),
         h('h3', {}, t('Anti-bot (Cloudflare Turnstile)', 'Anti-robots (Cloudflare Turnstile)')),
         h('div', { class: 'row2' }, field(t('Site key', 'Clé du site'), site), field(t('Secret key', 'Clé secrète'), secret, t('kept encrypted by the Gate', 'gardée chiffrée par la Gate'))),
         h('div', {}, save));

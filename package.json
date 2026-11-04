@@ -1,7 +1,7 @@
 {
   "name": "portunia",
   "private": true,
-  "version": "0.63.0",
+  "version": "0.64.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/build-rdp.mjs && vite",
