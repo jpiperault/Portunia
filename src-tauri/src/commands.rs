@@ -298,6 +298,13 @@ impl Sink for ChannelSink {
         self.send_event(TermEvent::Screen(event));
     }
 
+    fn screen_pixels(&self, packet: Vec<u8>) {
+        // Sous le verrou, après les octets en attente : l'ordre avec les autres messages est gardé.
+        let mut pending = self.pending.lock().unwrap();
+        Self::flush_locked(&self.channel, &mut pending);
+        let _ = self.channel.send(InvokeResponseBody::Raw(packet));
+    }
+
     fn closed(&self, reason: Option<String>) {
         self.send_event(TermEvent::Closed(reason));
         if let Some(state) = self.app.try_state::<AppState>() {

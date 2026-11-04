@@ -552,8 +552,9 @@ fn replays() -> &'static Mutex<HashMap<String, RdpReplay>> {
 /// (signature contrôlée par la Gate) et la confie au moteur RDP. Ses messages (images,
 /// position) arrivent par `on_event` ; renvoie l'identifiant de la relecture.
 #[tauri::command]
-pub async fn gate_rdp_replay(state: State<'_, AppState>, id: String, session: String, on_event: Channel<Value>) -> CmdResult<String> {
-    use std::io::{BufRead, Write};
+pub async fn gate_rdp_replay(state: State<'_, AppState>, id: String, session: String, on_event: Channel) -> CmdResult<String> {
+    use std::io::Write;
+    use tauri::ipc::InvokeResponseBody;
     state.unlocked()?;
     state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
     if !session.chars().all(|c| c.is_ascii_hexdigit() || c == '-') {
@@ -598,15 +599,22 @@ pub async fn gate_rdp_replay(state: State<'_, AppState>, id: String, session: St
     std::thread::Builder::new()
         .name("rdp-relecture".into())
         .spawn(move || {
-            for line in std::io::BufReader::new(stdout).lines() {
-                let Ok(line) = line else { break };
-                let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
-                if on_event.send(message).is_err() {
-                    return;
-                }
+            // Images en binaire (ArrayBuffer dans la page), le reste en JSON.
+            let mut open = true;
+            crate::connectors::rdp::read_engine(stdout, |message| {
+                let body = match message {
+                    crate::connectors::rdp::EngineMessage::Pixels(packet) => InvokeResponseBody::Raw(packet),
+                    crate::connectors::rdp::EngineMessage::Json(value) => InvokeResponseBody::Json(value.to_string()),
+                };
+                open = on_event.send(body).is_ok();
+                open
+            });
+            if !open {
+                return;
             }
             // Moteur arrêté sans message (plantage) : le lecteur l'affiche au lieu d'attendre.
-            let _ = on_event.send(json!({ "type": "closed", "reason": t!("The RDP engine stopped", "Le moteur RDP s'est arrêté") }));
+            let closed = json!({ "type": "closed", "reason": t!("The RDP engine stopped", "Le moteur RDP s'est arrêté") });
+            let _ = on_event.send(InvokeResponseBody::Json(closed.to_string()));
         })
         .map_err(err)?;
     replays().lock().unwrap().insert(replay_id.clone(), RdpReplay { stdin, child, file });

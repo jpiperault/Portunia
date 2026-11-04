@@ -5,8 +5,10 @@
 //!   ensuite   : { "type": "key", "code": "KeyA", "down": true } | { "type": "pointer", x, y, buttons }
 //!               | { "type": "close" }
 //! Sortie standard, une ligne JSON par message :
-//!   { "type": "connected" } | { "type": "resize", width, height }
-//!   | { "type": "image", x, y, width, height, rgba } | { "type": "closed", "reason": … }
+//!   { "type": "connected" } | { "type": "resize", width, height } | { "type": "closed", "reason": … }
+//!   | { "type": "pixels", "bytes": n } suivi de n octets bruts : « P », x, y, largeur, hauteur
+//!     (u16 petit-boutien), puis les pixels RGBA (voir `pixels`). Pas de base64 : une image
+//!     plein écran 1080p fait 8 Mo, et 11 Mo de texte de plus à décoder dans la page.
 //!
 //! Relecture (Gate) : 1re ligne { "replay": "fichier" }, voir `replay`.
 
@@ -16,11 +18,11 @@ mod scancodes;
 use std::{io::Write, time::Duration};
 
 use anyhow::Result;
-use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use ironrdp_client::{
     config::{ConfigBuilder, Destination, TransportKind},
     rdp::{RdpClient, RdpInputEvent, RdpOutputEvent},
 };
+use ironrdp_pdu::rdp::client_info::PerformanceFlags;
 use ironrdp_pdu::input::{
     fast_path::{FastPathInputEvent, KeyboardFlags},
     mouse::PointerFlags,
@@ -51,6 +53,10 @@ struct Settings {
     /// Passage RDCleanPath d'une Gate (mode enregistré).
     #[serde(default)]
     rdcleanpath: Option<RdCleanPath>,
+    /// « fast » : sans fond d'écran, thèmes ni lissage (liaison lente) ; « best » : tous les
+    /// effets ; sinon équilibré (options par défaut d'IronRDP).
+    #[serde(default)]
+    quality: String,
 }
 
 #[derive(Deserialize)]
@@ -75,7 +81,6 @@ enum Input {
 pub(crate) enum Output {
     Connected,
     Resize { width: u16, height: u16 },
-    Image { x: u16, y: u16, width: u16, height: u16, rgba: String },
     Closed { reason: Option<String> },
     /// Relecture chargée : durée et nombre de messages.
     Ready { duration: f64, frames: usize },
@@ -88,6 +93,25 @@ pub(crate) fn emit(message: &Output) {
     let _ = serde_json::to_writer(&mut out, message);
     let _ = out.write_all(b"\n");
     let _ = out.flush();
+}
+
+/// Zone d'image : annonce JSON puis le paquet binaire, d'un seul tenant.
+fn emit_pixels(packet: &[u8]) {
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "{{\"type\":\"pixels\",\"bytes\":{}}}", packet.len());
+    let _ = out.write_all(packet);
+    let _ = out.flush();
+}
+
+/// Paquet d'une zone : « P », x, y, largeur, hauteur (u16 petit-boutien), puis les pixels RGBA.
+fn pixels(x: usize, y: usize, w: usize, h: usize, fill: impl FnOnce(&mut Vec<u8>)) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(9 + w * h * 4);
+    packet.push(b'P');
+    for v in [x, y, w, h] {
+        packet.extend_from_slice(&(v as u16).to_le_bytes());
+    }
+    fill(&mut packet);
+    packet
 }
 
 #[tokio::main]
@@ -130,6 +154,7 @@ async fn run() -> Result<()> {
     if s.nla_only {
         builder = builder.with_tls(false);
     }
+    builder = builder.with_performance_flags(performance(&s.quality));
     if let Some(rdcp) = &s.rdcleanpath {
         let url = rdcp.url.parse().map_err(|e| anyhow::anyhow!("adresse du passage invalide : {e}"))?;
         builder = builder.with_transport(TransportKind::RDCleanPath { url }).with_rdcleanpath_token(rdcp.token.clone());
@@ -274,6 +299,23 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
+/// Options d'affichage annoncées au serveur selon la qualité choisie. Elles réduisent ce que
+/// Windows dessine (fond d'écran, animations), sans changer le décodage de l'image : les
+/// enregistrements de la Gate se relisent de la même façon.
+fn performance(quality: &str) -> PerformanceFlags {
+    match quality {
+        "fast" => {
+            PerformanceFlags::DISABLE_WALLPAPER
+                | PerformanceFlags::DISABLE_FULLWINDOWDRAG
+                | PerformanceFlags::DISABLE_MENUANIMATIONS
+                | PerformanceFlags::DISABLE_THEMING
+                | PerformanceFlags::DISABLE_CURSOR_SHADOW
+        }
+        "best" => PerformanceFlags::ENABLE_FONT_SMOOTHING | PerformanceFlags::ENABLE_DESKTOP_COMPOSITION,
+        _ => PerformanceFlags::default(),
+    }
+}
+
 /// Renvoie true si la session est terminée.
 fn handle_other(event: RdpOutputEvent) -> bool {
     match event {
@@ -333,16 +375,28 @@ fn send_changes(previous: &[u32], current: &[u32], width: u16, height: u16) {
     if changed.len() * 2 > total {
         changed = vec![(0, 0, w, h)];
     }
-    for (x, y, tw, th) in changed {
-        let mut rgba = Vec::with_capacity(tw * th * 4);
-        for row in y..y + th {
-            for &px in &current[row * w + x..row * w + x + tw] {
-                // 0x00RRGGBB → R, G, B, A
-                rgba.extend_from_slice(&[(px >> 16) as u8, (px >> 8) as u8, px as u8, 255]);
+    for (x, y, tw, th) in merge_runs(changed) {
+        emit_pixels(&pixels(x, y, tw, th, |out| {
+            for row in y..y + th {
+                for &px in &current[row * w + x..row * w + x + tw] {
+                    // 0x00RRGGBB → R, G, B, A
+                    out.extend_from_slice(&[(px >> 16) as u8, (px >> 8) as u8, px as u8, 255]);
+                }
             }
-        }
-        emit(&Output::Image { x: x as u16, y: y as u16, width: tw as u16, height: th as u16, rgba: B64.encode(&rgba) });
+        }));
     }
+}
+
+/// Carrés voisins d'une même rangée réunis en une seule zone : moins de messages.
+fn merge_runs(tiles: Vec<(usize, usize, usize, usize)>) -> Vec<(usize, usize, usize, usize)> {
+    let mut out: Vec<(usize, usize, usize, usize)> = Vec::with_capacity(tiles.len());
+    for (x, y, w, h) in tiles {
+        match out.last_mut() {
+            Some(last) if last.1 == y && last.0 + last.2 == x && last.3 == h => last.2 += w,
+            _ => out.push((x, y, w, h)),
+        }
+    }
+    out
 }
 
 /// Version RGBA (image d'IronRDP) : compare à l'image précédente (vide : tout envoyer).
@@ -371,15 +425,15 @@ pub(crate) fn send_rgba_changes(previous: &[u8], current: &[u8], width: u16, hei
     if changed.len() * 2 > total {
         changed = vec![(0, 0, w, h)];
     }
-    for (x, y, tw, th) in changed {
-        let mut rgba = Vec::with_capacity(tw * th * 4);
-        for row in y..y + th {
-            let start = (row * w + x) * 4;
-            for px in current[start..start + tw * 4].chunks_exact(4) {
-                rgba.extend_from_slice(&[px[0], px[1], px[2], 255]);
+    for (x, y, tw, th) in merge_runs(changed) {
+        emit_pixels(&pixels(x, y, tw, th, |out| {
+            for row in y..y + th {
+                let start = (row * w + x) * 4;
+                for px in current[start..start + tw * 4].chunks_exact(4) {
+                    out.extend_from_slice(&[px[0], px[1], px[2], 255]);
+                }
             }
-        }
-        emit(&Output::Image { x: x as u16, y: y as u16, width: tw as u16, height: th as u16, rgba: B64.encode(&rgba) });
+        }));
     }
 }
 
@@ -403,4 +457,22 @@ async fn pump_windows_messages() {
 #[cfg(not(windows))]
 async fn pump_windows_messages() {
     std::future::pending::<()>().await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paquet_de_pixels() {
+        let p = pixels(3, 64, 2, 1, |out| out.extend_from_slice(&[1, 2, 3, 255, 4, 5, 6, 255]));
+        assert_eq!(&p[..9], &[b'P', 3, 0, 64, 0, 2, 0, 1, 0]);
+        assert_eq!(p.len(), 9 + 2 * 4);
+    }
+
+    #[test]
+    fn carres_voisins_reunis() {
+        let tiles = vec![(0, 0, 64, 64), (64, 0, 64, 64), (192, 0, 64, 64), (0, 64, 64, 64), (64, 64, 32, 64)];
+        assert_eq!(merge_runs(tiles), vec![(0, 0, 128, 64), (192, 0, 64, 64), (0, 64, 96, 64)]);
+    }
 }

@@ -169,8 +169,23 @@ pub trait Sink: Send + Sync {
     }
     /// Image d'un écran distant (vue `Screen`).
     fn screen(&self, _event: ScreenEvent) {}
+    /// Zone d'image en binaire (voir `pixels_packet`) : envoyée telle quelle à la page, sans
+    /// base64 ni JSON. Même ordre que `screen`.
+    fn screen_pixels(&self, _packet: Vec<u8>) {}
     /// Fin de la connexion ; `reason` est renseigné en cas d'erreur.
     fn closed(&self, reason: Option<String>);
+}
+
+/// Paquet binaire d'une zone d'image : « P », x, y, largeur, hauteur (u16 petit-boutien),
+/// puis les pixels RGBA. Même format que celui du moteur RDP (`portunia-rdp`).
+pub fn pixels_packet(x: u16, y: u16, width: u16, height: u16, rgba: &[u8]) -> Vec<u8> {
+    let mut packet = Vec::with_capacity(9 + rgba.len());
+    packet.push(b'P');
+    for v in [x, y, width, height] {
+        packet.extend_from_slice(&v.to_le_bytes());
+    }
+    packet.extend_from_slice(rgba);
+    packet
 }
 
 /// Ce qu'une connexion graphique envoie à l'interface.

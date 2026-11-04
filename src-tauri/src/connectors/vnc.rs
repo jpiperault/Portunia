@@ -125,6 +125,15 @@ async fn pump(client: &VncClient, mut rx: UnboundedReceiver<Msg>, sink: &dyn Sin
         tokio::select! {
             event = client.recv_event() => {
                 let event = event.map_err(|e| anyhow!("{e}"))?;
+                // Pixels bruts : envoyés en binaire, sans base64.
+                if let VncEvent::RawImage(rect, mut data) = event {
+                    // Certains serveurs laissent l'octet alpha à 0 : on rend l'image opaque.
+                    for pixel in data.chunks_exact_mut(4) {
+                        pixel[3] = 255;
+                    }
+                    sink.screen_pixels(crate::connector::pixels_packet(rect.x, rect.y, rect.width, rect.height, &data));
+                    continue;
+                }
                 if let Some(screen) = to_screen(event)? {
                     sink.screen(screen);
                 }
@@ -141,13 +150,6 @@ async fn pump(client: &VncClient, mut rx: UnboundedReceiver<Msg>, sink: &dyn Sin
 fn to_screen(event: VncEvent) -> Result<Option<ScreenEvent>> {
     Ok(Some(match event {
         VncEvent::SetResolution(screen) => ScreenEvent::Resize { width: screen.width, height: screen.height },
-        VncEvent::RawImage(rect, mut data) => {
-            // Certains serveurs laissent l'octet alpha à 0 : on rend l'image opaque.
-            for pixel in data.chunks_exact_mut(4) {
-                pixel[3] = 255;
-            }
-            ScreenEvent::Image { x: rect.x, y: rect.y, width: rect.width, height: rect.height, rgba: B64.encode(&data) }
-        }
         VncEvent::JpegImage(rect, data) => {
             ScreenEvent::Jpeg { x: rect.x, y: rect.y, width: rect.width, height: rect.height, data: B64.encode(&data) }
         }

@@ -5,6 +5,7 @@
 import { h, icon } from './dom';
 import { LOCALE, t } from './i18n';
 import { detectLayout, LayoutChoice, Line, lineText, typedLines } from './rdpkeys';
+import { drawPixels } from './screen';
 
 /** Réponse de GET /audit/sessions/{id}/enregistrement pour une session RDP. */
 export interface RdpRecording {
@@ -31,7 +32,7 @@ export type RdpEvent =
 export type ReplayMessage =
   | { type: 'ready'; duration: number; frames: number }
   | { type: 'resize'; width: number; height: number }
-  | { type: 'image'; x: number; y: number; width: number; height: number; rgba: string }
+  | ArrayBuffer
   | { type: 'position'; t: number }
   | { type: 'closed'; reason?: string | null };
 
@@ -140,17 +141,14 @@ export class RdpPlayer {
   // ---------- Moteur ----------
 
   private onMessage(m: ReplayMessage) {
+    // Zone d'image en binaire (voir drawPixels).
+    if (m instanceof ArrayBuffer) { drawPixels(this.ctx, m); return; }
     switch (m.type) {
       case 'resize':
         this.canvas.width = m.width;
         this.canvas.height = m.height;
         this.fit();
         break;
-      case 'image': {
-        const bytes = Uint8ClampedArray.from(atob(m.rgba), (c) => c.charCodeAt(0));
-        this.ctx.putImageData(new ImageData(bytes, m.width, m.height), m.x, m.y);
-        break;
-      }
       case 'position':
         this.loading.hidden = true;
         this.inflight = false;

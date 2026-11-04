@@ -37,6 +37,16 @@ function decode(b64: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+/** Zone d'image binaire (moteur RDP, VNC) : « P », x, y, largeur, hauteur (u16 petit-boutien), puis les pixels RGBA. */
+export function drawPixels(ctx: CanvasRenderingContext2D, buf: ArrayBuffer) {
+  if (buf.byteLength < 9) return;
+  const head = new DataView(buf, 0, 9);
+  if (head.getUint8(0) !== 0x50) return;
+  const x = head.getUint16(1, true), y = head.getUint16(3, true), w = head.getUint16(5, true), hgt = head.getUint16(7, true);
+  if (!w || !hgt || buf.byteLength !== 9 + w * hgt * 4) return;
+  ctx.putImageData(new ImageData(new Uint8ClampedArray(buf, 9), w, hgt), x, y);
+}
+
 export class ScreenView {
   private readonly canvas = h('canvas', { class: 'screen-canvas', tabindex: '0', 'aria-label': t('Remote screen', 'Écran distant') });
   private readonly ctx = this.canvas.getContext('2d', { alpha: false })!;
@@ -124,7 +134,11 @@ export class ScreenView {
   }
 
   private onEvent(e: TermEvent) {
-    if (handleConfirm(e) || e instanceof ArrayBuffer) return;
+    if (e instanceof ArrayBuffer) {
+      this.drawing = this.drawing.then(() => drawPixels(this.ctx, e));
+      return;
+    }
+    if (handleConfirm(e)) return;
     if (e.event === 'screen') this.draw(e.data);
     else if (e.event === 'closed') {
       this.connectionId = null;

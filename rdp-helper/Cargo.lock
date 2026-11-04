@@ -1323,8 +1323,6 @@ dependencies = [
 [[package]]
 name = "ironrdp-client"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2a3b44f8af101cf5a8cc5bf80470d64099c95c553d5597dec55ff38a821243e"
 dependencies = [
  "anyhow",
  "futures-util",
@@ -2138,7 +2136,6 @@ name = "portunia-rdp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
  "ironrdp-bulk",
  "ironrdp-client",
  "ironrdp-connector",

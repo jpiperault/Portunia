@@ -4,7 +4,7 @@
 
 use std::{
     fs,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     path::PathBuf,
     process::{Child, ChildStdin, Command, Stdio},
     sync::{mpsc, Arc, Mutex},
@@ -54,6 +54,18 @@ impl Connector for RdpConnector {
                 )
                 .default(false)
                 .show_if("client", "tab"),
+                // Ce que Windows dessine : moins d'effets, moins de données sur une liaison lente.
+                Field::new(
+                    "quality",
+                    t!("Quality", "Qualité"),
+                    choice(&[
+                        ("balanced", t!("Balanced", "Équilibrée")),
+                        ("fast", t!("Fast (no wallpaper or themes, slow links)", "Rapide (sans fond d'écran ni thèmes, liaison lente)")),
+                        ("best", t!("Best (all visual effects)", "Maximale (tous les effets visuels)")),
+                    ]),
+                )
+                .default("balanced")
+                .show_if("client", "tab"),
                 Field::new("fullscreen", t!("Full screen", "Plein écran"), FieldKind::Bool).default(false).show_if("client", "mstsc"),
                 Field::new("multimon", t!("Use all screens", "Utiliser tous les écrans"), FieldKind::Bool)
                     .default(false)
@@ -83,6 +95,43 @@ pub(crate) fn helper_path() -> Option<PathBuf> {
     [beside, dev.join("release").join(name), dev.join("debug").join(name)]
         .into_iter()
         .find(|p| p.exists())
+}
+
+/// Message du moteur RDP : une ligne JSON, ou une zone d'image binaire annoncée par
+/// `{"type":"pixels","bytes":n}` et suivie de ses n octets (voir `pixels_packet`).
+pub(crate) enum EngineMessage {
+    Json(Value),
+    Pixels(Vec<u8>),
+}
+
+/// Lit la sortie du moteur jusqu'à sa fin, ou jusqu'à ce que `on` renvoie false.
+pub(crate) fn read_engine(stdout: impl Read, mut on: impl FnMut(EngineMessage) -> bool) {
+    let mut reader = BufReader::with_capacity(1 << 20, stdout);
+    let mut line = String::new();
+    loop {
+        line.clear();
+        if !matches!(reader.read_line(&mut line), Ok(n) if n > 0) {
+            return;
+        }
+        let Ok(message) = serde_json::from_str::<Value>(line.trim_end()) else { continue };
+        let message = if message["type"] == "pixels" {
+            let len = message["bytes"].as_u64().unwrap_or(0) as usize;
+            // Au plus une image 8K en RGBA : au-delà, la sortie est incompréhensible.
+            if len > 9 + 8192 * 8192 * 4 {
+                return;
+            }
+            let mut packet = vec![0; len];
+            if reader.read_exact(&mut packet).is_err() {
+                return;
+            }
+            EngineMessage::Pixels(packet)
+        } else {
+            EngineMessage::Json(message)
+        };
+        if !on(message) {
+            return;
+        }
+    }
 }
 
 fn split_user(raw: &str) -> (String, String) {
@@ -127,6 +176,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     // NLA exigé par défaut : un faux serveur ne peut pas faire passer la connexion en TLS simple,
     // où le mot de passe serait envoyé au serveur lui-même.
     settings["nlaOnly"] = json!(!ctx.bool("allowNoNla"));
+    settings["quality"] = json!(ctx.str("quality").unwrap_or_default());
     // Gate, mode enregistré : passage RDCleanPath avec un jeton à usage unique.
     if let (Some(url), Some(token)) = (ctx.str("rdcleanpathUrl"), ctx.raw("rdcleanpathToken")) {
         settings["rdcleanpath"] = json!({ "url": url, "token": token });
@@ -139,9 +189,14 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     thread::Builder::new().name("rdp-out".into()).spawn(move || {
         let mut ready = Some(ready_tx);
         let mut ended = false;
-        for line in BufReader::new(stdout).lines() {
-            let Ok(line) = line else { break };
-            let Ok(message) = serde_json::from_str::<Value>(&line) else { continue };
+        read_engine(stdout, |message| {
+            let message = match message {
+                EngineMessage::Pixels(packet) => {
+                    sink.screen_pixels(packet);
+                    return true;
+                }
+                EngineMessage::Json(message) => message,
+            };
             match message["type"].as_str() {
                 Some("connected") => {
                     if let Some(tx) = ready.take() {
@@ -157,7 +212,7 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
                         None => sink.closed(reason),
                     }
                     ended = true;
-                    break;
+                    return false;
                 }
                 _ => {
                     if let Ok(event) = serde_json::from_value::<ScreenEvent>(message) {
@@ -165,7 +220,8 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
                     }
                 }
             }
-        }
+            true
+        });
         if !ended {
             let reason = t!("The RDP engine stopped", "Le moteur RDP s'est arrêté").to_string();
             match ready.take() {
