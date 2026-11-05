@@ -470,16 +470,23 @@ pub async fn gate_connect(
     .collect();
     let mut values: HashMap<String, Value> = HashMap::new();
     let name = format!("{server} · {}", b.name);
-    if t["protocole"].as_str() == Some("rdp") && t["mode"].as_str() == Some("enregistre") {
+    let vault = t["mode"].as_str() == Some("coffre");
+    if t["protocole"].as_str() == Some("rdp") && (t["mode"].as_str() == Some("enregistre") || vault) {
         // Bureau à distance enregistré : passage RDCleanPath de la Gate (qui relaie et enregistre) ;
-        // l'authentification Windows (NLA) reste entre le moteur RDP et le serveur.
+        // l'authentification Windows (NLA) reste entre le moteur RDP et le serveur. Coffre : la
+        // Gate ouvre la session Windows elle-même, le moteur s'authentifie auprès d'elle avec le jeton.
         let local = pinned_forwarder(&b.host, b.api_port, &b.api_fingerprint).await.map_err(full)?;
         values.insert("host".into(), t["hote"].clone());
         values.insert("port".into(), t["port"].clone());
         values.insert("client".into(), json!("tab"));
         values.insert("rdcleanpathUrl".into(), json!(format!("ws://127.0.0.1:{local}/api/v1/rdp")));
         values.insert("rdcleanpathToken".into(), json!(ticket));
-        values.extend(extra.into_iter().filter(|(k, _)| ["username", "password"].contains(&k.as_str())));
+        if vault {
+            values.insert("username".into(), json!("portunia"));
+            values.insert("password".into(), json!(ticket));
+        } else {
+            values.extend(extra.into_iter().filter(|(k, _)| ["username", "password"].contains(&k.as_str())));
+        }
         return start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await;
     }
     if t["protocole"].as_str() == Some("rdp") {

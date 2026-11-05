@@ -514,16 +514,17 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     const passField = field(t('Account\'s current password', 'Mot de passe actuel du compte'), secretPass, t('used only once', 'utilisé une seule fois'));
     const keyField = field(t('Private key (without passphrase)', 'Clé privée (sans phrase de passe)'), secretKey);
     const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', t('Remote Desktop (RDP)', 'Bureau à distance (RDP)')]], cur?.protocole ?? 'ssh');
-    const rdpNote = h('p', { class: 'muted small', hidden: true }, t('Remote Desktop: the user types their Windows credentials at each opening. Jump: the Gate relays the encrypted connection without reading it (Portunia only). Recorded: the Gate relays and records the session, without seeing the password; also opens from the web portal. Vault mode is coming.', 'Bureau à distance : l\'utilisateur tape ses identifiants Windows à chaque ouverture. Rebond : la Gate relaie la connexion chiffrée sans la lire (Portunia seulement). Enregistré : la Gate relaie et enregistre la session, sans voir le mot de passe ; s\'ouvre aussi depuis le portail web. Le mode coffre arrive.'));
+    const rdpNote = h('p', { class: 'muted small', hidden: true }, t('Remote Desktop. Jump: the Gate relays the encrypted connection without reading it from Portunia; from the web portal it relays without recording. Recorded: the Gate relays and records the session, without seeing the password. In both, the user types their Windows credentials at each opening. Vault: the Gate signs in to Windows with the account it keeps (NLA required on the server) and records; the user never sees the password (Gate 0.29 and later).', 'Bureau à distance. Rebond : depuis Portunia, la Gate relaie la connexion chiffrée sans la lire ; depuis le portail web, elle relaie sans enregistrer. Enregistré : la Gate relaie et enregistre la session, sans voir le mot de passe. Dans les deux cas, l\'utilisateur tape ses identifiants Windows à chaque ouverture. Coffre : la Gate ouvre la session Windows avec le compte qu\'elle garde (NLA exigé sur le serveur) et enregistre ; l\'utilisateur ne voit jamais le mot de passe (Gate 0.29 et suivantes).'));
     // Port par défaut du protocole, tant que l'administrateur ne l'a pas changé.
     proto.addEventListener('change', () => {
       if (['22', '3389', ''].includes(port.value.trim())) port.value = proto.value === 'rdp' ? '3389' : '22';
-      if (proto.value === 'rdp' && mode.value === 'coffre') mode.value = 'enregistre';
       sync();
     });
     const sync = () => {
       const rdp = proto.value === 'rdp';
-      for (const o of mode.options) o.disabled = rdp && o.value === 'coffre';
+      // Bureau à distance : le coffre garde un mot de passe, pas de clé SSH.
+      for (const o of secretKind.options) o.disabled = rdp && ['generer', 'cle'].includes(o.value);
+      if (rdp && ['generer', 'cle'].includes(secretKind.value)) secretKind.value = 'mot_de_passe';
       rdpNote.hidden = !rdp;
       const vault = mode.value === 'coffre';
       secretKind.closest('label')!.hidden = !vault;

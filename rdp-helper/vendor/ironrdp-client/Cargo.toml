@@ -152,6 +152,7 @@ optional = true
 [dependencies.ironrdp-rdpsnd-native]
 version = "0.7"
 optional = true
+default-features = false
 
 [dependencies.ironrdp-session]
 version = "0.11"

@@ -57,6 +57,27 @@ struct Settings {
     /// effets ; sinon équilibré (options par défaut d'IronRDP).
     #[serde(default)]
     quality: String,
+    /// Son du serveur joué sur ce poste.
+    #[serde(default)]
+    sound: bool,
+    /// Passerelle Bureau à distance (RD Gateway) : « hôte:port », compte et mot de passe.
+    #[serde(default)]
+    gateway: Option<Gateway>,
+    /// Profondeur de couleur (16, 24 ou 32 bits) ; 0 : celle d'IronRDP.
+    #[serde(default, rename = "colorDepth")]
+    color_depth: u32,
+    /// Taille fixe du bureau : l'onglet ne la change pas en se redimensionnant.
+    #[serde(default, rename = "fixedSize")]
+    fixed_size: bool,
+}
+
+#[derive(Deserialize)]
+struct Gateway {
+    host: String,
+    #[serde(default)]
+    username: String,
+    #[serde(default)]
+    password: String,
 }
 
 #[derive(Deserialize)]
@@ -154,11 +175,23 @@ async fn run() -> Result<()> {
     if s.nla_only {
         builder = builder.with_tls(false);
     }
-    builder = builder.with_performance_flags(performance(&s.quality));
+    builder = builder.with_performance_flags(performance(&s.quality)).with_sound(s.sound);
+    if matches!(s.color_depth, 16 | 24 | 32) {
+        builder = builder.with_color_depth(s.color_depth);
+    }
     if let Some(rdcp) = &s.rdcleanpath {
         let url = rdcp.url.parse().map_err(|e| anyhow::anyhow!("adresse du passage invalide : {e}"))?;
         builder = builder.with_transport(TransportKind::RDCleanPath { url }).with_rdcleanpath_token(rdcp.token.clone());
+    } else if let Some(gw) = s.gateway.as_ref().filter(|g| !g.host.trim().is_empty()) {
+        // Port 443 par défaut, comme mstsc.
+        let host = gw.host.trim();
+        let endpoint = if host.rsplit_once(':').is_some_and(|(_, p)| p.parse::<u16>().is_ok()) { host.to_string() } else { format!("{host}:443") };
+        builder = builder
+            .with_transport(TransportKind::Gateway { endpoint })
+            .with_gateway_username(if gw.username.is_empty() { s.username.clone() } else { gw.username.clone() })
+            .with_gateway_password(if gw.password.is_empty() { s.password.clone() } else { gw.password.clone() });
     }
+    let fixed = s.fixed_size;
     let config = builder.build()?;
 
     let (out_tx, mut out_rx) = mpsc::channel(16);
@@ -186,6 +219,8 @@ async fn run() -> Result<()> {
         while let Ok(Some(line)) = lines.next_line().await {
             let Ok(event) = serde_json::from_str::<Input>(&line) else { continue };
             let events: smallvec::SmallVec<[FastPathInputEvent; 2]> = match event {
+                // Taille fixe : le bureau garde sa taille, l'onglet le met à l'échelle.
+                Input::Resize { .. } if fixed => continue,
                 Input::Resize { width, height } => {
                     // L'onglet a changé de taille : le bureau distant s'adapte (ou la session se reconnecte à la nouvelle taille).
                     let _ = keys.send(RdpInputEvent::Resize { width: width.max(640), height: height.max(480), scale_factor: 100, physical_size: None });

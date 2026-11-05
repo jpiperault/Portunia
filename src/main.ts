@@ -256,7 +256,8 @@ function openGateServer(b: Gate, s: GateServer) {
  * chaque ouverture, jamais enregistrés.
  */
 async function openGateDesktop(b: Gate, s: GateServer) {
-  const cred = await askCredentials(
+  // Coffre : la Gate ouvre la session Windows avec le compte qu'elle garde, rien à demander.
+  const cred = s.mode === 'coffre' ? { username: s.compte ?? '', password: '' } : await askCredentials(
     { protocol: 'rdp', name: s.nom, values: { host: s.nom, username: s.compte ?? '' } } as QuickTarget,
     s.mode === 'enregistre'
       ? tr(`Windows credentials for ${s.nom} (local account or DOMAIN\\user). The Gate relays and records the session; it does not see your password.`, `Identifiants Windows de ${s.nom} (compte local ou DOMAINE\\utilisateur). La Gate relaie et enregistre la session ; il ne voit pas votre mot de passe.`)

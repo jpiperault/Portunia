@@ -8,7 +8,7 @@ edition = "2021"
 # biblioth??ques cryptographiques) sont incompatibles avec celles de russh.
 
 [dependencies]
-ironrdp-client = { version = "0.1", features = ["native-tls", "clipboard"] }
+ironrdp-client = { version = "0.1", features = ["native-tls", "clipboard", "sound", "gateway"] }
 ironrdp-pdu = "0.9"
 ironrdp-connector = "0.10"
 ironrdp-session = "0.11"

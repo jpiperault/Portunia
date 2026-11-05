@@ -25,7 +25,7 @@ impl Connector for RdpConnector {
         Manifest {
             id: "rdp".into(),
             name: t!("Remote Desktop (RDP)", "Bureau à distance (RDP)").into(),
-            version: "0.2.0".into(),
+            version: "0.3.0".into(),
             description: t!("Windows desktop in a tab (IronRDP), or in the Windows Remote Desktop client.", "Bureau Windows dans un onglet (IronRDP), ou dans le client Bureau à distance de Windows.").into(),
             view: ViewKind::Screen,
             builtin: true,
@@ -66,9 +66,46 @@ impl Connector for RdpConnector {
                 )
                 .default("balanced")
                 .show_if("client", "tab"),
+                Field::new(
+                    "resolution",
+                    t!("Resolution", "Résolution"),
+                    choice(&[
+                        ("auto", t!("Fit the tab or window", "Celle de l'onglet ou de la fenêtre")),
+                        ("1280x720", "1280 × 720"),
+                        ("1600x900", "1600 × 900"),
+                        ("1920x1080", "1920 × 1080"),
+                        ("2560x1440", "2560 × 1440"),
+                    ]),
+                )
+                .default("auto"),
+                Field::new(
+                    "colorDepth",
+                    t!("Colours", "Couleurs"),
+                    choice(&[("0", t!("Automatic", "Automatique")), ("32", t!("32 bits", "32 bits")), ("24", t!("24 bits", "24 bits")), ("16", t!("16 bits (slow links)", "16 bits (liaison lente)"))]),
+                )
+                .default("0"),
+                Field::new("sound", t!("Play the server's sound here", "Jouer le son du serveur ici"), FieldKind::Bool).default(true),
+                // Passerelle Bureau à distance (RD Gateway) : serveurs atteints par HTTPS.
+                Field::new("gateway", t!("Remote Desktop Gateway", "Passerelle Bureau à distance"), FieldKind::Text)
+                    .placeholder(t!("Optional: rdg.company.com (port 443 by default)", "Facultatif : rdg.entreprise.fr (port 443 par défaut)")),
+                Field::new("gatewayUser", t!("Gateway user", "Utilisateur de la passerelle"), FieldKind::Text)
+                    .placeholder(t!("Empty = same credentials as the server", "Vide = mêmes identifiants que le serveur")),
+                Field::new("gatewayPassword", t!("Gateway password", "Mot de passe de la passerelle"), FieldKind::Secret).show_if("client", "tab"),
                 Field::new("fullscreen", t!("Full screen", "Plein écran"), FieldKind::Bool).default(false).show_if("client", "mstsc"),
                 Field::new("multimon", t!("Use all screens", "Utiliser tous les écrans"), FieldKind::Bool)
                     .default(false)
+                    .show_if("client", "mstsc"),
+                Field::new("drives", t!("Share this computer's drives", "Partager les lecteurs de ce poste"), FieldKind::Bool)
+                    .default(false)
+                    .show_if("client", "mstsc"),
+                Field::new("printers", t!("Share this computer's printers", "Partager les imprimantes de ce poste"), FieldKind::Bool)
+                    .default(false)
+                    .show_if("client", "mstsc"),
+                Field::new("admin", t!("Administration session (console)", "Session d'administration (console)"), FieldKind::Bool)
+                    .default(false)
+                    .show_if("client", "mstsc"),
+                Field::new("remoteApp", t!("RemoteApp: program only", "RemoteApp : programme seul"), FieldKind::Text)
+                    .placeholder(t!("Optional: C:\\Program Files\\App\\app.exe or ||alias", "Facultatif : C:\\Program Files\\App\\app.exe ou ||alias"))
                     .show_if("client", "mstsc"),
                 Field::new("mac", t!("MAC address (Wake-on-LAN)", "Adresse MAC (Wake-on-LAN)"), FieldKind::Text)
                     .placeholder(t!("Optional: AA:BB:CC:DD:EE:FF, to wake the machine up", "Facultatif : AA:BB:CC:DD:EE:FF, pour réveiller la machine")),
@@ -134,6 +171,13 @@ pub(crate) fn read_engine(stdout: impl Read, mut on: impl FnMut(EngineMessage) -
     }
 }
 
+/// Résolution choisie (« 1920x1080 »), ou rien pour suivre l'onglet ou la fenêtre.
+fn fixed_resolution(ctx: &ConnectContext) -> Option<(u16, u16)> {
+    let value = ctx.str("resolution")?;
+    let (w, h) = value.split_once('x')?;
+    Some((w.parse().ok().filter(|w| (640..=8192).contains(w))?, h.parse().ok().filter(|h| (480..=8192).contains(h))?))
+}
+
 fn split_user(raw: &str) -> (String, String) {
     match raw.split_once('\\') {
         Some((domain, user)) => (domain.to_string(), user.to_string()),
@@ -168,11 +212,23 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     let mut stdin = child.stdin.take().context(t!("RDP engine: input unavailable", "Moteur RDP : entrée indisponible"))?;
     let stdout = child.stdout.take().context(t!("RDP engine: output unavailable", "Moteur RDP : sortie indisponible"))?;
 
-    // Pour une vue écran, l'interface transmet la taille de l'onglet en pixels.
+    // Pour une vue écran, l'interface transmet la taille de l'onglet en pixels ; une résolution
+    // fixe la remplace, et l'onglet met alors l'image à l'échelle.
+    let fixed = fixed_resolution(ctx);
+    let (width, height) = fixed.unwrap_or((ctx.cols, ctx.rows));
     let mut settings = json!({
         "host": host, "port": port, "username": username, "domain": domain, "password": password,
-        "width": ctx.cols, "height": ctx.rows,
+        "width": width, "height": height, "fixedSize": fixed.is_some(),
     });
+    settings["sound"] = json!(ctx.values.get("sound").and_then(Value::as_bool).unwrap_or(true));
+    settings["colorDepth"] = json!(ctx.str("colorDepth").and_then(|d| d.parse::<u32>().ok()).unwrap_or(0));
+    if let Some(gateway) = ctx.str("gateway").filter(|g| !g.trim().is_empty()) {
+        settings["gateway"] = json!({
+            "host": gateway.trim(),
+            "username": ctx.str("gatewayUser").unwrap_or_default(),
+            "password": ctx.raw("gatewayPassword").unwrap_or_default(),
+        });
+    }
     // NLA exigé par défaut : un faux serveur ne peut pas faire passer la connexion en TLS simple,
     // où le mot de passe serait envoyé au serveur lui-même.
     settings["nlaOnly"] = json!(!ctx.bool("allowNoNla"));
@@ -330,6 +386,45 @@ fn connect_mstsc(ctx: &ConnectContext) -> Result<Outcome> {
     ];
     if !username.is_empty() {
         lines.push(format!("username:s:{username}"));
+    }
+    if let Some((w, h)) = fixed_resolution(ctx) {
+        lines.extend([format!("desktopwidth:i:{w}"), format!("desktopheight:i:{h}"), "smart sizing:i:1".into()]);
+    }
+    if let Some(depth) = ctx.str("colorDepth").filter(|d| ["32", "24", "16"].contains(&d.as_str())) {
+        lines.push(format!("session bpp:i:{depth}"));
+    }
+    // 0 : son joué sur ce poste ; 2 : pas de son.
+    let sound = ctx.values.get("sound").and_then(Value::as_bool).unwrap_or(true);
+    lines.push(format!("audiomode:i:{}", if sound { 0 } else { 2 }));
+    if ctx.bool("drives") {
+        lines.push("drivestoredirect:s:*".into());
+    }
+    lines.push(format!("redirectprinters:i:{}", ctx.bool("printers") as u8));
+    if ctx.bool("admin") {
+        lines.push("administrative session:i:1".into());
+    }
+    if let Some(gateway) = ctx.str("gateway").map(|g| g.trim().to_string()).filter(|g| !g.is_empty()) {
+        single_line(&gateway, t!("The gateway", "La passerelle"))?;
+        // 1 : toujours passer par la passerelle ; mêmes identifiants que le serveur si aucun n'est donné.
+        lines.extend([format!("gatewayhostname:s:{gateway}"), "gatewayusagemethod:i:1".into(), "gatewayprofileusagemethod:i:1".into(), "gatewaycredentialssource:i:0".into()]);
+        match ctx.str("gatewayUser").filter(|u| !u.trim().is_empty()) {
+            Some(user) => {
+                single_line(&user, t!("The gateway user", "L'utilisateur de la passerelle"))?;
+                lines.extend(["promptcredentialonce:i:0".into(), format!("gatewayusername:s:{user}")]);
+            }
+            None => lines.push("promptcredentialonce:i:1".into()),
+        }
+    }
+    // RemoteApp : la fenêtre du programme seule, au lieu du bureau entier.
+    if let Some(program) = ctx.str("remoteApp").map(|p| p.trim().to_string()).filter(|p| !p.is_empty()) {
+        single_line(&program, t!("The RemoteApp program", "Le programme RemoteApp"))?;
+        let name = program.trim_start_matches("||").rsplit(['\\', '/']).next().unwrap_or(&program).trim_end_matches(".exe").to_string();
+        lines.extend([
+            "remoteapplicationmode:i:1".into(),
+            format!("remoteapplicationprogram:s:{program}"),
+            format!("remoteapplicationname:s:{name}"),
+            "disableremoteappcapscheck:i:1".into(),
+        ]);
     }
 
     // Fichier .rdp en UTF-16 avec BOM, comme ceux enregistrés par Windows.
