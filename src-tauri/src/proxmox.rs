@@ -181,6 +181,11 @@ fn unreachable(p: &Pve, e: &reqwest::Error) -> anyhow::Error {
 
 /// Appel de l'API ; renvoie le champ « data ». Ticket expiré : un nouveau, une fois.
 async fn api(p: &Pve, method: reqwest::Method, path: &str, params: Option<&Value>) -> Result<Value> {
+    api_as(p, None, method, path, params).await
+}
+
+/// Même appel avec une authentification imposée (`fixed`, jamais renouvelée), ou celle du serveur.
+async fn api_as(p: &Pve, fixed: Option<&Auth>, method: reqwest::Method, path: &str, params: Option<&Value>) -> Result<Value> {
     if !path.starts_with('/') || path.contains("..") || path.contains('?') || path.contains('#') {
         bail!("chemin d'API invalide : {path}");
     }
@@ -190,7 +195,14 @@ async fn api(p: &Pve, method: reqwest::Method, path: &str, params: Option<&Value
     let in_body = method == reqwest::Method::POST || method == reqwest::Method::PUT;
     let mut renewed = false;
     loop {
-        let a = auth(p, renewed).await?;
+        let owned;
+        let a = match fixed {
+            Some(a) => a,
+            None => {
+                owned = auth(p, renewed).await?;
+                &owned
+            }
+        };
         let mut url = format!("https://{}:{}/api2/json{path}", p.host, p.port);
         let mut req = if in_body {
             http.request(method.clone(), &url)
@@ -207,7 +219,7 @@ async fn api(p: &Pve, method: reqwest::Method, path: &str, params: Option<&Value
         let status = resp.status();
         let reason = status.canonical_reason().unwrap_or_default().to_string();
         let value: Value = resp.json().await.unwrap_or(Value::Null);
-        if status == reqwest::StatusCode::UNAUTHORIZED && !p.uses_token() && !renewed {
+        if status == reqwest::StatusCode::UNAUTHORIZED && fixed.is_none() && !p.uses_token() && !renewed {
             renewed = true;
             continue;
         }
@@ -229,11 +241,14 @@ pub struct PveView {
     #[serde(flatten)]
     pve: Pve,
     has_secret: bool,
+    /// Mot de passe des consoles gardé (serveur ajouté avec un jeton).
+    has_console: bool,
 }
 
 fn view(p: Pve) -> PveView {
     let has_secret = crate::secrets::get(&p.secret_id(), "secret").ok().flatten().is_some();
-    PveView { has_secret, pve: p }
+    let has_console = crate::secrets::get(&p.secret_id(), "console").ok().flatten().is_some();
+    PveView { has_secret, has_console, pve: p }
 }
 
 fn require(state: &AppState) -> CmdResult<()> {
@@ -278,6 +293,9 @@ pub struct SaveRequest {
     token_id: String,
     /// Mot de passe ou secret du jeton ; vide en modification : garder l'actuel.
     secret: Option<String>,
+    /// Avec un jeton : mot de passe de l'utilisateur pour les consoles (facultatif ; vide : garder).
+    #[serde(default)]
+    console_password: Option<String>,
 }
 
 /// Ajout ou modification : vérifie l'accès (version de Proxmox) avant d'enregistrer.
@@ -312,6 +330,16 @@ pub async fn pve_save(state: State<'_, AppState>, request: SaveRequest) -> CmdRe
         }
         return Err(full(e));
     }
+    if let Some(password) = r.console_password.filter(|s| !s.is_empty()) {
+        if p.uses_token() {
+            // Vérifié tout de suite : un mauvais mot de passe ne se découvrirait qu'à la console.
+            login(&p, &password).await.map_err(|e| t!(format!("Password for consoles: {e}"), format!("Mot de passe des consoles : {e}")).to_string())?;
+            crate::secrets::set(&p.secret_id(), "console", &password).map_err(full)?;
+        }
+    }
+    if !p.uses_token() {
+        let _ = crate::secrets::delete(&p.secret_id(), "console");
+    }
     let mut list = load(&state.data_dir);
     match list.iter_mut().find(|x| x.id == p.id) {
         Some(x) => *x = p.clone(),
@@ -326,7 +354,7 @@ pub fn pve_remove(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.unlocked()?;
     let mut list = load(&state.data_dir);
     if let Some(p) = list.iter().find(|p| p.id == id) {
-        for key in ["secret", "ticket", "csrf"] {
+        for key in ["secret", "ticket", "csrf", "console"] {
             let _ = crate::secrets::delete(&p.secret_id(), key);
         }
     }
@@ -366,21 +394,37 @@ pub async fn pve_console(app: AppHandle, state: State<'_, AppState>, id: String,
         "qemu" => (format!("{base}/vncproxy"), json!({ "websocket": true, "generate-password": true })),
         _ => (format!("{base}/vncproxy"), json!({ "websocket": true })),
     };
-    let console = api(&p, reqwest::Method::POST, &start, Some(&params)).await.map_err(full)?;
+    let a = console_auth(&p).await.map_err(full)?;
+    let console = api_as(&p, Some(&a), reqwest::Method::POST, &start, Some(&params)).await.map_err(full)?;
     let port = console["port"].as_u64().or_else(|| console["port"].as_str().and_then(|s| s.parse().ok())).ok_or("Proxmox n'a pas donné de port de console")?;
     let ticket = console["ticket"].as_str().ok_or("Proxmox n'a pas donné de ticket de console")?.to_string();
     let password = console["password"].as_str().map(str::to_string).unwrap_or_else(|| ticket.clone());
-    let local = bridge(&p, &format!("{base}/vncwebsocket?port={port}&vncticket={}", urlencode(&ticket))).await.map_err(full)?;
+    let local = bridge(&p, &a, &format!("{base}/vncwebsocket?port={port}&vncticket={}", urlencode(&ticket))).await.map_err(full)?;
     let values: HashMap<String, Value> = [("host".to_string(), json!("127.0.0.1")), ("port".to_string(), json!(local)), ("password".to_string(), json!(password))].into_iter().collect();
     start_connection(&app, &state, "vnc", name, values, cols, rows, on_event).await
 }
 
+/// Authentification des consoles. Proxmox lie le ticket VNC à un utilisateur et refuse les jetons
+/// d'API (« root@pam!portunia does not look like a valid user name ») : avec un jeton, la console
+/// passe par un ticket de session, tiré du mot de passe des consoles.
+async fn console_auth(p: &Pve) -> Result<Auth> {
+    if !p.uses_token() {
+        return auth(p, false).await;
+    }
+    let Some(password) = crate::secrets::get(&p.secret_id(), "console")? else {
+        bail!(t!(
+            format!("Proxmox does not open consoles with an API token. Give the password of {} for consoles: menu « … » of the server › Edit.", p.user),
+            format!("Proxmox n'ouvre pas les consoles avec un jeton d'API. Donnez le mot de passe de {} pour les consoles : menu « … » du serveur › Modifier.", p.user)
+        ));
+    };
+    login(p, &password).await
+}
+
 /// Relais local vers la WebSocket de la console (TLS épinglé) : une seule connexion, le flux
 /// VNC passe tel quel dans les deux sens.
-async fn bridge(p: &Pve, path: &str) -> Result<u16> {
-    let a = auth(p, false).await?;
+async fn bridge(p: &Pve, a: &Auth, path: &str) -> Result<u16> {
     let mut request = format!("wss://{}:{}/api2/json{path}", p.host, p.port).into_client_request()?;
-    match &a {
+    match a {
         Auth::Token(header) => {
             request.headers_mut().insert("authorization", header.parse()?);
         }
