@@ -559,10 +559,16 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     ], cur ? '' : 'generer');
     const secretPass = input({ id: 't-secret-pass', type: 'password' });
     const secretKey = h('textarea', { id: 't-secret-key', class: 'input', rows: 5, spellcheck: 'false', placeholder: '-----BEGIN OPENSSH PRIVATE KEY-----' }) as HTMLTextAreaElement;
+    const webLogin = select('t-web', [
+      ['auto', t('Fill in the sign-in form and submit it', 'Remplir le formulaire de connexion et le valider')],
+      ['remplir', t('Fill in the form only (the user clicks)', 'Remplir le formulaire seulement (l\'utilisateur clique)')],
+      ['basic', t('HTTP authentication (Basic) on every request', 'Authentification HTTP (Basic) à chaque requête')],
+    ], cur?.connexion_web ?? 'auto');
+    const webLoginField = field(t('Sign-in', 'Connexion'), webLogin, t('form: also for applications that sign in with JavaScript; HTTP authentication is also sent when the server asks for it', 'formulaire : aussi pour les applications qui se connectent en JavaScript ; l\'authentification HTTP est aussi envoyée si le serveur la demande'));
     const passField = field(t('Account\'s current password', 'Mot de passe actuel du compte'), secretPass, t('used only once', 'utilisé une seule fois'));
     const keyField = field(t('Private key (without passphrase)', 'Clé privée (sans phrase de passe)'), secretKey);
     const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', t('Remote Desktop (RDP)', 'Bureau à distance (RDP)')], ['https', t('Web interface (HTTPS)', 'Interface web (HTTPS)')], ['http', t('Web interface (HTTP)', 'Interface web (HTTP)')]], cur?.protocole ?? 'ssh');
-    const webNote = h('p', { class: 'muted small', hidden: true }, t('Web interface (Gate 0.30 and later): administration consoles (vCenter, iDRAC, firewall…). The Gate relays every request, recorded mode only: the pages opened are logged. Opens from Portunia (dedicated window) and from the web portal. Credentials are typed in the page.', 'Interface web (Gate 0.30 et suivantes) : consoles d\'administration (vCenter, iDRAC, pare-feu…). La Gate relaie chaque requête, en mode enregistré seulement : les pages ouvertes sont journalisées. S\'ouvre depuis Portunia (fenêtre dédiée) et depuis le portail web. Les identifiants se tapent dans la page.'));
+    const webNote = h('p', { class: 'muted small', hidden: true }, t('Web interface: administration consoles (vCenter, iDRAC, firewall…) and internal applications. The Gate relays every request and logs the pages opened. Opens from Portunia (dedicated window) and from the web portal. Recorded: credentials are typed in the page. Vault (Gate 0.32 and later): the Gate signs the user in with the vault account; the password never reaches the browser.', 'Interface web : consoles d\'administration (vCenter, iDRAC, pare-feu…) et applications internes. La Gate relaie chaque requête et journalise les pages ouvertes. S\'ouvre depuis Portunia (fenêtre dédiée) et depuis le portail web. Enregistré : les identifiants se tapent dans la page. Coffre (Gate 0.32 et suivantes) : la Gate connecte l\'utilisateur avec le compte du coffre ; le mot de passe n\'arrive jamais dans le navigateur.'));
     const rdpNote = h('p', { class: 'muted small', hidden: true }, t('Remote Desktop. Jump: the Gate relays the encrypted connection without reading it from Portunia; from the web portal it relays without recording. Recorded: the Gate relays and records the session, without seeing the password. In both, the user types their Windows credentials at each opening. Vault: the Gate signs in to Windows with the account it keeps (NLA required on the server) and records; the user never sees the password (Gate 0.29 and later).', 'Bureau à distance. Rebond : depuis Portunia, la Gate relaie la connexion chiffrée sans la lire ; depuis le portail web, elle relaie sans enregistrer. Enregistré : la Gate relaie et enregistre la session, sans voir le mot de passe. Dans les deux cas, l\'utilisateur tape ses identifiants Windows à chaque ouverture. Coffre : la Gate ouvre la session Windows avec le compte qu\'elle garde (NLA exigé sur le serveur) et enregistre ; l\'utilisateur ne voit jamais le mot de passe (Gate 0.29 et suivantes).'));
     // Port par défaut du protocole, tant que l'administrateur ne l'a pas changé.
     proto.addEventListener('change', () => {
@@ -572,15 +578,16 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     const sync = () => {
       const rdp = proto.value === 'rdp';
       const web = proto.value === 'http' || proto.value === 'https';
-      // Interface web : mode enregistré seulement.
-      for (const o of mode.options) o.disabled = web && o.value !== 'enregistre';
-      if (web) mode.value = 'enregistre';
+      // Interface web : mode enregistré ou coffre (pas de rebond : la Gate lit chaque requête).
+      for (const o of mode.options) o.disabled = web && o.value === 'rebond';
+      if (web && mode.value === 'rebond') mode.value = 'enregistre';
       webNote.hidden = !web;
-      // Bureau à distance : le coffre garde un mot de passe, pas de clé SSH.
-      for (const o of secretKind.options) o.disabled = rdp && ['generer', 'cle'].includes(o.value);
-      if (rdp && ['generer', 'cle'].includes(secretKind.value)) secretKind.value = 'mot_de_passe';
+      // Bureau à distance et web : le coffre garde un mot de passe, pas de clé SSH.
+      for (const o of secretKind.options) o.disabled = (rdp || web) && ['generer', 'cle'].includes(o.value);
+      if ((rdp || web) && ['generer', 'cle'].includes(secretKind.value)) secretKind.value = 'mot_de_passe';
       rdpNote.hidden = !rdp;
       const vault = mode.value === 'coffre';
+      webLoginField.hidden = !(web && vault);
       secretKind.closest('label')!.hidden = !vault;
       passField.hidden = !vault || !['generer', 'mot_de_passe'].includes(secretKind.value);
       keyField.hidden = !vault || secretKind.value !== 'cle';
@@ -593,7 +600,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       h('div', { class: 'row2' }, field(t('Name', 'Nom'), nom, t('no spaces', 'sans espace')), field(t('Folder', 'Dossier'), dossier)),
       h('div', { class: 'quick-row' }, field(t('Address', 'Adresse'), hote), field('Port', port)),
       field('Mode', mode), rdpNote, webNote, field(t('Account on the server', 'Compte sur le serveur'), compte, t('required in vault mode; for Remote Desktop: DOMAIN\\account, offered at opening', 'obligatoire en mode coffre ; en Bureau à distance : DOMAINE\\compte, proposé à l\'ouverture')),
-      field(t('Vault secret', 'Secret du coffre'), secretKind), passField, keyField,
+      webLoginField, field(t('Vault secret', 'Secret du coffre'), secretKind), passField, keyField,
       h('p', { class: 'muted small' }, t('The secret is encrypted by the Gate and can never be read back. « Generate » creates a key, installs it with the password given only once, then checks that it works.', 'Le secret est chiffré par la Gate et ne se relit jamais. « Générer » crée une clé, l\'installe avec le mot de passe donné une seule fois, puis vérifie qu\'elle fonctionne.')),
     ];
     setTimeout(sync);
@@ -605,6 +612,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const payload = {
         nom: nom.value.trim(), dossier: dossier.value.trim(), hote: hote.value.trim(), port: Number(port.value) || (({ rdp: 3389, https: 443, http: 80 } as Record<string, number>)[proto.value] ?? 22),
         mode: mode.value, compte: compte.value.trim() || null, secret, protocole: proto.value,
+        ...(proto.value === 'http' || proto.value === 'https' ? { connexion_web: webLogin.value } : {}),
       };
       await (cur ? call('PUT', `/admin/cibles/${cur.id}`, payload) : call('POST', '/admin/cibles', payload));
       host.toast(cur ? t('Server updated', 'Serveur modifié') : t('Server added', 'Serveur ajouté'));

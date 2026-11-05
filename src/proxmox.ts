@@ -47,7 +47,7 @@ export function bytes(n?: number): string {
   let i = 0;
   let v = n;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${t(unitsEn[i], units[i])}`;
+  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1).replace('.', t('.', ','))} ${t(unitsEn[i], units[i])}`;
 }
 export const date = (s?: number) => (s ? new Date(s * 1000).toLocaleString(LOCALE) : '');
 export const guestLabel = (g: PveResource) => `${g.vmid} · ${g.name ?? ''}`;

@@ -8,11 +8,11 @@ const REFRESH_MS = 5000;
 const HISTORY = 60;
 
 function size(kb: number): string {
-  const units = ['Ko', 'Mo', 'Go', 'To'];
+  const units = t('KB MB GB TB', 'Ko Mo Go To').split(' ');
   let v = kb;
   let i = 0;
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`.replace('.', ',');
+  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`.replace('.', t('.', ','));
 }
 
 function duration(secs: number): string {
@@ -128,12 +128,12 @@ export class ServerPanel {
         h('strong', {}, s.hostname || this.title),
         h('span', { class: 'muted small' }, s.os),
         h('span', { class: 'muted small' }, t(`Kernel ${s.kernel} · up for ${duration(s.uptimeSecs)}`, `Noyau ${s.kernel} · démarré depuis ${duration(s.uptimeSecs)}`))),
-      gauge(t('CPU', 'Processeur'), s.cpuPercent, `${s.cpus} cœur${s.cpus > 1 ? 's' : ''}`, this.cpuHistory),
+      gauge(t('CPU', 'Processeur'), s.cpuPercent, t(`${s.cpus} core${s.cpus > 1 ? 's' : ''}`, `${s.cpus} cœur${s.cpus > 1 ? 's' : ''}`), this.cpuHistory),
       gauge(t('Memory', 'Mémoire'), this.memPercent(s), t(`${size(s.memTotalKb - s.memAvailableKb)} used of ${size(s.memTotalKb)}`, `${size(s.memTotalKb - s.memAvailableKb)} utilisés sur ${size(s.memTotalKb)}`), this.memHistory),
       s.swapTotalKb > 0 ? gauge('Swap', (100 * swapUsed) / s.swapTotalKb, t(`${size(swapUsed)} of ${size(s.swapTotalKb)}`, `${size(swapUsed)} sur ${size(s.swapTotalKb)}`)) : '',
       h('div', { class: 'dash-gauge' },
         h('div', { class: 'dash-gauge-head' }, h('span', {}, t('Load (1 / 5 / 15 min)', 'Charge (1 / 5 / 15 min)')),
-          h('strong', { class: `lvl-${level(loadPct)}` }, s.load.map((l) => l.toFixed(2).replace('.', ',')).join(' · ')))),
+          h('strong', { class: `lvl-${level(loadPct)}` }, s.load.map((l) => l.toFixed(2).replace('.', t('.', ','))).join(' · ')))),
       h('h4', { class: 'dash-title' }, t('Disks', 'Disques')),
       ...s.disks.map((d) => gauge(d.mount, (100 * d.usedKb) / d.totalKb, t(`${size(d.usedKb)} of ${size(d.totalKb)} · ${d.fs}`, `${size(d.usedKb)} sur ${size(d.totalKb)} · ${d.fs}`))),
       s.failedServices.length ? h('h4', { class: 'dash-title lvl-crit' }, t(`Failed services (${s.failedServices.length})`, `Services en échec (${s.failedServices.length})`)) : '',
@@ -148,7 +148,7 @@ export class ServerPanel {
         h('thead', {}, h('tr', {}, h('th', {}, t('Processes', 'Processus')), h('th', {}, 'PID'), h('th', {}, 'CPU'), h('th', {}, t('Mem.', 'Mém.')))),
         h('tbody', {}, ...s.processes.map((p) => h('tr', {},
           h('td', { class: 'ellipsis' }, p.name), h('td', { class: 'muted' }, String(p.pid)),
-          h('td', {}, `${p.cpu.toFixed(1).replace('.', ',')} %`), h('td', {}, `${p.mem.toFixed(1).replace('.', ',')} %`))))));
+          h('td', {}, `${p.cpu.toFixed(1).replace('.', t('.', ','))} %`), h('td', {}, `${p.mem.toFixed(1).replace('.', t('.', ','))} %`))))));
   }
 
   dispose() {

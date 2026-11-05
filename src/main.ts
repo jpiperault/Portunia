@@ -1045,7 +1045,7 @@ function renderStatus() {
     ...(settings().monitoring && monitor.summary().total ? [h('button', {
       class: `status-btn${monitor.summary().up < monitor.summary().total ? ' warn' : ''}`, title: tr('Server monitoring', 'Supervision des serveurs'),
       onclick: () => monitor.openOverview((s) => openSession(s)),
-    }, h('span', { class: `health ${monitor.summary().up < monitor.summary().total ? 'down' : 'up'}` }), `${monitor.summary().up}/${monitor.summary().total} en ligne`)] : []),
+    }, h('span', { class: `health ${monitor.summary().up < monitor.summary().total ? 'down' : 'up'}` }), tr(`${monitor.summary().up}/${monitor.summary().total} online`, `${monitor.summary().up}/${monitor.summary().total} en ligne`))] : []),
     h('span', { title: tr('Edition and licence: Settings › Licence', 'Édition et licence : Paramètres › Licence') }, EDITION_LABEL[(currentEdition())], ` · v${__APP_VERSION__}`),
   );
 }
@@ -1597,7 +1597,10 @@ initTheme();
 reload();
 // Vérification discrète des mises à jour, une fois l'application chargée.
 if (settings().autoUpdate) setTimeout(() => checkForUpdates(toast, true), 4000);
-loadLicense().then(() => renderStatus());
+loadLicense().then(() => {
+  renderStatus();
+  if (extensionEnabled('proxmox')) proxmoxPanel.load();
+});
 // Shells locaux : détection, section « Ce PC », ouverture au démarrage si demandé.
 loadShells().then(() => {
   renderShells();

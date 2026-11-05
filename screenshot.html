@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Portunia</title>
@@ -8,8 +8,11 @@
     (function () {
       const params = new URLSearchParams(location.search);
       const scene = params.get('scene') || 'main';
-      if (params.get('theme')) localStorage.setItem('termoria.settings', JSON.stringify({ uiTheme: params.get('theme'), autoUpdate: false }));
-      else localStorage.setItem('termoria.settings', JSON.stringify({ autoUpdate: false }));
+      const fr = params.get('lang') === 'fr';
+      const T = (en, frText) => (fr ? frText : en);
+      localStorage.setItem('termoria.settings', JSON.stringify(Object.assign({ autoUpdate: false, language: fr ? 'fr' : 'en', installedExtensions: ['proxmox'] }, params.get('theme') ? { uiTheme: params.get('theme') } : {})));
+      localStorage.setItem('portunia.panneau', 'sessions');
+      localStorage.setItem('portunia.recentes', JSON.stringify({ s1: Date.now() - 6e4, s2: Date.now() - 864e5 * 3, s4: Date.now() - 864e5 * 3 }));
       localStorage.setItem('termoria.collapsed', '[]');
 
       let next = 1;
@@ -27,32 +30,33 @@
 
       const field = (key, label, type, extra) => Object.assign({ key, label, kind: { type }, required: false }, extra || {});
       const protocols = [
-        { id: 'ssh', name: 'SSH', version: '0.3.0', description: 'Terminal sécurisé : clé privée, mot de passe ou agent.', view: 'terminal', builtin: true, fileBrowser: true, portForwarding: true, fields: [field('host', 'Hôte', 'text', { required: true }), field('port', 'Port', 'number'), Object.assign(field('credential', 'Identifiants partagés', 'suggest'), { kind: { type: 'suggest', source: 'credentials' }, placeholder: 'Vide = identifiants propres à cette session' }), field('username', 'Utilisateur', 'text', { required: true, hiddenBy: 'credential' }), field('password', 'Mot de passe', 'secret', { hiddenBy: 'credential' }), field('x11', 'Afficher les applications graphiques du serveur (X11)', 'bool'), field('x11Display', 'Serveur X de ce PC', 'text', { placeholder: 'localhost:0 (VcXsrv, X410…)', showIf: { key: 'x11', equals: 'true' } }), field('tunnels', 'Tunnels', 'tunnels')] },
-        { id: 'ftp', name: 'FTP / FTPS', version: '0.1.0', description: 'Fichiers d’un serveur FTP, chiffré (FTPS) ou non.', view: 'files', builtin: true, fileBrowser: true, portForwarding: false, fields: [field('host', 'Hôte', 'text', { required: true }), field('port', 'Port', 'number')] },
-        { id: 'rdp', name: 'Bureau à distance (RDP)', version: '0.2.0', description: 'Bureau Windows dans un onglet (IronRDP), ou dans le client Windows.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
-        { id: 'vnc', name: 'VNC', version: '0.1.0', description: 'Écran distant affiché dans un onglet.', view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
-        { id: 'web', name: 'Interface web', version: '0.1.0', description: 'Console d\'administration dans une fenêtre dédiée.', view: 'web', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('url', 'Adresse', 'text')] },
-        { id: 'telnet', name: 'Telnet', version: '0.1.0', description: 'Équipements réseau anciens.', view: 'terminal', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', 'Hôte', 'text')] },
-        { id: 'serial', name: 'Port série', version: '0.1.0', description: 'Ports COM.', view: 'terminal', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('port', 'Port', 'text')] },
+        { id: 'ssh', name: 'SSH', version: '0.3.0', description: T('Secure terminal: private key, password or agent.', 'Terminal sécurisé : clé privée, mot de passe ou agent.'), view: 'terminal', builtin: true, fileBrowser: true, portForwarding: true, fields: [field('host', T('Host', 'Hôte'), 'text', { required: true }), field('port', 'Port', 'number'), Object.assign(field('credential', T('Shared credentials', 'Identifiants partagés'), 'suggest'), { kind: { type: 'suggest', source: 'credentials' }, placeholder: T('Empty = this session\'s own credentials', 'Vide = identifiants propres à cette session') }), field('username', T('User', 'Utilisateur'), 'text', { required: true, hiddenBy: 'credential' }), field('password', T('Password', 'Mot de passe'), 'secret', { hiddenBy: 'credential' }), field('x11', T('Show the server\'s graphical applications (X11)', 'Afficher les applications graphiques du serveur (X11)'), 'bool'), field('x11Display', T('X server on this PC', 'Serveur X de ce PC'), 'text', { placeholder: 'localhost:0 (VcXsrv, X410…)', showIf: { key: 'x11', equals: 'true' } }), field('tunnels', T('Tunnels', 'Tunnels'), 'tunnels')] },
+        { id: 'ftp', name: 'FTP / FTPS', version: '0.1.0', description: T('Files on an FTP server, encrypted (FTPS) or not.', 'Fichiers d’un serveur FTP, chiffré (FTPS) ou non.'), view: 'files', builtin: true, fileBrowser: true, portForwarding: false, fields: [field('host', T('Host', 'Hôte'), 'text', { required: true }), field('port', 'Port', 'number')] },
+        { id: 'rdp', name: T('Remote Desktop (RDP)', 'Bureau à distance (RDP)'), version: '0.2.0', description: T('Windows desktop in a tab, or in the Windows client.', 'Bureau Windows dans un onglet, ou dans le client Windows.'), view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', T('Host', 'Hôte'), 'text')] },
+        { id: 'vnc', name: 'VNC', version: '0.1.0', description: T('Remote screen in a tab.', 'Écran distant affiché dans un onglet.'), view: 'screen', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', T('Host', 'Hôte'), 'text')] },
+        { id: 'web', name: T('Web interface', 'Interface web'), version: '0.1.0', description: T('Administration console in its own window.', 'Console d\'administration dans une fenêtre dédiée.'), view: 'web', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('url', 'Adresse', 'text')] },
+        { id: 'telnet', name: 'Telnet', version: '0.1.0', description: T('Older network equipment.', 'Équipements réseau anciens.'), view: 'terminal', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('host', T('Host', 'Hôte'), 'text')] },
+        { id: 'serial', name: T('Serial port', 'Port série'), version: '0.1.0', description: T('COM ports.', 'Ports COM.'), view: 'terminal', builtin: true, fileBrowser: false, portForwarding: false, fields: [field('port', 'Port', 'text')] },
       ];
+      const HOME = T('Home lab', 'Lab maison');
       const S = (id, name, folder, protocol, values) => ({ id, name, folder, protocol, values, tags: [], secretKeys: [] });
       const sessions = [
         S('s1', 'srv-web-01', 'Production/Web', 'ssh', { host: '10.0.1.12', port: 22, username: 'deploy' }),
         S('s2', 'srv-web-02', 'Production/Web', 'ssh', { host: '10.0.1.13', port: 22, username: 'deploy' }),
         S('s3', 'srv-db-01', 'Production', 'ssh', { host: '10.0.1.20', port: 22, username: 'admin' }),
         S('s4', 'dc-01', 'Production', 'rdp', { host: '10.0.0.5', port: 3389 }),
-        S('s5', 'switch-coeur', 'Production', 'telnet', { host: '10.0.0.2', port: 23 }),
-        S('s6', 'nas-backup', 'Lab maison', 'web', { url: 'https://192.168.1.10:5001' }),
-        S('s7', 'raspberry-pi', 'Lab maison', 'vnc', { host: '192.168.1.42', port: 5900 }),
-        S('s8', 'proxmox', 'Lab maison', 'web', { url: 'https://192.168.1.5:8006' }),
-        S('s9', 'arduino', 'Lab maison', 'serial', { port: 'COM4' }),
-        S('s10', 'recette-app', 'Clients/Dupont', 'ssh', { host: 'recette.dupont.example', port: 22, username: 'ops' }),
-        S('s11', 'ftp-hebergeur', 'Clients/Dupont', 'ftp', { host: 'ftp.dupont.example', security: 'explicit', username: 'dupont' }),
+        S('s5', T('core-switch', 'switch-coeur'), 'Production', 'telnet', { host: '10.0.0.2', port: 23 }),
+        S('s6', 'nas-backup', HOME, 'web', { url: 'https://192.168.1.10:5001' }),
+        S('s7', 'raspberry-pi', HOME, 'vnc', { host: '192.168.1.42', port: 5900 }),
+        S('s8', 'proxmox', HOME, 'web', { url: 'https://192.168.1.5:8006' }),
+        S('s9', 'arduino', HOME, 'serial', { port: 'COM4' }),
+        S('s10', T('staging-app', 'recette-app'), T('Customers/Acme', 'Clients/Dupont'), 'ssh', { host: T('staging.acme.example', 'recette.dupont.example'), port: 22, username: 'ops' }),
+        S('s11', T('ftp-hosting', 'ftp-hebergeur'), T('Customers/Acme', 'Clients/Dupont'), 'ftp', { host: T('ftp.acme.example', 'ftp.dupont.example'), security: 'explicit', username: 'acme' }),
       ];
 
       const prompt = (h) => `\x1b[1;32mdeploy@${h}\x1b[0m:\x1b[1;34m~\x1b[0m$ `;
       const terminalText = (h) => [
-        `\x1b[90m[Portunia] Connecté à ${h} (10.0.1.12:22)\x1b[0m\r\n`,
+        `\x1b[90m[Portunia] ${T('Connected to', 'Connecté à')} ${h} (10.0.1.12:22)\x1b[0m\r\n`,
         `Welcome to Debian GNU/Linux 13 (trixie)\r\n\r\n`,
         prompt(h) + 'systemctl status nginx --no-pager\r\n',
         `\x1b[1;32m●\x1b[0m nginx.service - A high performance web server\r\n`,
@@ -75,24 +79,54 @@
       const now = Math.floor(Date.now() / 1000);
       const E = (name, isDir, size, ago) => ({ name, path: '/home/deploy/' + name, isDir, isLink: false, size, modified: now - ago, permissions: null });
 
+      const GB = 1024 ** 3;
+      const guest = (type, vmid, name, node, status, cpu, mem, maxmem, disk, tags) => ({ id: type + '/' + vmid, type, vmid, name, node, status, cpu, maxcpu: type === 'qemu' ? 4 : 2, mem, maxmem, disk, maxdisk: disk * 3, uptime: status === 'running' ? 86400 * 6 + vmid * 977 : 0, tags, netin: vmid * 1e9, netout: vmid * 4e8, diskread: vmid * 2e9, diskwrite: vmid * 1e9 });
+      const pveRes = [
+        { id: 'node/pve1', type: 'node', node: 'pve1', status: 'online', cpu: 0.23, maxcpu: 16, mem: 41 * GB, maxmem: 64 * GB, disk: 180 * GB, maxdisk: 460 * GB, uptime: 86400 * 41 },
+        { id: 'node/pve2', type: 'node', node: 'pve2', status: 'online', cpu: 0.11, maxcpu: 8, mem: 19 * GB, maxmem: 32 * GB, disk: 96 * GB, maxdisk: 460 * GB, uptime: 86400 * 41 },
+        guest('qemu', 100, 'dc-01', 'pve1', 'running', 0.04, 3.1 * GB, 4 * GB, 60 * GB, 'windows;prod'),
+        guest('qemu', 101, 'srv-web-01', 'pve1', 'running', 0.18, 1.6 * GB, 4 * GB, 32 * GB, 'prod'),
+        guest('qemu', 102, 'srv-web-02', 'pve1', 'running', 0.15, 1.4 * GB, 4 * GB, 32 * GB, 'prod'),
+        guest('qemu', 103, 'srv-db-01', 'pve1', 'running', 0.31, 7.2 * GB, 8 * GB, 120 * GB, 'prod'),
+        guest('qemu', 110, 'win11-test', 'pve2', 'stopped', 0, 0, 8 * GB, 64 * GB, 'lab'),
+        guest('lxc', 200, 'gate', 'pve2', 'running', 0.02, 0.4 * GB, 2 * GB, 8 * GB, 'infra'),
+        guest('lxc', 201, 'monitoring', 'pve2', 'running', 0.07, 0.9 * GB, 2 * GB, 16 * GB, 'infra'),
+        guest('lxc', 202, 'backup', 'pve2', 'running', 0.01, 0.3 * GB, 1 * GB, 8 * GB, 'infra'),
+        { id: 'storage/pve1/local-lvm', type: 'storage', node: 'pve1', storage: 'local-lvm', status: 'available', disk: 180 * GB, maxdisk: 460 * GB, plugintype: 'lvmthin', content: 'images,rootdir', shared: 0 },
+      ];
+      const rrd = (base, amp, mem, memtotal) => Array.from({ length: 70 }, (_, i) => {
+        const t = Math.floor(Date.now() / 1000) - (69 - i) * 60, w = Math.sin(i / 6) + 0.4 * Math.sin(i / 1.7);
+        return { time: t, cpu: Math.max(0.01, base + amp * w), iowait: 0.01 + 0.006 * Math.abs(w), memused: mem * (1 + 0.04 * w), memtotal, maxmem: memtotal, mem: mem * (1 + 0.04 * w), swapused: 0.2 * GB, netin: 2.4e6 + 1.1e6 * w, netout: 1.1e6 + 0.6e6 * w, loadavg: 2.1 + 0.8 * w, diskread: 3e6 + 2e6 * w, diskwrite: 1.5e6 + 1e6 * w };
+      });
+      function pve(method, path) {
+        if (path === '/cluster/resources') return pveRes;
+        if (path === '/access/permissions') return { '/': { 'Sys.Audit': 1, 'VM.Allocate': 1 } };
+        let m = path.match(/^\/nodes\/(\w+)\/rrddata$/);
+        if (m) return m[1] === 'pve1' ? rrd(0.23, 0.08, 41 * GB, 64 * GB) : rrd(0.11, 0.05, 19 * GB, 32 * GB);
+        m = path.match(/^\/nodes\/\w+\/(qemu|lxc)\/(\d+)\/rrddata$/);
+        if (m) { const g = pveRes.find((r) => r.vmid === Number(m[2])); return rrd(g.cpu || 0.02, 0.05, g.mem, g.maxmem); }
+        if (path === '/cluster/tasks') return [];
+        return [];
+      }
+
       async function invoke(cmd, args) {
         args = args || {};
         switch (cmd) {
           case 'list_protocols': return protocols;
           case 'list_sessions': return sessions;
-          case 'list_folders': return ['Clients', 'Clients/Dupont', 'Lab maison', 'Production', 'Production/Web'];
+          case 'list_folders': return [T('Customers', 'Clients'), T('Customers/Acme', 'Clients/Dupont'), HOME, 'Production', 'Production/Web'];
           case 'list_snippets': return [];
-          case 'folder_colors': return { Production: 'red', 'Lab maison': 'green', Clients: 'blue' };
-          case 'license_status': return { edition: 'free', preview: true, license: null, expired: false, features: ['sessionRecording', 'monitoringAlerts', 'serverDashboard', 'multiExec', 'containers', 'cloudStorage'].map((feature) => ({ feature, label: feature, edition: 'pro', allowed: true })) };
+          case 'folder_colors': return { Production: 'red', [HOME]: 'green', [T('Customers', 'Clients')]: 'blue' };
+          case 'license_status': return { edition: 'pro', preview: false, license: null, expired: false, features: ['sessionRecording', 'monitoringAlerts', 'serverDashboard', 'multiExec', 'containers', 'cloudStorage', 'proxmox', 'rdpOptions'].map((feature) => ({ feature, label: feature, edition: 'pro', allowed: true })) };
           case 'lock_status': return { enabled: location.search.includes('locked'), locked: location.search.includes('locked'), hello: false, helloAvailable: true, timeoutMinutes: 15 };
           case 'monitor_check': return args.targets.map((t, i) => t.id === 's5'
-            ? { id: t.id, up: false, latencyMs: null, error: 'pas de réponse en 3 s' }
+            ? { id: t.id, up: false, latencyMs: null, error: T('no answer in 3 s', 'pas de réponse en 3 s') }
             : { id: t.id, up: true, latencyMs: 8 + (i * 7) % 30, error: null });
           case 'monitor_alerts_allowed': return true;
           case 'connect': {
             const s = sessions.find((x) => x.id === args.sessionId);
             window.__mock.channels.push(chId(args.onEvent));
-            if (s.name === 'recette-app') {
+            if (s.name === T('staging-app', 'recette-app')) {
               const id = chId(args.onEvent);
               window.__mockConfirm = (accept) => accept ? send(id, bytes(terminalText(s.name))) : send(id, { event: 'closed', data: 'Clé du serveur non confirmée : connexion annulée.' });
               setTimeout(() => send(id, { event: 'confirm', data: { id: 'q1', question: { title: 'Nouveau serveur : recette.dupont.example:22', message: 'Portunia ne connaît pas encore ce serveur. Vérifiez que l’empreinte ci-dessous est bien celle du serveur (son administrateur peut l’obtenir avec « ssh-keygen -lf » sur la clé de l’hôte). Elle sera mémorisée : un changement futur bloquera la connexion.', detail: 'ssh-ed25519 SHA256:fi111SBeLJCCWkbnrVt90w0E72Z2bW4rRWilXUkm4R4', accept: 'Faire confiance et se connecter', reject: 'Annuler' } } }), 150);
@@ -143,17 +177,17 @@
               failedServices: ['backup-nightly.service'] };
           }
           case 'credentials_list': return [
-            { id: 'c1', name: 'Admin production', username: 'admin', auth: 'key', keyPath: '', domain: '', secretKeys: ['passphrase'], usedBy: ['srv-web-01', 'srv-web-02', 'srv-db-01'] },
-            { id: 'c2', name: 'Compte domaine', username: 'jpiperault', auth: 'password', keyPath: '', domain: 'CORP', secretKeys: ['password'], usedBy: [] },
+            { id: 'c1', name: T('Production admin', 'Admin production'), username: 'admin', auth: 'key', keyPath: '', domain: '', secretKeys: ['passphrase'], usedBy: ['srv-web-01', 'srv-web-02', 'srv-db-01'] },
+            { id: 'c2', name: T('Domain account', 'Compte domaine'), username: 'jpiperault', auth: 'password', keyPath: '', domain: 'CORP', secretKeys: ['password'], usedBy: [] },
           ];
-          case 'field_suggestions': return args.source === 'credentials' ? [{ value: 'Admin production', label: 'admin' }, { value: 'Compte domaine', label: 'jpiperault' }] : [];
+          case 'field_suggestions': return args.source === 'credentials' ? [{ value: T('Production admin', 'Admin production'), label: 'admin' }, { value: T('Domain account', 'Compte domaine'), label: 'jpiperault' }] : [];
           case 'shells_detect': return [
             { id: 'pwsh', name: 'PowerShell 7', command: 'pwsh.exe', args: ['-NoLogo'], cwd: '', icon: 'pwsh' },
-            { id: 'cmd', name: 'Invite de commandes', command: 'cmd.exe', args: [], cwd: '', icon: 'cmd' },
+            { id: 'cmd', name: T('Command Prompt', 'Invite de commandes'), command: 'cmd.exe', args: [], cwd: '', icon: 'cmd' },
             { id: 'wsl:Ubuntu', name: 'Ubuntu (WSL)', command: 'wsl.exe', args: ['-d', 'Ubuntu'], cwd: '', icon: 'wsl' },
           ];
           case 'notes_list': return ['s1'];
-          case 'note_get': return args.sessionId === 's1' ? '# srv-web-01\nServeur **nginx** de production.\n\n- [x] Certificat renouvelé\n- [ ] Passer en PHP 8.4\n\n```\nsudo systemctl reload nginx\n```\nContact : https://wiki.local/web' : '';
+          case 'note_get': return args.sessionId === 's1' ? T('# srv-web-01\nProduction **nginx** server.\n\n- [x] Certificate renewed\n- [ ] Move to PHP 8.4\n\n```\nsudo systemctl reload nginx\n```\nContact: https://wiki.local/web', '# srv-web-01\nServeur **nginx** de production.\n\n- [x] Certificat renouvelé\n- [ ] Passer en PHP 8.4\n\n```\nsudo systemctl reload nginx\n```\nContact : https://wiki.local/web') : '';
           case 'note_set': return null;
           case 'ssh_keys_list': return [{ name: 'id_ed25519', path: 'C:\Users\julien\.ssh\id_ed25519', algorithm: 'Ed25519', fingerprint: 'SHA256:q8m5Yc0f3nV6l0yQx2rE4c1q9u2y8H7Kf0dXo3P1aZ4', comment: 'julien@pc-julien', public: 'ssh-ed25519 AAAA julien@pc-julien', encrypted: true }];
           case 'ssh_key_default_comment': return 'julien@pc-julien';
@@ -181,10 +215,12 @@
             setTimeout(() => send(id, { type: 'done', message: '4 ports testés, 3 ouverts' }), 600);
             return 'job';
           }
+          case 'pve_list': return [{ id: 'pve1', name: 'pve-lab', host: '192.168.1.5', port: 8006, fingerprint: '', user: 'root@pam', tokenId: 'portunia', hasSecret: true }];
+          case 'pve_api': return pve(args.method, args.path);
           case 'plugin:event|listen': return next++;
           case 'plugin:notification|is_permission_granted': return true;
           case 'plugin:updater|check': return null;
-          default: return null;
+          default: return ['gate_list', 'local_list', 'recordings_list', 'import_preview'].includes(cmd) ? [] : null;
         }
       }
 
@@ -197,57 +233,92 @@
       };
       window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener() {} };
 
-      // Mise en scène : ouvrir des sessions automatiquement.
+      // Mise en scène : ouvrir des sessions et des panneaux automatiquement (?scene=main|split|server|proxmox).
       window.addEventListener('load', () => {
-        const openByName = (name) => [...document.querySelectorAll('.tree-item.session')].find((b) => b.textContent.includes(name))?.click();
-        setTimeout(() => {
-          openByName('srv-web-01');
-          if (scene === 'split') {
-            setTimeout(() => {
-              openByName('srv-web-02');
-              setTimeout(() => {
-                const tab = [...document.querySelectorAll('.tab')].find((t) => t.textContent.includes('srv-web-01'));
-                tab?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 60 }));
-                setTimeout(() => [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes('Afficher à côté'))?.click(), 150);
-              }, 400);
-            }, 400);
+        const later = (ms, f) => setTimeout(f, ms);
+        const openByName = (name) => document.querySelector(`.tree-item.session[data-id="${sessions.find((x) => x.name === name)?.id}"]`)?.click();
+        const clickTitle = (start) => [...document.querySelectorAll('button[title]')].find((b) => b.title.startsWith(start))?.click();
+        const menuItem = (label) => [...document.querySelectorAll('.menu-item')].find((b) => b.textContent.includes(label))?.click();
+        later(1500, () => {
+          if (scene === 'proxmox') {
+            document.getElementById('rail-proxmox')?.click();
+            later(800, () => {
+              const more = document.querySelector('#proxmox button[aria-label$="pve-lab"]');
+              const r = more?.getBoundingClientRect();
+              more?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r?.x, clientY: r?.y }));
+              later(200, () => menuItem(T('Monitoring', 'Supervision')));
+            });
+            return;
           }
-        }, 700);
+          openByName('srv-web-01');
+          if (scene === 'main') later(800, () => clickTitle(T('File browser', 'Explorateur de fichiers')));
+          if (scene === 'server') later(800, () => clickTitle(T('Dashboard:', 'Tableau de bord')));
+          if (scene === 'split') {
+            later(500, () => {
+              openByName('srv-web-02');
+              later(800, () => {
+                clickTitle(T('Show several sessions side by side', 'Afficher plusieurs sessions côte à côte'));
+                later(200, () => menuItem(T('Show beside: srv-web-01', 'Afficher à côté : srv-web-01')));
+                later(600, () => clickTitle(T('File browser', 'Explorateur de fichiers')));
+              });
+            });
+          }
+        });
       });
     })();
   </script>
 </head>
 <body>
   <div class="app">
+    <nav class="rail" aria-label="Activités">
+      <button id="rail-sessions" class="rail-btn" type="button"></button>
+      <button id="rail-gates" class="rail-btn" type="button" hidden></button>
+      <button id="rail-proxmox" class="rail-btn" type="button" hidden></button>
+      <button id="rail-pc" class="rail-btn" type="button"></button>
+      <span class="rail-sep" aria-hidden="true"></span>
+      <button id="open-snippets" class="rail-btn" type="button"></button>
+      <button id="open-credentials" class="rail-btn" type="button"></button>
+      <button id="open-recordings" class="rail-btn" type="button"></button>
+      <button id="open-assist" class="rail-btn" type="button" hidden></button>
+      <button id="open-nettools" class="rail-btn" type="button"></button>
+      <button id="open-import" class="rail-btn" type="button"></button>
+      <span class="grow"></span>
+      <button id="open-extensions" class="rail-btn" type="button"></button>
+      <button id="open-settings" class="rail-btn" type="button"></button>
+    </nav>
     <nav class="sidebar" aria-label="Sessions">
-      <label class="search">
-        <span class="sr-only">Rechercher une session</span>
-        <input id="search" type="search" placeholder="Rechercher, ou ssh user@hôte…" title="Rechercher une session (Ctrl Maj K). Entrée sur « user@hôte », « rdp hôte »… : connexion rapide. Palette : Ctrl Maj O" autocomplete="off">
-      </label>
-      <div class="sidebar-head">
-        <span class="label">Ce PC</span>
-        <div class="head-actions">
-          <button id="manage-shells" class="icon-btn" aria-label="Gérer les shells locaux" title="Gérer les shells locaux"></button>
+      <section id="pane-sessions" class="side-pane">
+        <div class="side-pane-head">
+          <span class="side-pane-title"><span id="title-sessions">Sessions</span> <span id="session-count" class="count"></span></span>
+          <div class="head-actions">
+            <button id="quick-connect" class="icon-btn" aria-label="Connexion rapide" title="Connexion rapide : adresse, identifiant et mot de passe (Ctrl Maj Q)"></button>
+            <button id="new-folder" class="icon-btn" aria-label="Nouveau dossier" title="Nouveau dossier"></button>
+            <button id="new-session" class="icon-btn" aria-label="Nouvelle session" title="Nouvelle session (Ctrl Maj N)"></button>
+          </div>
         </div>
-      </div>
-      <div id="local-shells" class="local-shells"></div>
-      <div class="sidebar-head">
-        <span class="label">Sessions</span>
-        <div class="head-actions">
-          <button id="new-folder" class="icon-btn" aria-label="Nouveau dossier" title="Nouveau dossier"></button>
-          <button id="new-session" class="icon-btn" aria-label="Nouvelle session" title="Nouvelle session (Ctrl Maj N)"></button>
+        <label class="search">
+          <span class="sr-only">Filtrer les sessions</span>
+          <input id="search" type="search" placeholder="Filtrer, ou ssh user@hôte…" title="Filtrer les sessions (Ctrl Maj K) ; ↓ pour parcourir, Entrée ouvre la première. « user@hôte », « rdp hôte »… : connexion rapide. Palette : Ctrl Maj O" autocomplete="off">
+        </label>
+        <div id="session-chips" class="filter-chips"></div>
+        <div id="tree" class="tree"></div>
+        <button id="open-library" class="library-link" type="button">Toutes les sessions en tableau</button>
+      </section>
+      <section id="pane-gates" class="side-pane" hidden>
+        <div id="gates" class="gates" hidden></div>
+      </section>
+      <section id="pane-proxmox" class="side-pane" hidden>
+        <div id="proxmox" class="gates" hidden></div>
+      </section>
+      <section id="pane-pc" class="side-pane" hidden>
+        <div class="side-pane-head">
+          <span id="title-pc" class="side-pane-title">Ce PC</span>
+          <div class="head-actions">
+            <button id="manage-shells" class="icon-btn" aria-label="Gérer les shells locaux" title="Gérer les shells locaux"></button>
+          </div>
         </div>
-      </div>
-      <div id="tree" class="tree"></div>
-      <div class="sidebar-foot">
-        <button id="open-snippets" class="tree-item"></button>
-        <button id="open-credentials" class="tree-item"></button>
-        <button id="open-recordings" class="tree-item"></button>
-        <button id="open-nettools" class="tree-item"></button>
-        <button id="open-import" class="tree-item"></button>
-        <button id="open-extensions" class="tree-item"></button>
-        <button id="open-settings" class="tree-item"></button>
-      </div>
+        <div id="local-shells" class="local-shells"></div>
+      </section>
     </nav>
     <main class="work">
       <div id="tabs" class="tabs" role="tablist" aria-label="Sessions ouvertes"></div>
