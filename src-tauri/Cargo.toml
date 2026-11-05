@@ -23,11 +23,9 @@ qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 russh = { version = "0.64", default-features = false, features = ["ring", "rsa", "flate2", "des", "dsa"] }
 tokio = { version = "1", features = ["sync", "macros", "time", "fs", "io-util", "net", "rt"] }
-keyring = { version = "3", features = ["windows-native"] }
 russh-sftp = "3"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
-winreg = "0.56.0"
 quick-xml = "0.42.0"
 serialport = { version = "4.10.1", default-features = false }
 tauri-plugin-single-instance = "2"
@@ -50,8 +48,16 @@ assist-proto = { path = "../assist-proto" }
 
 # Windows Hello (verrouillage de l'application).
 [target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+winreg = "0.56.0"
 windows = { version = "0.62", features = ["Security_Credentials_UI", "Win32_System_WinRT", "Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_Security_Cryptography"] }
 windows-future = "0.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
 
 # Exécutable le plus petit possible en release.
 [profile.release]

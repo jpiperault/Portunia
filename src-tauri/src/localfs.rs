@@ -145,6 +145,8 @@ mod tests {
         rename(dir.join("b.txt").display().to_string(), dir.join("c.txt").display().to_string()).unwrap();
         assert!(rename(dir.join("c.txt").display().to_string(), dir.join("sous").display().to_string()).is_err());
         fs::remove_dir_all(&dir).unwrap();
+        // Les lettres de lecteur n'existent que sous Windows.
+        #[cfg(windows)]
         assert!(!drives().is_empty());
     }
 }

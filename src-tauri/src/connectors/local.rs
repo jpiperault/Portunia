@@ -110,7 +110,7 @@ pub fn detect() -> Vec<ShellSpec> {
 }
 
 fn home() -> PathBuf {
-    env_path("USERPROFILE").unwrap_or_else(|| PathBuf::from("."))
+    crate::platform::home_dir().unwrap_or_else(|| PathBuf::from("."))
 }
 
 /// Ouvre le shell dans un pseudo-terminal et relaie ses entrées / sorties.

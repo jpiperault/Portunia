@@ -192,7 +192,7 @@ async fn run() -> Result<()> {
         .with_client_name("Portunia")
         // Identité du client annoncée au serveur (valeurs habituelles d'un client Windows).
         .with_client_build(0)
-        .with_client_dir("C:\\Windows\\System32\\mstscax.dll")
+        .with_client_dir(CLIENT_DIR)
         .with_platform(ironrdp_pdu::rdp::capability_sets::MajorPlatformType::WINDOWS);
     if !s.domain.is_empty() {
         builder = builder.with_domain(s.domain.clone());
@@ -422,6 +422,12 @@ fn explain(raw: &str) -> String {
         raw.to_string()
     }
 }
+
+/// Chemin annoncé au serveur comme bibliothèque cliente (mstscax.dll n'existe que sous Windows).
+#[cfg(windows)]
+const CLIENT_DIR: &str = "C:\\Windows\\System32\\mstscax.dll";
+#[cfg(not(windows))]
+const CLIENT_DIR: &str = "";
 
 const TILE: usize = 64;
 

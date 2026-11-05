@@ -29,7 +29,7 @@ pub fn identity(s: &Session) -> String {
 }
 
 pub fn home() -> PathBuf {
-    std::env::var_os("USERPROFILE").map(PathBuf::from).unwrap_or_default()
+    crate::platform::home_dir().unwrap_or_default()
 }
 
 pub fn default_ssh_config() -> PathBuf {
@@ -37,9 +37,10 @@ pub fn default_ssh_config() -> PathBuf {
 }
 
 pub fn default_mremoteng() -> PathBuf {
+    // Hors Windows, APPDATA n'existe pas : repli sous le dossier personnel (jamais un chemin relatif).
     std::env::var_os("APPDATA")
         .map(PathBuf::from)
-        .unwrap_or_default()
+        .unwrap_or_else(|| home().join(".config"))
         .join("mRemoteNG")
         .join("confCons.xml")
 }
