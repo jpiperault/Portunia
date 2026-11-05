@@ -5,7 +5,7 @@
 use std::{
     fs,
     io::{BufRead, BufReader, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{mpsc, Arc, Mutex},
     thread,
@@ -43,7 +43,7 @@ impl Connector for RdpConnector {
                 Field::new(
                     "client",
                     t!("Display", "Affichage"),
-                    choice(&[("tab", t!("In a tab", "Dans un onglet")), ("mstsc", t!("Windows client (mstsc)", "Client Windows (mstsc)"))]),
+                    choice(&[("tab", t!("In a tab", "Dans un onglet")), ("mstsc", if cfg!(target_os = "macos") { t!("Windows App", "Windows App") } else { t!("Windows client (mstsc)", "Client Windows (mstsc)") })]),
                 )
                 .default("tab"),
                 Field::new("password", t!("Password", "Mot de passe"), FieldKind::Secret).show_if("client", "tab").hidden_by("credential"),
@@ -434,21 +434,207 @@ fn connect_mstsc(ctx: &ConnectContext) -> Result<Outcome> {
     // Fichier .rdp en UTF-16 avec BOM, comme ceux enregistrés par Windows.
     let dir = ctx.data_dir.join("rdp");
     fs::create_dir_all(&dir)?;
+    prepare_rdp_dir(&dir)?;
     let safe_name: String = ctx
         .session_name
         .chars()
         .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' })
         .collect();
-    let path = dir.join(format!("{safe_name}.rdp"));
+    let path = dir.join(rdp_file_name(&safe_name));
     let mut bytes = vec![0xFF, 0xFE];
     for unit in (lines.join("\r\n") + "\r\n").encode_utf16() {
         bytes.extend(unit.to_le_bytes());
     }
-    fs::write(&path, bytes)?;
+    write_rdp_file(&path, &bytes)?;
+    launch_external_client(&path)?;
+    Ok(Outcome::Detached(format!("Bureau à distance ouvert vers {host}")))
+}
 
+/// Windows : nom stable, dossier laissé tel quel (comportement d'origine).
+#[cfg(windows)]
+fn rdp_file_name(safe_name: &str) -> String {
+    format!("{safe_name}.rdp")
+}
+
+/// Unix : nom unique par lancement, pour que le minuteur de suppression d'une connexion
+/// n'efface pas le fichier d'une autre.
+#[cfg(not(windows))]
+fn rdp_file_name(safe_name: &str) -> String {
+    format!("{safe_name}-{}.rdp", &uuid::Uuid::new_v4().simple().to_string()[..12])
+}
+
+#[cfg(windows)]
+fn prepare_rdp_dir(_dir: &Path) -> Result<()> {
+    Ok(())
+}
+
+/// Dossier réservé à l'utilisateur (0700) ; purge les .rdp oubliés (arrêt de Portunia avant le minuteur).
+#[cfg(not(windows))]
+fn prepare_rdp_dir(dir: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))?;
+    purge_stale_rdp(dir, RDP_FILE_LIFETIME);
+    Ok(())
+}
+
+/// Supprime les `.rdp` du dossier plus vieux que `max_age`. Les erreurs sont ignorées : c'est du ménage.
+#[cfg(not(windows))]
+fn purge_stale_rdp(dir: &Path, max_age: std::time::Duration) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let stale = path.extension().is_some_and(|e| e == "rdp")
+            && entry.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > max_age);
+        if stale {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn write_rdp_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    Ok(fs::write(path, bytes)?)
+}
+
+/// Fichier .rdp créé neuf, lisible par son seul propriétaire (0600) : un fichier ou un lien
+/// symbolique déjà présent est écarté, jamais suivi ni réutilisé.
+#[cfg(not(windows))]
+fn write_rdp_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    let mut file = fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(path)?;
+    std::io::Write::write_all(&mut file, bytes)?;
+    Ok(())
+}
+
+#[cfg(windows)]
+fn launch_external_client(path: &Path) -> Result<()> {
     Command::new("mstsc.exe")
-        .arg(&path)
+        .arg(path)
         .spawn()
         .context(t!("Cannot start the Remote Desktop client (mstsc.exe)", "Impossible de lancer le client Bureau à distance (mstsc.exe)"))?;
-    Ok(Outcome::Detached(format!("Bureau à distance ouvert vers {host}")))
+    Ok(())
+}
+
+/// Identifiant de Windows App (ex-« Microsoft Remote Desktop ») et sa page de l'App Store.
+#[cfg(not(windows))]
+const WINDOWS_APP_BUNDLE: &str = "com.microsoft.rdc.macos";
+#[cfg(not(windows))]
+const WINDOWS_APP_STORE: &str = "https://apps.apple.com/app/windows-app/id1295203466";
+
+/// Arguments de `open` pour ouvrir le fichier .rdp dans Windows App (le chemin reste un argument
+/// distinct : jamais de chaîne shell).
+#[cfg(not(windows))]
+fn open_args(path: &Path) -> Vec<std::ffi::OsString> {
+    vec!["-b".into(), WINDOWS_APP_BUNDLE.into(), path.as_os_str().to_owned()]
+}
+
+/// Délai avant de supprimer le .rdp temporaire : le temps que Windows App le lise.
+#[cfg(not(windows))]
+const RDP_FILE_LIFETIME: std::time::Duration = std::time::Duration::from_secs(60);
+
+#[cfg(target_os = "macos")]
+fn launch_external_client(path: &Path) -> Result<()> {
+    let status = Command::new("open").args(open_args(path)).stdout(Stdio::null()).stderr(Stdio::null()).status();
+    if !matches!(status, Ok(s) if s.success()) {
+        let _ = fs::remove_file(path);
+        bail!(t!(
+            format!("Windows App is not installed. Install it from the App Store: {WINDOWS_APP_STORE}"),
+            format!("Windows App n'est pas installée. Installez-la depuis l'App Store : {WINDOWS_APP_STORE}")
+        ));
+    }
+    // Le fichier .rdp ne sert qu'à ouvrir la session : on ne le garde pas.
+    let path = path.to_path_buf();
+    std::thread::spawn(move || {
+        std::thread::sleep(RDP_FILE_LIFETIME);
+        let _ = fs::remove_file(path);
+    });
+    Ok(())
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
+fn launch_external_client(path: &Path) -> Result<()> {
+    let _ = fs::remove_file(path);
+    bail!(t!("The external RDP client is only available on Windows and macOS", "Le client RDP externe n'est disponible que sous Windows et macOS"))
+}
+
+#[cfg(all(test, not(windows)))]
+mod external_client_tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn open_cible_windows_app_sans_chaine_shell() {
+        let args = open_args(Path::new("/tmp/a b; rm -rf x.rdp"));
+        assert_eq!(args, ["-b", "com.microsoft.rdc.macos", "/tmp/a b; rm -rf x.rdp"]);
+    }
+
+    #[test]
+    fn le_fichier_rdp_est_prive_et_sans_mot_de_passe() {
+        let dir = std::env::temp_dir().join(format!("portunia-rdp-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("s.rdp");
+        // Un fichier déjà présent avec des droits larges doit être resserré.
+        fs::write(&path, "ancien").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+        write_rdp_file(&path, b"full address:s:h:3389\r\n").unwrap();
+        assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+        assert_eq!(fs::read(&path).unwrap(), b"full address:s:h:3389\r\n");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn le_nom_du_moteur_n_a_pas_d_extension_exe() {
+        if let Some(path) = helper_path() {
+            assert!(!path.to_string_lossy().ends_with(".exe"));
+        }
+    }
+
+    #[test]
+    fn un_lien_symbolique_n_est_pas_suivi() {
+        let dir = std::env::temp_dir().join(format!("portunia-rdp-link-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("cible");
+        fs::write(&target, "intact").unwrap();
+        let path = dir.join("s.rdp");
+        std::os::unix::fs::symlink(&target, &path).unwrap();
+        write_rdp_file(&path, b"neuf").unwrap();
+        assert_eq!(fs::read(&target).unwrap(), b"intact");
+        assert_eq!(fs::read(&path).unwrap(), b"neuf");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn les_noms_de_fichier_sont_uniques() {
+        let (a, b) = (rdp_file_name("srv"), rdp_file_name("srv"));
+        assert_ne!(a, b);
+        assert!(a.starts_with("srv-") && a.ends_with(".rdp"));
+    }
+
+    #[test]
+    fn le_dossier_est_prive_et_les_vieux_rdp_sont_purges() {
+        let dir = std::env::temp_dir().join(format!("portunia-rdp-purge-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        let old = dir.join("vieux.rdp");
+        let fresh = dir.join("frais.rdp");
+        let other = dir.join("autre.txt");
+        for f in [&old, &fresh, &other] {
+            fs::write(f, "x").unwrap();
+        }
+        let long_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        for f in [&old, &other] {
+            fs::File::options().write(true).open(f).unwrap().set_modified(long_ago).unwrap();
+        }
+        prepare_rdp_dir(&dir).unwrap();
+        assert_eq!(fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+        assert!(!old.exists(), "le vieux .rdp doit être supprimé");
+        assert!(fresh.exists(), "un .rdp récent est conservé (autre connexion en cours)");
+        assert!(other.exists(), "seuls les .rdp sont purgés");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 }

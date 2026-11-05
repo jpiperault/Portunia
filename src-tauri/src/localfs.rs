@@ -1,5 +1,5 @@
 //! Fichiers de ce PC : le volet gauche d'une session de fichiers (SFTP, FTP, S3).
-//! Chemins Windows ; le chemin vide désigne la liste des lecteurs.
+//! Chemins Windows ou Unix ; le chemin vide désigne la liste des lecteurs (Windows) ou la racine (Unix).
 
 use std::{
     fs,
@@ -22,15 +22,25 @@ pub fn local_home(state: State<'_, AppState>, start: Option<String>) -> CmdResul
             return Ok(expanded.display().to_string());
         }
     }
-    Ok(std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into()))
+    Ok(crate::platform::home_dir().map(|h| h.display().to_string()).unwrap_or_else(|| DEFAULT_ROOT.into()))
 }
+
+/// Point de départ quand le dossier personnel est inconnu.
+#[cfg(windows)]
+const DEFAULT_ROOT: &str = "C:\\";
+#[cfg(not(windows))]
+const DEFAULT_ROOT: &str = "/";
 
 /// « %USERPROFILE%\Projets » ou « ~\Projets » → chemin complet.
 fn expand(dir: &str) -> PathBuf {
-    let home = std::env::var("USERPROFILE").unwrap_or_default();
-    let dir = dir.replace("%USERPROFILE%", &home);
+    let home = crate::platform::home_dir().map(|h| h.display().to_string()).unwrap_or_default();
+    expand_with(dir, &home)
+}
+
+fn expand_with(dir: &str, home: &str) -> PathBuf {
+    let dir = dir.replace("%USERPROFILE%", home);
     match dir.strip_prefix('~') {
-        Some(rest) => Path::new(&home).join(rest.trim_start_matches(['\\', '/'])),
+        Some(rest) => Path::new(home).join(rest.trim_start_matches(['\\', '/'])),
         None => PathBuf::from(dir),
     }
 }
@@ -60,7 +70,7 @@ fn list(path: String) -> CmdResult<Vec<RemoteEntry>> {
             is_link: kind.is_symlink(),
             size: if meta.is_dir() { 0 } else { meta.len() },
             modified: meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs()),
-            permissions: hidden(&meta).then_some(HIDDEN),
+            permissions: hidden(&name, &meta).then_some(HIDDEN),
             name,
         });
     }
@@ -72,17 +82,30 @@ fn list(path: String) -> CmdResult<Vec<RemoteEntry>> {
 const HIDDEN: u32 = 0x8000_0000;
 
 #[cfg(windows)]
-fn hidden(meta: &fs::Metadata) -> bool {
+fn hidden(_name: &str, meta: &fs::Metadata) -> bool {
     use std::os::windows::fs::MetadataExt;
     const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
     meta.file_attributes() & FILE_ATTRIBUTE_HIDDEN != 0
 }
 
+/// Sous Unix, un fichier est caché quand son nom commence par un point.
 #[cfg(not(windows))]
-fn hidden(_meta: &fs::Metadata) -> bool {
-    false
+fn hidden(name: &str, _meta: &fs::Metadata) -> bool {
+    is_dot_file(name)
 }
 
+#[cfg(not(windows))]
+fn is_dot_file(name: &str) -> bool {
+    name.starts_with('.') && name != "." && name != ".."
+}
+
+/// Unix : une seule « racine », le système de fichiers.
+#[cfg(not(windows))]
+fn drives() -> Vec<RemoteEntry> {
+    vec![RemoteEntry { name: "/".into(), path: "/".into(), is_dir: true, is_link: false, size: 0, modified: None, permissions: None }]
+}
+
+#[cfg(windows)]
 fn drives() -> Vec<RemoteEntry> {
     (b'A'..=b'Z')
         .map(|letter| format!("{}:\\", letter as char))
@@ -119,6 +142,7 @@ fn rename(from: String, to: String) -> CmdResult<()> {
 }
 
 /// Montre le fichier dans l'Explorateur Windows (sélectionné), ou ouvre le dossier.
+#[cfg(windows)]
 #[tauri::command]
 pub fn local_reveal(state: State<'_, AppState>, path: String) -> CmdResult<()> {
     state.unlocked()?;
@@ -129,6 +153,50 @@ pub fn local_reveal(state: State<'_, AppState>, path: String) -> CmdResult<()> {
         command.arg(format!("/select,{path}"));
     }
     command.spawn().map(|_| ()).map_err(err)
+}
+
+/// Programme et arguments pour montrer un chemin : `open -R` (fichier) ou `open` (dossier) sous
+/// macOS ; `xdg-open` sur le dossier (le parent d'un fichier) ailleurs. Le chemin reste un
+/// argument distinct, jamais inséré dans une chaîne shell.
+#[cfg(not(windows))]
+fn reveal_invocation(path: &Path, is_dir: bool, macos: bool) -> (&'static str, Vec<std::ffi::OsString>) {
+    use std::ffi::OsString;
+    if macos {
+        let mut args: Vec<OsString> = if is_dir { vec![] } else { vec!["-R".into()] };
+        args.push(path.as_os_str().to_owned());
+        return ("open", args);
+    }
+    let folder = if is_dir { path } else { path.parent().unwrap_or(path) };
+    ("xdg-open", vec![folder.as_os_str().to_owned()])
+}
+
+/// Montre le fichier dans le Finder (sélectionné), ou ouvre le dossier.
+#[cfg(not(windows))]
+#[tauri::command]
+pub fn local_reveal(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    state.unlocked()?;
+    let path = validate_reveal_path(&path)?;
+    let (program, args) = reveal_invocation(path, path.is_dir(), cfg!(target_os = "macos"));
+    let mut child = std::process::Command::new(program).args(args).spawn().map_err(err)?;
+    // `open` et `xdg-open` rendent la main aussitôt : on récolte le processus pour ne pas laisser de zombie.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+/// Chemin à montrer : absolu (un chemin relatif commençant par « - » serait pris pour une option)
+/// et existant.
+#[cfg(not(windows))]
+fn validate_reveal_path(path: &str) -> CmdResult<&Path> {
+    let path = Path::new(path);
+    if !path.is_absolute() {
+        return Err(t!("Give an absolute path", "Indiquez un chemin absolu").to_string());
+    }
+    if !path.exists() {
+        return Err(t!(format!("{} does not exist", path.display()), format!("{} n'existe pas", path.display())));
+    }
+    Ok(path)
 }
 
 #[cfg(test)]
@@ -148,5 +216,59 @@ mod tests {
         // Les lettres de lecteur n'existent que sous Windows.
         #[cfg(windows)]
         assert!(!drives().is_empty());
+    }
+
+    #[test]
+    fn tilde_et_variable_profil_pointent_vers_le_dossier_personnel() {
+        assert_eq!(expand_with("~/Projets", "/Users/moi"), PathBuf::from("/Users/moi/Projets"));
+        assert_eq!(expand_with("~\\Projets", "/Users/moi"), PathBuf::from("/Users/moi/Projets"));
+        assert_eq!(expand_with("/etc", "/Users/moi"), PathBuf::from("/etc"));
+        assert_eq!(expand_with("%USERPROFILE%/x", "/Users/moi"), PathBuf::from("/Users/moi/x"));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn fichiers_caches_unix() {
+        assert!(is_dot_file(".ssh"));
+        assert!(!is_dot_file("notes.txt"));
+        assert!(!is_dot_file("."));
+        assert!(!is_dot_file(".."));
+        let dir = std::env::temp_dir().join(format!("portunia-hidden-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(".secret"), "x").unwrap();
+        fs::write(dir.join("visible"), "x").unwrap();
+        let entries = list(dir.display().to_string()).unwrap();
+        let flag = |name: &str| entries.iter().find(|e| e.name == name).unwrap().permissions;
+        assert_eq!(flag(".secret"), Some(HIDDEN));
+        assert_eq!(flag("visible"), None);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn reveler_sans_chaine_shell() {
+        use std::ffi::OsString;
+        let file = Path::new("/Users/moi/a b; rm -rf ~ x.txt");
+        assert_eq!(reveal_invocation(file, false, true), ("open", vec![OsString::from("-R"), file.as_os_str().to_owned()]));
+        let dir = Path::new("/Users/moi/Dossier");
+        assert_eq!(reveal_invocation(dir, true, true), ("open", vec![dir.as_os_str().to_owned()]));
+        assert_eq!(reveal_invocation(file, false, false), ("xdg-open", vec![OsString::from("/Users/moi")]));
+        assert_eq!(reveal_invocation(dir, true, false), ("xdg-open", vec![dir.as_os_str().to_owned()]));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn la_racine_unix_remplace_la_liste_des_lecteurs() {
+        assert_eq!(drives().iter().map(|d| d.path.as_str()).collect::<Vec<_>>(), ["/"]);
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn valide_le_chemin_a_reveler() {
+        assert!(validate_reveal_path("relatif/x").is_err());
+        assert!(validate_reveal_path("-R").is_err());
+        let err = validate_reveal_path("/nonexistent/portunia/x.txt").unwrap_err();
+        assert!(err.contains("/nonexistent/portunia/x.txt"), "{err}");
+        assert_eq!(validate_reveal_path("/").unwrap(), Path::new("/"));
     }
 }

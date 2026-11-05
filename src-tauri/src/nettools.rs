@@ -1,5 +1,5 @@
-//! Outils réseau : ping et traceroute (API ICMP de Windows, sans droits
-//! administrateur), test de ports TCP, résolution DNS, Wake-on-LAN.
+//! Outils réseau : ping et traceroute (API ICMP de Windows, socket ICMP datagramme
+//! sous Unix, sans droits administrateur), test de ports TCP, résolution DNS, Wake-on-LAN.
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket},
@@ -119,9 +119,305 @@ mod icmp {
 #[cfg(windows)]
 pub use icmp::echo;
 
-#[cfg(not(windows))]
-pub fn echo(_target: Ipv4Addr, _ttl: u8, _timeout: Duration) -> Result<Echo> {
-    bail!(t!("Ping only available on Windows", "Ping disponible uniquement sous Windows"))
+/// ICMP Unix : socket datagramme (`SOCK_DGRAM` + `IPPROTO_ICMP`), autorisée sans root par macOS
+/// et par Linux (selon `ping_group_range`). Le noyau réécrit l'identifiant ICMP : les réponses
+/// sont donc reconnues par leur numéro de séquence.
+#[cfg(unix)]
+mod icmp_unix {
+    use super::*;
+    use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+    use std::{
+        mem::MaybeUninit,
+        sync::atomic::{AtomicU16, Ordering},
+    };
+
+    const PAYLOAD: &[u8; 32] = b"Portunia ping...................";
+    /// Repli si le générateur aléatoire du système échoue.
+    static FALLBACK_SEQ: AtomicU16 = AtomicU16::new(1);
+
+    /// Numéro de séquence imprévisible : un tiers ne peut pas deviner quelle réponse accepter.
+    fn next_seq() -> u16 {
+        use ring::rand::SecureRandom;
+        let mut bytes = [0u8; 2];
+        match ring::rand::SystemRandom::new().fill(&mut bytes) {
+            Ok(()) => u16::from_be_bytes(bytes),
+            Err(_) => FALLBACK_SEQ.fetch_add(1, Ordering::Relaxed),
+        }
+    }
+
+    /// Somme de contrôle Internet (RFC 1071).
+    pub fn checksum(data: &[u8]) -> u16 {
+        let mut sum: u32 = data
+            .chunks(2)
+            .map(|c| u32::from(u16::from_be_bytes([c[0], *c.get(1).unwrap_or(&0)])))
+            .sum();
+        while sum > 0xFFFF {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+        !(sum as u16)
+    }
+
+    /// Requête d'écho : type 8 (IPv4) ou 128 (IPv6), identifiant laissé au noyau.
+    /// En IPv6 la somme de contrôle (pseudo-en-tête) est calculée par le noyau.
+    pub fn build_echo_request(seq: u16, v6: bool) -> Vec<u8> {
+        let mut packet = vec![if v6 { 128 } else { 8 }, 0, 0, 0, 0, 0];
+        packet.extend_from_slice(&seq.to_be_bytes());
+        packet.extend_from_slice(PAYLOAD);
+        if !v6 {
+            let sum = checksum(&packet);
+            packet[2..4].copy_from_slice(&sum.to_be_bytes());
+        }
+        packet
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub enum Message {
+        EchoReply { seq: u16, ttl: Option<u8> },
+        TimeExceeded { seq: Option<u16> },
+        Unreachable { code: u8, seq: Option<u16> },
+        Other,
+    }
+
+    /// Retire l'en-tête IPv4 que macOS laisse devant les messages ICMP reçus (Linux n'en laisse pas).
+    fn strip_ipv4_header(buf: &[u8]) -> (&[u8], Option<u8>) {
+        if buf.len() >= 20 && buf[0] >> 4 == 4 {
+            let len = usize::from(buf[0] & 0x0F) * 4;
+            if len >= 20 && buf.len() > len {
+                return (&buf[len..], Some(buf[8]));
+            }
+        }
+        (buf, None)
+    }
+
+    /// Numéro de séquence de la requête citée dans un message d'erreur.
+    fn quoted_seq(body: &[u8], v6: bool) -> Option<u16> {
+        let (inner, offset) = if v6 {
+            (body.get(8..)?, 40)
+        } else {
+            let inner = body.get(8..)?;
+            (inner, usize::from(inner.first()? & 0x0F) * 4)
+        };
+        let seq = inner.get(offset + 6..offset + 8)?;
+        Some(u16::from_be_bytes([seq[0], seq[1]]))
+    }
+
+    /// Analyse un message ICMP reçu.
+    pub fn parse_message(buf: &[u8], v6: bool) -> Message {
+        let (icmp, ttl) = if v6 { (buf, None) } else { strip_ipv4_header(buf) };
+        let Some(&kind) = icmp.first() else { return Message::Other };
+        let code = icmp.get(1).copied().unwrap_or(0);
+        let (reply, exceeded, unreachable) = if v6 { (129, 3, 1) } else { (0, 11, 3) };
+        match kind {
+            k if k == reply && icmp.len() >= 8 => Message::EchoReply { seq: u16::from_be_bytes([icmp[6], icmp[7]]), ttl },
+            k if k == exceeded => Message::TimeExceeded { seq: quoted_seq(icmp, v6) },
+            k if k == unreachable => Message::Unreachable { code, seq: quoted_seq(icmp, v6) },
+            _ => Message::Other,
+        }
+    }
+
+    /// Ce qu'une réponse reçue signifie pour notre requête.
+    #[derive(Debug, PartialEq)]
+    pub enum Verdict {
+        Reply { ttl: u8 },
+        Expired,
+        Unreachable { code: u8 },
+    }
+
+    /// Décide si `message`, reçu de `from`, répond bien à notre requête (`seq`, vers `target`) :
+    /// - un écho doit venir de la cible elle-même et porter notre séquence ;
+    /// - une erreur (TTL expiré, injoignable) vient d'un routeur, mais doit citer notre séquence ;
+    ///   une erreur sans séquence lisible est ignorée.
+    pub fn verdict(message: &Message, from: Option<IpAddr>, target: IpAddr, seq: u16) -> Option<Verdict> {
+        match *message {
+            Message::EchoReply { seq: s, ttl } if s == seq && from == Some(target) => Some(Verdict::Reply { ttl: ttl.unwrap_or(0) }),
+            Message::TimeExceeded { seq: Some(s) } if s == seq => Some(Verdict::Expired),
+            Message::Unreachable { code, seq: Some(s) } if s == seq => Some(Verdict::Unreachable { code }),
+            _ => None,
+        }
+    }
+
+    fn unreachable_reason(code: u8, v6: bool) -> String {
+        match (v6, code) {
+            (false, 0) | (true, 0) => t!("network unreachable", "réseau injoignable").into(),
+            (false, 1) | (true, 3) => t!("host unreachable", "hôte injoignable").into(),
+            (false, 2) => "protocole injoignable".into(),
+            (false, 3) | (true, 4) => "port injoignable".into(),
+            (_, other) => format!("erreur ICMP {other}"),
+        }
+    }
+
+    fn sender_ip(addr: &SockAddr) -> String {
+        addr.as_socket().map(|a| a.ip().to_string()).unwrap_or_default()
+    }
+
+    /// Un écho vers `target` avec ce TTL, en attendant au plus `timeout`.
+    pub fn echo_ip(target: IpAddr, ttl: u8, timeout: Duration) -> Result<Echo> {
+        let v6 = target.is_ipv6();
+        let socket = if v6 {
+            Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::ICMPV6))
+        } else {
+            Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::ICMPV4))
+        }
+        .map_err(|e| anyhow!("{}", t!(format!("ICMP unavailable: {e}"), format!("ICMP indisponible : {e}"))))?;
+        if v6 {
+            socket.set_unicast_hops_v6(u32::from(ttl))?;
+        } else {
+            socket.set_ttl_v4(u32::from(ttl))?;
+        }
+        let seq = next_seq();
+        let start = Instant::now();
+        socket.send_to(&build_echo_request(seq, v6), &SockAddr::from(SocketAddr::new(target, 0)))?;
+
+        let mut buf = [MaybeUninit::<u8>::uninit(); 1500];
+        loop {
+            let Some(left) = timeout.checked_sub(start.elapsed()).filter(|d| !d.is_zero()) else {
+                return Ok(Echo::Timeout);
+            };
+            socket.set_read_timeout(Some(left))?;
+            let (len, from) = match socket.recv_from(&mut buf) {
+                Ok(received) => received,
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => return Ok(Echo::Timeout),
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e.into()),
+            };
+            // SAFETY: `recv_from` a initialisé les `len` premiers octets du tampon.
+            let data: Vec<u8> = buf[..len].iter().map(|b| unsafe { b.assume_init() }).collect();
+            let rtt = start.elapsed().as_millis() as u32;
+            let from_ip = sender_ip(&from);
+            match verdict(&parse_message(&data, v6), from.as_socket().map(|a| a.ip()), target, seq) {
+                Some(Verdict::Reply { ttl }) => return Ok(Echo::Reply { from: from_ip, rtt, ttl }),
+                Some(Verdict::Expired) => return Ok(Echo::TtlExpired { from: from_ip, rtt }),
+                Some(Verdict::Unreachable { code }) => return Ok(Echo::Unreachable { from: from_ip, reason: unreachable_reason(code, v6) }),
+                // Réponse destinée à un autre ping, d'une autre adresse, ou sans rapport : on attend la suite.
+                None => {}
+            }
+        }
+    }
+}
+
+#[cfg(unix)]
+pub fn echo(target: Ipv4Addr, ttl: u8, timeout: Duration) -> Result<Echo> {
+    icmp_unix::echo_ip(IpAddr::V4(target), ttl, timeout)
+}
+
+/// Écho vers une adresse IPv4 ou IPv6 (ICMPv6 pour cette dernière).
+#[cfg(unix)]
+#[allow(dead_code)] // les commandes ping/traceroute (commands.rs) n'envoient encore que de l'IPv4
+pub fn echo_ip(target: IpAddr, ttl: u8, timeout: Duration) -> Result<Echo> {
+    icmp_unix::echo_ip(target, ttl, timeout)
+}
+
+#[cfg(unix)]
+#[cfg(test)]
+mod icmp_unix_tests {
+    use super::icmp_unix::*;
+
+    #[test]
+    fn somme_de_controle_rfc1071() {
+        // Exemple de la RFC 1071 : 00 01 f2 03 f4 f5 f6 f7 → somme 0xddf2, complément 0x220d.
+        assert_eq!(checksum(&[0x00, 0x01, 0xf2, 0x03, 0xf4, 0xf5, 0xf6, 0xf7]), 0x220d);
+        // Longueur impaire : l'octet final est complété par un zéro.
+        assert_eq!(checksum(&[0x01]), !0x0100);
+    }
+
+    #[test]
+    fn requete_d_echo_v4_valide() {
+        let packet = build_echo_request(0x1234, false);
+        assert_eq!(&packet[..2], &[8, 0]);
+        assert_eq!(&packet[6..8], &[0x12, 0x34]);
+        assert_eq!(packet.len(), 8 + 32);
+        // Un paquet portant sa somme de contrôle se vérifie à zéro.
+        assert_eq!(checksum(&packet), 0);
+    }
+
+    #[test]
+    fn requete_d_echo_v6_laisse_la_somme_au_noyau() {
+        let packet = build_echo_request(7, true);
+        assert_eq!(&packet[..4], &[128, 0, 0, 0]);
+        assert_eq!(&packet[6..8], &[0, 7]);
+    }
+
+    /// En-tête IPv4 minimal de 20 octets avec ce TTL.
+    fn ipv4_header(ttl: u8) -> Vec<u8> {
+        let mut h = vec![0x45, 0, 0, 0, 0, 0, 0, 0, ttl, 1];
+        h.resize(20, 0);
+        h
+    }
+
+    #[test]
+    fn reponse_d_echo_avec_ou_sans_en_tete_ip() {
+        let icmp = [0, 0, 0, 0, 0xab, 0xcd, 0x00, 0x2a, 1, 2, 3];
+        let mut with_header = ipv4_header(57);
+        with_header.extend_from_slice(&icmp);
+        assert_eq!(parse_message(&with_header, false), Message::EchoReply { seq: 42, ttl: Some(57) });
+        assert_eq!(parse_message(&icmp, false), Message::EchoReply { seq: 42, ttl: None });
+    }
+
+    #[test]
+    fn ttl_expire_cite_la_sequence_de_la_requete() {
+        // Type 11, puis 4 octets inutilisés, l'en-tête IP cité et 8 octets de la requête (seq = 9).
+        let mut message = ipv4_header(250);
+        message.extend_from_slice(&[11, 0, 0, 0, 0, 0, 0, 0]);
+        message.extend_from_slice(&ipv4_header(1));
+        message.extend_from_slice(&[8, 0, 0, 0, 0x11, 0x22, 0x00, 0x09]);
+        assert_eq!(parse_message(&message, false), Message::TimeExceeded { seq: Some(9) });
+    }
+
+    #[test]
+    fn destination_injoignable_et_troncature() {
+        let mut message = vec![3, 1, 0, 0, 0, 0, 0, 0];
+        message.extend_from_slice(&ipv4_header(1));
+        message.extend_from_slice(&[8, 0, 0, 0, 0, 0, 0x01, 0x00]);
+        assert_eq!(parse_message(&message, false), Message::Unreachable { code: 1, seq: Some(256) });
+        // Citation tronquée : la séquence est inconnue, pas de panique.
+        assert_eq!(parse_message(&message[..12], false), Message::Unreachable { code: 1, seq: None });
+        assert_eq!(parse_message(&[], false), Message::Other);
+        assert_eq!(parse_message(&[0, 0, 0], false), Message::Other);
+    }
+
+    #[test]
+    fn une_reponse_d_une_autre_adresse_est_ignoree() {
+        use std::net::IpAddr;
+        let target: IpAddr = "192.0.2.10".parse().unwrap();
+        let other: IpAddr = "192.0.2.99".parse().unwrap();
+        let reply = Message::EchoReply { seq: 5, ttl: Some(60) };
+        assert_eq!(verdict(&reply, Some(target), target, 5), Some(Verdict::Reply { ttl: 60 }));
+        assert_eq!(verdict(&reply, Some(other), target, 5), None);
+        assert_eq!(verdict(&reply, None, target, 5), None);
+        assert_eq!(verdict(&reply, Some(target), target, 6), None);
+    }
+
+    #[test]
+    fn une_erreur_sans_sequence_ou_avec_une_autre_est_ignoree() {
+        use std::net::IpAddr;
+        let target: IpAddr = "192.0.2.10".parse().unwrap();
+        let router: IpAddr = "192.0.2.1".parse().unwrap();
+        assert_eq!(verdict(&Message::TimeExceeded { seq: Some(5) }, Some(router), target, 5), Some(Verdict::Expired));
+        assert_eq!(verdict(&Message::TimeExceeded { seq: None }, Some(router), target, 5), None);
+        assert_eq!(verdict(&Message::TimeExceeded { seq: Some(4) }, Some(router), target, 5), None);
+        assert_eq!(verdict(&Message::Unreachable { code: 1, seq: None }, Some(router), target, 5), None);
+        assert_eq!(verdict(&Message::Unreachable { code: 1, seq: Some(5) }, Some(router), target, 5), Some(Verdict::Unreachable { code: 1 }));
+        assert_eq!(verdict(&Message::Other, Some(router), target, 5), None);
+    }
+
+    #[test]
+    fn citation_icmpv6_tronquee() {
+        let mut exceeded = vec![3, 0, 0, 0, 0, 0, 0, 0];
+        exceeded.extend_from_slice(&[0x60; 40]);
+        // Moins de 8 octets du message cité : séquence inconnue, donc pas de panique ni d'acceptation.
+        exceeded.extend_from_slice(&[128, 0, 0, 0, 0, 1]);
+        assert_eq!(parse_message(&exceeded, true), Message::TimeExceeded { seq: None });
+        assert_eq!(parse_message(&exceeded[..20], true), Message::TimeExceeded { seq: None });
+    }
+
+    #[test]
+    fn messages_icmpv6() {
+        assert_eq!(parse_message(&[129, 0, 0, 0, 0, 1, 0, 5], true), Message::EchoReply { seq: 5, ttl: None });
+        let mut exceeded = vec![3, 0, 0, 0, 0, 0, 0, 0];
+        exceeded.extend_from_slice(&[0x60; 40]);
+        exceeded.extend_from_slice(&[128, 0, 0, 0, 0, 1, 0, 8]);
+        assert_eq!(parse_message(&exceeded, true), Message::TimeExceeded { seq: Some(8) });
+    }
 }
 
 // ---------- Ports TCP ----------
@@ -263,7 +559,26 @@ mod tests {
         assert_eq!(&p[96..], &mac);
     }
 
-    // Le ping ICMP n'est réalisé que sous Windows (voir le stub d'`echo`).
+    /// Ping réel de la boucle locale, à lancer à la main : `cargo test -- --ignored ping_localhost`.
+    /// macOS autorise l'ICMP en datagramme : un échec ici est un vrai bug.
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "envoie un vrai paquet ICMP"]
+    fn ping_localhost() {
+        let echo = echo(Ipv4Addr::LOCALHOST, 64, Duration::from_secs(2)).unwrap();
+        assert!(matches!(echo, Echo::Reply { ref from, .. } if from == "127.0.0.1"), "{echo:?}");
+    }
+
+    /// Traceroute : avec un TTL de 1, la passerelle doit signaler « Time Exceeded » (réseau requis) :
+    /// `cargo test -- --ignored ttl_expire_vers_internet`.
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "exige un accès réseau"]
+    fn ttl_expire_vers_internet() {
+        let echo = echo(Ipv4Addr::new(8, 8, 8, 8), 1, Duration::from_secs(3)).unwrap();
+        assert!(matches!(echo, Echo::TtlExpired { .. }), "{echo:?}");
+    }
+
     #[cfg(windows)]
     #[test]
     fn ping_de_la_boucle_locale() {

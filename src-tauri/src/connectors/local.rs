@@ -4,7 +4,6 @@
 use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
-    process::Command,
     sync::{Arc, Mutex},
     thread,
 };
@@ -12,6 +11,8 @@ use std::{
 use anyhow::{anyhow, bail, Context, Result};
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
+#[cfg(not(unix))]
+use std::process::Command;
 
 use crate::connector::*;
 
@@ -30,6 +31,13 @@ pub struct ShellSpec {
     /// Icône : pwsh, powershell, cmd, wsl, git, custom.
     #[serde(default)]
     pub icon: String,
+    /// Peut être relancé en administrateur (Windows seulement).
+    #[serde(default = "default_elevatable")]
+    pub elevatable: bool,
+}
+
+fn default_elevatable() -> bool {
+    cfg!(windows)
 }
 
 fn spec(id: &str, name: &str, command: PathBuf, args: &[&str], icon: &str) -> ShellSpec {
@@ -40,14 +48,17 @@ fn spec(id: &str, name: &str, command: PathBuf, args: &[&str], icon: &str) -> Sh
         args: args.iter().map(|a| a.to_string()).collect(),
         cwd: String::new(),
         icon: icon.into(),
+        elevatable: cfg!(windows),
     }
 }
 
+#[cfg(windows)]
 fn env_path(var: &str) -> Option<PathBuf> {
     std::env::var_os(var).map(PathBuf::from)
 }
 
 /// Cherche un exécutable dans le PATH.
+#[cfg(windows)]
 fn which(name: &str) -> Option<PathBuf> {
     std::env::var_os("PATH").and_then(|paths| std::env::split_paths(&paths).map(|p| p.join(name)).find(|p| p.is_file()))
 }
@@ -71,12 +82,23 @@ fn wsl_distributions() -> Vec<String> {
         .collect()
 }
 
-#[cfg(not(windows))]
-fn wsl_distributions() -> Vec<String> {
-    Vec::new()
+/// Shells Unix : `$SHELL` d'abord (shell par défaut), puis `/etc/shells` et Homebrew.
+#[cfg(unix)]
+pub fn detect() -> Vec<ShellSpec> {
+    use super::local_unix::{detect_paths, login_args};
+    detect_paths()
+        .into_iter()
+        .map(|path| {
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            let args = login_args(&path);
+            let args: Vec<&str> = args.iter().map(String::as_str).collect();
+            spec(&format!("unix:{name}"), &name, path, &args, "custom")
+        })
+        .collect()
 }
 
 /// Shells présents sur ce PC, dans l'ordre d'affichage.
+#[cfg(not(unix))]
 pub fn detect() -> Vec<ShellSpec> {
     let mut out = Vec::new();
     let program_files = env_path("ProgramFiles").unwrap_or_else(|| PathBuf::from(r"C:\Program Files"));
@@ -109,8 +131,9 @@ pub fn detect() -> Vec<ShellSpec> {
     out
 }
 
+/// Dossier de départ par défaut : le dossier personnel, sinon « / » sous Unix et « . » sous Windows.
 fn home() -> PathBuf {
-    crate::platform::home_dir().unwrap_or_else(|| PathBuf::from("."))
+    crate::platform::home_dir().unwrap_or_else(|| PathBuf::from(if cfg!(unix) { "/" } else { "." }))
 }
 
 /// Ouvre le shell dans un pseudo-terminal et relaie ses entrées / sorties.
@@ -127,6 +150,10 @@ pub fn open(shell: &ShellSpec, cols: u16, rows: u16, sink: Arc<dyn Sink>) -> Res
     let cwd = if shell.cwd.trim().is_empty() { home() } else { PathBuf::from(shell.cwd.trim()) };
     command.cwd(if cwd.is_dir() { cwd } else { home() });
     command.env("TERM_PROGRAM", "Portunia");
+    #[cfg(unix)]
+    for (key, value) in super::local_unix::pty_env(std::env::var("LANG").ok()) {
+        command.env(key, value);
+    }
     let child = pty
         .slave
         .spawn_command(command)
@@ -192,8 +219,15 @@ impl Drop for LocalShell {
     }
 }
 
+/// Pas d'élévation depuis Portunia sous Unix : l'utilisateur tape `sudo` dans le shell.
+#[cfg(unix)]
+pub fn open_elevated(_shell: &ShellSpec) -> Result<()> {
+    bail!(t!("Not available on macOS: use sudo in the shell", "Non disponible sur macOS : utilisez sudo dans le shell"))
+}
+
 /// Lance le shell en administrateur, dans sa propre fenêtre Windows (l'élévation
 /// ne peut pas se faire à l'intérieur de Portunia sans l'élever tout entier).
+#[cfg(not(unix))]
 pub fn open_elevated(shell: &ShellSpec) -> Result<()> {
     let quote = |s: &str| format!("'{}'", s.replace('\'', "''"));
     let mut script = format!("Start-Process -Verb RunAs -FilePath {}", quote(&shell.command));
@@ -256,6 +290,7 @@ impl Connector for LocalShellConnector {
             args: ctx.str("args").map(|a| split_args(&a)).unwrap_or_default(),
             cwd: ctx.str("cwd").unwrap_or_default(),
             icon: "custom".into(),
+            elevatable: false,
         };
         Ok(Outcome::Terminal(open(&shell, ctx.cols, ctx.rows, ctx.sink.clone())?))
     }
@@ -299,6 +334,22 @@ mod tests {
     fn decoupe_les_arguments() {
         assert_eq!(split_args(r#"-d Ubuntu --cd "C:\Mes projets" -x"#), vec!["-d", "Ubuntu", "--cd", r"C:\Mes projets", "-x"]);
         assert!(split_args("   ").is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_elevated_refuse_sous_unix() {
+        let shell = ShellSpec { id: "x".into(), name: "x".into(), command: "/bin/sh".into(), args: vec![], cwd: String::new(), icon: String::new(), elevatable: false };
+        assert!(open_elevated(&shell).unwrap_err().to_string().contains("sudo"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn les_shells_unix_ne_sont_pas_elevables() {
+        for shell in detect() {
+            assert!(!shell.elevatable);
+            assert!(Path::new(&shell.command).is_absolute());
+        }
     }
 
     #[test]
