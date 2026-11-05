@@ -561,6 +561,44 @@ pub async fn gate_connect(
     start_connection(&app, &state, "ssh", name, values, cols, rows, on_event).await
 }
 
+/// Entrée RDP native de la Gate (0.31) : fichier .rdp à usage unique, ouvert dans le client RDP
+/// du système (mstsc, Windows App). Mode enregistré : les identifiants Windows donnés ici sont
+/// confiés à la Gate, qui les garde en mémoire le temps du jeton et ouvre la session avec.
+/// Renvoie l'adresse appelée.
+#[tauri::command]
+pub async fn gate_native_rdp(state: State<'_, AppState>, id: String, server: String, account: Option<String>, password: Option<String>) -> CmdResult<String> {
+    state.unlocked()?;
+    let data_dir = state.data_dir.clone();
+    let mut b = find(&data_dir, &id).map_err(full)?;
+    let path = format!("/serveurs/{}/rdp-natif", urlencode(&server));
+    let body = json!({ "compte": account, "mot_de_passe": password });
+    let t = authed(&data_dir, &mut b, reqwest::Method::POST, &path, Some(body)).await.map_err(full)?;
+    let token = t["jeton"].as_str().ok_or(t!("The Gate gave no token", "La Gate n'a pas donné de jeton"))?;
+    let port = t["port"].as_u64().unwrap_or(3390);
+    // Adresse réglée sur la Gate (« hôte » ou « hôte:port »), sinon celle que Portunia connaît.
+    let address = match t["adresse"].as_str().map(str::trim).filter(|a| !a.is_empty()) {
+        Some(a) if a.rsplit_once(':').is_some_and(|(h, p)| !h.ends_with(':') && p.parse::<u16>().is_ok() && (!h.contains(':') || h.ends_with(']'))) => a.to_string(),
+        Some(a) => format!("{a}:{port}"),
+        None if b.host.contains(':') => format!("[{}]:{port}", b.host),
+        None => format!("{}:{port}", b.host),
+    };
+    // Rebond : authentification Windows de bout en bout (NLA) ; sinon TLS simple avec la Gate,
+    // qui ouvre elle-même la session Windows.
+    let jump = t["mode"].as_str() == Some("rebond");
+    let lines = vec![
+        format!("full address:s:{address}"),
+        format!("loadbalanceinfo:s:{token}"),
+        "screen mode id:i:1".to_string(),
+        "prompt for credentials:i:0".to_string(),
+        "authentication level:i:2".to_string(),
+        format!("enablecredsspsupport:i:{}", jump as u8),
+        "redirectclipboard:i:1".to_string(),
+        "audiomode:i:0".to_string(),
+    ];
+    crate::connectors::rdp::open_rdp_lines(&data_dir, &format!("{server}-{}", b.name), &lines).map_err(full)?;
+    Ok(address)
+}
+
 /// Code QR (SVG) d'enrôlement du code TOTP, dessiné aux couleurs de l'interface par le CSS.
 #[tauri::command]
 pub fn qr_svg(text: String) -> CmdResult<String> {

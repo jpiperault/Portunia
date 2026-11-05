@@ -450,6 +450,32 @@ fn connect_mstsc(ctx: &ConnectContext) -> Result<Outcome> {
     Ok(Outcome::Detached(format!("Bureau à distance ouvert vers {host}")))
 }
 
+/// Fichier .rdp préparé ailleurs (entrée RDP native d'une Gate) : écrit, ouvert dans le client
+/// du système (mstsc, Windows App), puis effacé au bout d'une minute : il porte un jeton.
+pub(crate) fn open_rdp_lines(data_dir: &Path, name: &str, lines: &[String]) -> Result<()> {
+    for line in lines {
+        single_line(line, t!("A line of the .rdp file", "Une ligne du fichier .rdp"))?;
+    }
+    let dir = data_dir.join("rdp");
+    fs::create_dir_all(&dir)?;
+    prepare_rdp_dir(&dir)?;
+    let safe: String = name.chars().map(|c| if c.is_alphanumeric() || c == '-' { c } else { '_' }).collect();
+    let path = dir.join(format!("{safe}-{}.rdp", &uuid::Uuid::new_v4().simple().to_string()[..12]));
+    let mut bytes = vec![0xFF, 0xFE];
+    for unit in (lines.join("\r\n") + "\r\n").encode_utf16() {
+        bytes.extend(unit.to_le_bytes());
+    }
+    write_rdp_file(&path, &bytes)?;
+    launch_external_client(&path)?;
+    // macOS : déjà effacé par launch_external_client.
+    #[cfg(windows)]
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(60));
+        let _ = fs::remove_file(path);
+    });
+    Ok(())
+}
+
 /// Windows : nom stable, dossier laissé tel quel (comportement d'origine).
 #[cfg(windows)]
 fn rdp_file_name(safe_name: &str) -> String {

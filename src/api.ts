@@ -347,6 +347,8 @@ export interface GateServer {
   compte: string | null;
   sftp: boolean;
   tunnels: boolean;
+  /** Gate 0.31 : entrée RDP native ouverte pour ce serveur (mstsc, Windows App…). */
+  rdp_natif?: boolean;
 }
 
 export interface Gate {
@@ -395,6 +397,8 @@ export const gates = {
   logout: (id: string) => invoke<void>('gate_logout', { id }),
   remove: (id: string) => invoke<void>('gate_remove', { id }),
   servers: (id: string) => invoke<Gate>('gate_servers', { id }),
+  /** Fichier .rdp à usage unique ouvert dans le client RDP du système ; renvoie l'adresse appelée. */
+  nativeRdp: (id: string, server: string, account?: string, password?: string) => invoke<string>('gate_native_rdp', { id, server, account: account ?? null, password: password ?? null }),
   admin: <T = any>(id: string, method: string, path: string, body?: unknown) => invoke<T>('gate_admin', { id, method, path, body: body ?? null }),
   journalCsv: (id: string, query: string, dest: string) => invoke<void>('gate_journal_csv', { id, query, dest }),
   /** Écrit un export de l'audit (enregistrement, transcription) dans le fichier choisi. */

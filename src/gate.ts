@@ -117,6 +117,48 @@ export class GatePanel {
   }
 
   /** Reconnexion (session expirée) ; vrai si l'utilisateur s'est reconnecté. */
+  /** Entrée RDP native (Gate 0.31) : fichier .rdp à usage unique dans le client RDP du système.
+   *  Mode enregistré : identifiants Windows demandés ici, confiés à la Gate le temps du jeton. */
+  async openNative(b: Gate, s: GateServer) {
+    if (!b.connected && !(await this.reconnect(b.id))) return;
+    const launch = async (account?: string, password?: string) => {
+      const address = await gates.nativeRdp(b.id, s.nom, account, password);
+      this.host.toast(t(`${s.nom}: opening in the RDP client (${address})`, `${s.nom} : ouverture dans le client RDP (${address})`));
+    };
+    if (s.mode !== 'enregistre') {
+      try { await launch(); } catch (e) { this.host.toast(errorText(e), 'error'); }
+      return;
+    }
+    const account = h('input', { class: 'input', autocomplete: 'off', spellcheck: 'false', placeholder: t('DOMAIN\\account or account', 'DOMAINE\\compte ou compte') }) as HTMLInputElement;
+    const password = h('input', { class: 'input', type: 'password', autocomplete: 'off' }) as HTMLInputElement;
+    const submit = h('button', { type: 'submit', class: 'btn primary' }, t('Open', 'Ouvrir'));
+    const cancel = h('button', { type: 'button', class: 'btn' }, t('Cancel', 'Annuler'));
+    const { dialog, form, error } = modal(t(`${s.nom} · Windows account`, `${s.nom} · compte Windows`), [
+      h('p', { class: 'muted small' }, t('The Gate opens the Windows session with this account, then relays and records it. It keeps it in memory only until the RDP client connects (a few minutes at most), never on disk.', 'La Gate ouvre la session Windows avec ce compte, puis la relaie et l\'enregistre. Elle ne le garde qu\'en mémoire, jusqu\'à la connexion du client RDP (quelques minutes au plus), jamais sur disque.')),
+      field(t('Account', 'Compte'), account),
+      field(t('Password', 'Mot de passe'), password),
+      h('p', { class: 'muted small' }, t('Leave both empty for a server that shows its own sign-in screen (without NLA).', 'Laissez les deux vides pour un serveur qui affiche son propre écran de connexion (sans NLA).')),
+    ], [cancel, submit]);
+    cancel.addEventListener('click', () => dialog.close());
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      error.textContent = '';
+      submit.setAttribute('disabled', '');
+      try {
+        await launch(account.value.trim() || undefined, password.value || undefined);
+        dialog.close();
+      } catch (err) {
+        error.textContent = errorText(err);
+      } finally {
+        submit.removeAttribute('disabled');
+        password.value = '';
+      }
+    });
+    dialog.addEventListener('close', () => dialog.remove());
+    dialog.showModal();
+    account.focus();
+  }
+
   async reconnect(id: string): Promise<boolean> {
     const b = this.list.find((x) => x.id === id);
     const done = await openGateLogin(this.host, b);
@@ -217,6 +259,7 @@ export class GatePanel {
     const command = web ? `${s.protocole}://${s.hote}:${s.port}` : rdp ? `${s.hote}:${s.port}` : `ssh -p ${b.sshPort} ${b.login}%${s.nom}@${b.host}`;
     const menu = (): (MenuItem | 'separator')[] => [
       { label: t('Open', 'Ouvrir'), icon: 'play', action: open },
+      ...(rdp && s.rdp_natif ? [{ label: navigator.userAgent.includes('Mac') ? t('Open in Windows App', 'Ouvrir dans Windows App') : t('Open in the Windows client (mstsc)', 'Ouvrir dans le client Windows (mstsc)'), icon: 'desktop' as const, action: () => this.openNative(b, s) }] : []),
       rdp || web
         ? { label: t('Copy the server address', 'Copier l\'adresse du serveur'), icon: 'copy', action: () => navigator.clipboard.writeText(command) }
         : { label: t('Copy the ssh command', 'Copier la commande ssh'), icon: 'copy', action: () => navigator.clipboard.writeText(command) },
@@ -403,13 +446,14 @@ function openBypass(host: GateHost, b: Gate, list: { session: Session; server: G
 
 // ---------- Administration ----------
 
-type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'assistance' | 'durcissement' | 'reglages';
+type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'rdp' | 'assistance' | 'durcissement' | 'reglages';
 const SECTIONS: { id: Section; label: string; admin: boolean }[] = [
   { id: 'cibles', label: t('Servers and vault', 'Serveurs et coffre'), admin: true },
   { id: 'comptes', label: t('Accounts', 'Comptes'), admin: true },
   { id: 'groupes', label: t('Groups', 'Groupes'), admin: true },
   { id: 'regles', label: t('Rules', 'Règles'), admin: true },
   { id: 'portail', label: t('Web portal', 'Portail web'), admin: true },
+  { id: 'rdp', label: t('Native RDP', 'RDP natif'), admin: true },
   { id: 'assistance', label: t('Assistance', 'Assistance'), admin: true },
   { id: 'durcissement', label: t('Hardening', 'Durcissement'), admin: true },
   { id: 'reglages', label: t('Settings', 'Réglages'), admin: true },
@@ -1156,6 +1200,59 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         field(t('Maximum duration of an assistance', 'Durée maximale d\'une assistance'), duree),
         h('div', {}, save));
     },
+
+    // Entrée RDP native (Gate 0.31) : mstsc, Remmina, FreeRDP ou Windows App avec un fichier .rdp à usage unique.
+    rdp: async () => {
+      let r: any;
+      try {
+        r = await call<any>('GET', '/admin/rdp-natif');
+      } catch (e) {
+        if (/404|Not Found/i.test(errorText(e))) return h('div', { class: 'admin-section' }, toolbar(t('The native RDP entry needs Portunia Gate 0.31 or later: update the Gate.', 'L\'entrée RDP native demande Portunia Gate 0.31 ou suivant : mettez la Gate à jour.')));
+        throw e;
+      }
+      const sw = h('button', { type: 'button', class: 'switch', role: 'switch', 'aria-checked': String(r.actif), 'aria-label': t('Native RDP entry', 'Entrée RDP native') });
+      const stateText = r.ecoute
+        ? h('strong', { class: 'ok-text' }, t(`listening on ${r.ecoute}`, `en écoute sur ${r.ecoute}`))
+        : r.erreur
+          ? h('strong', { class: 'danger-text' }, r.erreur)
+          : h('strong', { class: 'muted' }, r.actif ? t('starting…', 'démarrage…') : t('closed', 'fermée'));
+      sw.addEventListener('click', async () => {
+        const on = sw.getAttribute('aria-checked') !== 'true';
+        try {
+          await call('PUT', '/admin/rdp-natif', { actif: on });
+          host.toast(on ? t('Native RDP entry open', 'Entrée RDP native ouverte') : t('Native RDP entry closed; sessions under way continue', 'Entrée RDP native fermée ; les sessions en cours continuent'));
+          // L'écoute s'ouvre sous 3 secondes.
+          setTimeout(reload, on ? 3500 : 0);
+        } catch (e) { fail(e); }
+      });
+      const port = h('input', { id: 'r-port', class: 'input', type: 'number', min: 1, max: 65535, value: String(r.port) }) as HTMLInputElement;
+      const adresse = h('input', { id: 'r-adresse', class: 'input', spellcheck: 'false', value: r.adresse ?? '', placeholder: t('empty: the Gate\'s address in Portunia', 'vide : l\'adresse de la Gate dans Portunia') }) as HTMLInputElement;
+      const MODES: [string, string][] = [['rebond', t('Jump (end to end, nothing recorded)', 'Rebond (de bout en bout, rien n\'est enregistré)')], ['coffre', t('Vault (the Gate signs in with the vault account)', 'Coffre (la Gate ouvre la session avec le compte du coffre)')], ['enregistre', t('Recorded (Windows account typed in Portunia)', 'Enregistré (compte Windows tapé dans Portunia)')]];
+      const boxes = MODES.map(([id, label]) => ({ id, ...checkbox(`r-mode-${id}`, label, (r.modes ?? []).includes(id)) }));
+      const validity = select('r-jeton', [['60', t('1 minute', '1 minute')], ['120', t('2 minutes', '2 minutes')], ['300', t('5 minutes', '5 minutes')], ['600', t('10 minutes', '10 minutes')]].concat([60, 120, 300, 600].includes(r.jeton_s) ? [] : [[String(r.jeton_s), `${r.jeton_s} s`]]) as [string, string][], String(r.jeton_s));
+      const save = h('button', { class: 'btn primary', onclick: async () => {
+        try {
+          await call('PUT', '/admin/rdp-natif', { port: Number(port.value), adresse: adresse.value.trim(), modes: boxes.filter((x) => x.box.checked).map((x) => x.id), jeton_s: Number(validity.value) });
+          host.toast(t('Native RDP saved (applied within 3 seconds)', 'RDP natif enregistré (appliqué sous 3 secondes)'));
+          setTimeout(reload, 3500);
+        } catch (e) { fail(e); }
+      } }, t('Save', 'Enregistrer'));
+      return h('div', { class: 'admin-section form-narrow' },
+        h('div', { class: 'portal-head' }, sw, h('div', {},
+          h('div', {}, h('b', {}, t('Native RDP entry', 'Entrée RDP native')), ' · ', stateText),
+          h('p', { class: 'muted small' }, t('Lets users open the Gate\'s Remote Desktop servers in an ordinary RDP client (mstsc, Windows App, Remmina, FreeRDP): Portunia prepares a single-use .rdp file. The Gate still checks the rules, records and keeps the vault account. Portunia and the web portal keep working as before.', 'Permet d\'ouvrir les serveurs Bureau à distance de la Gate dans un client RDP ordinaire (mstsc, Windows App, Remmina, FreeRDP) : Portunia prépare un fichier .rdp à usage unique. La Gate vérifie toujours les règles, enregistre et garde le compte du coffre. Portunia et le portail web fonctionnent comme avant.')))),
+        h('h3', {}, t('Listening', 'Écoute')),
+        field(t('Port', 'Port'), port, t('3390 by default; open it on the firewall (with Docker, publish it: PORTUNIA_GATE_RDP_PORT)', '3390 par défaut ; ouvrez-le sur le pare-feu (avec Docker, publiez-le : PORTUNIA_GATE_RDP_PORT)')),
+        field(t('Address in the .rdp files', 'Adresse dans les fichiers .rdp'), adresse, t('host or host:port reached by the users, if it differs from the Gate\'s address in Portunia (NAT, DNS name)', 'hôte ou hôte:port joint par les utilisateurs, s\'il diffère de l\'adresse de la Gate dans Portunia (NAT, nom DNS)')),
+        h('h3', {}, t('Servers reachable this way', 'Serveurs accessibles ainsi')),
+        h('div', { class: 'check-list' }, ...boxes.map((x) => x.row)),
+        field(t('Validity of a .rdp file', 'Validité d\'un fichier .rdp'), validity, t('single use; the Windows account of the recorded mode is forgotten at the same time', 'usage unique ; le compte Windows du mode enregistré est oublié en même temps')),
+        h('h3', {}, t('Certificate shown to RDP clients', 'Certificat présenté aux clients RDP')),
+        h('div', { class: 'fp' }, r.empreinte ?? ''),
+        h('p', { class: 'muted small' }, t('In vault and recorded modes the RDP client sees the Gate\'s API certificate: without a company certificate (sudo portunia-gate info), it warns once; compare this fingerprint before accepting. In jump mode it sees the Windows server\'s own certificate.', 'En modes coffre et enregistré, le client RDP voit le certificat de l\'API de la Gate : sans certificat d\'entreprise (sudo portunia-gate info), il avertit une fois ; comparez cette empreinte avant d\'accepter. En rebond, il voit le certificat du serveur Windows lui-même.')),
+        h('div', {}, save));
+    },
+
 
     // Lecture seule : le durcissement se pilote sur le serveur, avec les droits de root.
     durcissement: async () => {

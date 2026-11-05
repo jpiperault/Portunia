@@ -136,6 +136,7 @@ pub fn run() {
             gate::gate_rdp_replay_seek,
             gate::gate_rdp_replay_close,
             gate::gate_connect,
+            gate::gate_native_rdp,
             gate::qr_svg,
             commands::term_write,
             commands::term_resize,
