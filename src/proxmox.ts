@@ -425,9 +425,13 @@ function openServerForm(existing?: Pve): Promise<Pve | null> {
     const secret = input({ type: 'password', placeholder: existing?.hasSecret ? t('Kept: leave empty', 'Gardé : laisser vide') : '' });
     const secretLabel = h('span', {});
     const secretField = h('label', { class: 'fld' }, secretLabel, secret);
+    // Proxmox refuse les jetons pour les consoles : elles s'ouvrent avec le mot de passe de l'utilisateur.
+    const consolePassword = input({ type: 'password', placeholder: existing?.hasConsole ? t('Kept: leave empty', 'Gardé : laisser vide') : t('Optional', 'Facultatif') });
+    const consoleField = field(t('Password for consoles', 'Mot de passe des consoles'), consolePassword, t('the user\'s: Proxmox does not open consoles with a token', 'celui de l\'utilisateur : Proxmox n\'ouvre pas les consoles avec un jeton'));
     const sync = () => {
       const token = mode.value === 'token';
       tokenField.hidden = !token;
+      consoleField.hidden = !token;
       secretLabel.textContent = token ? t('Token secret', 'Secret du jeton') : t('Password', 'Mot de passe');
     };
     mode.addEventListener('change', sync);
@@ -435,7 +439,7 @@ function openServerForm(existing?: Pve): Promise<Pve | null> {
     const creds = h('div', { class: 'fld-group', hidden: !existing },
       field(t('Name', 'Nom'), name),
       h('div', { class: 'row2' }, field(t('User', 'Utilisateur'), user, 'utilisateur@domaine'), field(t('Sign-in', 'Connexion'), mode)),
-      tokenField, secretField,
+      tokenField, secretField, consoleField,
       h('p', { class: 'muted small' }, t('Token: give it the privileges needed (e.g. role PVEVMAdmin on /, without « Privilege Separation » to keep the user\'s rights). Password: accounts with two-factor authentication need a token.', 'Jeton : donnez-lui les droits nécessaires (par ex. rôle PVEVMAdmin sur /, sans « Privilege Separation » pour garder les droits de l\'utilisateur). Mot de passe : les comptes à double authentification demandent un jeton.')));
     const submit = h('button', { type: 'submit', class: 'btn primary' }, existing ? t('Save', 'Enregistrer') : t('Continue', 'Continuer'));
     const cancel = h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, t('Cancel', 'Annuler'));
@@ -459,6 +463,7 @@ function openServerForm(existing?: Pve): Promise<Pve | null> {
         result = await proxmox.save({
           id: existing?.id, name: name.value.trim(), host: target.host, port: target.port, fingerprint: target.fingerprint,
           user: user.value.trim(), tokenId: mode.value === 'token' ? tokenId.value.trim() : '', secret: secret.value || undefined,
+          consolePassword: mode.value === 'token' ? consolePassword.value || undefined : undefined,
         });
         dialog.close();
       } catch (err) {

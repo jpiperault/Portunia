@@ -437,6 +437,8 @@ export interface Pve {
   /** Nom du jeton d'API ; vide : mot de passe. */
   tokenId: string;
   hasSecret: boolean;
+  /** Jeton : mot de passe des consoles gardé. */
+  hasConsole?: boolean;
 }
 
 export interface PveSave {
@@ -448,6 +450,8 @@ export interface PveSave {
   user: string;
   tokenId: string;
   secret?: string;
+  /** Jeton : mot de passe de l'utilisateur pour les consoles (Proxmox les refuse aux jetons). */
+  consolePassword?: string;
 }
 
 /** Ligne de /cluster/resources : nœud, machine virtuelle (qemu), conteneur (lxc) ou stockage. */
