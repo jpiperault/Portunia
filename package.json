@@ -7,6 +7,7 @@
     "dev": "node scripts/build-rdp.mjs && vite",
     "build:release": "node scripts/build-rdp.mjs --release && npm run build",
     "build": "tsc && node scripts/check-i18n.cjs && vite build",
+    "test": "node --import ./tests/setup.mjs --test tests/src/",
     "tauri": "tauri"
   },
   "dependencies": {

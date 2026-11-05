@@ -1,10 +1,10 @@
-// Langue de l'interface : anglais par défaut, français si Windows (ou le réglage) le demande.
+// Langue de l'interface : anglais par défaut, français si le système (Windows ou macOS) ou le réglage le demande.
 // Chaque texte est écrit dans les deux langues côte à côte : t('English', 'Français').
 // Le choix est lu une fois au démarrage ; en changer recharge la fenêtre.
 
 export type Lang = 'en' | 'fr';
 
-/** Réglage « language » : 'auto' (langue de Windows), 'en' ou 'fr'. */
+/** Réglage « language » : 'auto' (langue du système), 'en' ou 'fr'. */
 function chosen(): string {
   try {
     // Clé des réglages (ancien nom du logiciel, gardé) ; lue ici car les textes en dépendent dès le chargement.

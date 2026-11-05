@@ -1,6 +1,9 @@
 #[macro_use]
 mod lang;
 mod platform;
+// Compilé partout (testable), installé seulement sous macOS.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod appmenu;
 mod gate;
 mod proxmox;
 mod commands;
@@ -97,11 +100,15 @@ pub fn run() {
                 store,
                 data_dir,
             ));
+            // Barre de menus native (macOS seulement ; Windows garde le menu de l'interface web).
+            #[cfg(target_os = "macos")]
+            appmenu::install(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             lang::set_language,
             platform::platform_os,
+            appmenu::appmenu_refresh,
             commands::list_protocols,
             commands::list_sessions,
             commands::save_session,

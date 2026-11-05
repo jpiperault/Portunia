@@ -3,20 +3,17 @@ import { api, errorText, RemoteEntry } from './api';
 import { h, icon } from './dom';
 import { formatDate, formatSize, Selection } from './files';
 import { t } from './i18n';
+import { IS_MAC, isMod, joinPath, localName, parentDir, places } from './platform';
 
 /** Marque « caché » (attribut Windows) transmise par le cœur dans `permissions`. */
 const HIDDEN = 0x8000_0000;
 
-/** Nom venu d'un serveur, rendu sûr pour Windows : ni caractère interdit, ni « .. », ni point final. */
-export function windowsName(name: string): string {
-  // eslint-disable-next-line no-control-regex
-  const cleaned = name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, '');
-  return cleaned || '_';
-}
+/** Nom venu d'un serveur, rendu sûr pour le système local : Windows = ni caractère interdit, ni « .. », ni point final ; Mac = ni « / ». Nom gardé pour compatibilité. */
+export const windowsName = (name: string): string => localName(name);
 
-export const localJoin = (dir: string, name: string) => (/[\\/]$/.test(dir) ? dir + name : `${dir}\\${name}`);
-/** « C:\Users\moi » → « C:\Users » ; « C:\ » → « » (liste des lecteurs). */
-const localParent = (path: string) => (/^[A-Za-z]:\\?$/.test(path) ? '' : path.replace(/[\\/][^\\/]+[\\/]?$/, '').replace(/^([A-Za-z]:)$/, '$1\\'));
+export const localJoin = (dir: string, name: string) => joinPath(dir, name);
+/** « C:\Users\moi » → « C:\Users » ; « C:\ » → « » (liste des lecteurs) ; sur Mac « /Users » → « / ». */
+const localParent = (path: string) => parentDir(path);
 
 export class LocalPanel {
   readonly el = h('div', { class: 'files dual local' });
@@ -106,22 +103,24 @@ export class LocalPanel {
   }
 
   private render() {
-    const drives = this.cwd === '';
+    const drives = !IS_MAC && this.cwd === '';
     const btn = (name: string, label: string, onclick: () => void, disabled = false) =>
       h('button', { class: 'icon-btn sm', 'aria-label': label, title: label, disabled, onclick }, icon(name, 15));
     const pathInput = h('input', {
-      class: 'files-path', type: 'text', value: this.cwd, placeholder: t('Drives', 'Lecteurs'), spellcheck: 'false', 'aria-label': t('Folder of this PC', 'Dossier de ce PC'),
+      class: 'files-path', type: 'text', value: this.cwd, placeholder: IS_MAC ? '/' : t('Drives', 'Lecteurs'), spellcheck: 'false', 'aria-label': t('Folder of this PC', 'Dossier de ce PC'),
       onkeydown: (e: KeyboardEvent) => { if (e.key === 'Enter') this.load((e.target as HTMLInputElement).value.trim()); },
     });
     this.el.replaceChildren(
       h('div', { class: 'files-head' },
         h('strong', {}, t('This PC', 'Ce PC')), h('span', { class: 'grow' }),
-        btn('drive', t('Drives', 'Lecteurs'), () => this.load(''), drives),
+        ...(IS_MAC
+          ? places().map((p) => btn(p.path === '/' ? 'drive' : 'folder', p.label, () => this.load(p.path)))
+          : [btn('drive', t('Drives', 'Lecteurs'), () => this.load(''), drives)]),
         btn('home', t('My user folder', 'Mon dossier utilisateur'), async () => this.load(await api.localHome())),
         btn('up', t('Parent folder', 'Dossier parent'), () => this.load(localParent(this.cwd)), drives),
         btn('refresh', t('Refresh', 'Actualiser'), () => this.load(this.cwd)),
         btn('folderPlus', t('New folder', 'Nouveau dossier'), () => this.mkdir(), drives),
-        btn('reveal', t('Show in the Windows Explorer', 'Afficher dans l\'Explorateur Windows'), () => this.reveal(this.picked[0]?.path ?? this.cwd), drives && !this.picked.length)),
+        btn('reveal', IS_MAC ? t('Show in the Finder', 'Afficher dans le Finder') : t('Show in the Windows Explorer', 'Afficher dans l\'Explorateur Windows'), () => this.reveal(this.picked[0]?.path ?? this.cwd), drives && !this.picked.length)),
       pathInput,
       this.renderList(),
     );
@@ -138,7 +137,7 @@ export class LocalPanel {
       return list;
     }
     list.addEventListener('keydown', (e) => {
-      if (e.key === 'a' && e.ctrlKey) { e.preventDefault(); this.selection.all(this.visible()); this.render(); this.focusList(); }
+      if (e.key === 'a' && isMod(e)) { e.preventDefault(); this.selection.all(this.visible()); this.render(); this.focusList(); }
     });
     const shown = this.visible();
     if (!shown.length) list.append(h('p', { class: 'files-msg muted' }, t('Empty folder.', 'Dossier vide.')));
@@ -165,7 +164,7 @@ export class LocalPanel {
           !drive && h('div', { class: 'row-actions' },
             h('button', { class: 'icon-btn sm', 'aria-label': t(`Upload ${entry.name}`, `Envoyer ${entry.name}`), title: t('Upload to the folder open on the server (F5)', 'Envoyer dans le dossier ouvert sur le serveur (F5)'), onclick: () => this.transfer([entry]) }, icon('upload', 14)),
             h('button', { class: 'icon-btn sm', 'aria-label': t(`Rename ${entry.name}`, `Renommer ${entry.name}`), title: t('Rename (F2)', 'Renommer (F2)'), onclick: () => this.rename(entry) }, icon('edit', 14)),
-            h('button', { class: 'icon-btn sm', 'aria-label': t(`Show ${entry.name} in the Explorer`, `Afficher ${entry.name} dans l'Explorateur`), title: t('Show in the Windows Explorer', 'Afficher dans l\'Explorateur Windows'), onclick: () => this.reveal(entry.path) }, icon('reveal', 14)))),
+            h('button', { class: 'icon-btn sm', 'aria-label': IS_MAC ? t(`Show ${entry.name} in the Finder`, `Afficher ${entry.name} dans le Finder`) : t(`Show ${entry.name} in the Explorer`, `Afficher ${entry.name} dans l'Explorateur`), title: IS_MAC ? t('Show in the Finder', 'Afficher dans le Finder') : t('Show in the Windows Explorer', 'Afficher dans l\'Explorateur Windows'), onclick: () => this.reveal(entry.path) }, icon('reveal', 14)))),
       );
     }
     return list;

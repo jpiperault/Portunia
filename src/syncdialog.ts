@@ -5,6 +5,7 @@ import { h, icon } from './dom';
 import { formatDate, formatSize } from './files';
 import { t } from './i18n';
 import { windowsName } from './localpanel';
+import { localPathUnder } from './platform';
 import { proChip } from './security';
 import type { TransferQueue } from './transfers';
 
@@ -191,7 +192,7 @@ export function openSyncDialog(target: SyncTarget) {
     const id = target.connectionId;
     const localRoot = localInput.value.trim().replace(/[\\/]+$/, '');
     const remoteRoot = remoteInput.value.trim().replace(/\/+$/, '') || '/';
-    const localPath = (rel: string) => `${localRoot}\\${rel.split('/').map(windowsName).join('\\')}`;
+    const localPath = (rel: string) => localPathUnder(localRoot, rel.split('/').map((part) => windowsName(part)));
     const remotePath = (rel: string) => `${remoteRoot === '/' ? '' : remoteRoot}/${rel}`;
     const remoteParent = (rel: string) => remotePath(rel).replace(/\/[^/]+$/, '') || '/';
     for (const r of todo) {

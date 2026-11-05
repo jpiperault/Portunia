@@ -3,6 +3,7 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { api, errorText, remoteFiles, RemoteEntry } from './api';
 import { h, icon } from './dom';
 import { LOCALE, t } from './i18n';
+import { baseName, isMod } from './platform';
 import type { TransferQueue } from './transfers';
 
 /** Sélection multiple : clic, Ctrl+clic, Maj+clic, Ctrl+A. */
@@ -14,11 +15,11 @@ export class Selection {
     if (e.shiftKey && this.anchor) {
       const a = all.findIndex((x) => x.path === this.anchor);
       const b = all.findIndex((x) => x.path === entry.path);
-      if (!e.ctrlKey) this.paths.clear();
+      if (!isMod(e)) this.paths.clear();
       for (const x of all.slice(Math.min(a, b), Math.max(a, b) + 1)) this.paths.add(x.path);
       return;
     }
-    if (e.ctrlKey) {
+    if (isMod(e)) {
       if (!this.paths.delete(entry.path)) this.paths.add(entry.path);
     } else {
       this.paths.clear();
@@ -63,7 +64,6 @@ interface Transfer {
 
 const join = (dir: string, name: string) => (dir.endsWith('/') ? dir + name : `${dir}/${name}`);
 const parent = (path: string) => (path === '/' ? '/' : path.replace(/\/[^/]+\/?$/, '') || '/');
-const baseName = (localPath: string) => localPath.split(/[\\/]/).pop() ?? localPath;
 
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`;
@@ -169,11 +169,11 @@ export class FilePanel {
     if (this.dropping !== on) { this.dropping = on; this.render(); }
   }
 
-  /** Fichiers glissés depuis l'Explorateur Windows. */
+  /** Fichiers glissés depuis le Finder ou l'Explorateur (chemins reçus de Tauri). */
   uploadPaths(paths: string[]) {
     if (!this.connectionId || !paths.length) return;
     const existing = new Set(this.entries.map((e) => e.name));
-    const clashes = paths.map(baseName).filter((n) => existing.has(n));
+    const clashes = paths.map((p) => baseName(p)).filter((n) => existing.has(n));
     if (clashes.length && !confirm(t(`Replace on the server: ${clashes.join(', ')}?`, `Remplacer sur le serveur : ${clashes.join(', ')} ?`))) return;
     const dir = this.cwd;
     const id = this.connectionId;
@@ -204,7 +204,7 @@ export class FilePanel {
     this.enqueue({ name: entry.name, direction: 'down' }, (cb) => api.fsDownload(id, entry.path, local, cb));
   }
 
-  /** Ouvre le fichier dans l'éditeur de Windows ; chaque enregistrement repart sur le serveur. */
+  /** Ouvre le fichier dans l'éditeur du système ; chaque enregistrement repart sur le serveur. */
   private async edit(entry: RemoteEntry) {
     if (!this.connectionId || entry.isDir) return;
     if (entry.size > 20 * 1024 * 1024 && !confirm(t(`« ${entry.name} » is ${formatSize(entry.size)}. Open it in an editor anyway?`, `« ${entry.name} » fait ${formatSize(entry.size)}. L'ouvrir quand même dans un éditeur ?`))) return;
@@ -342,7 +342,7 @@ export class FilePanel {
       return list;
     }
     list.addEventListener('keydown', (e) => {
-      if (e.key === 'a' && e.ctrlKey) { e.preventDefault(); this.selection.all(this.visible()); this.render(); this.focusList(); }
+      if (e.key === 'a' && isMod(e)) { e.preventDefault(); this.selection.all(this.visible()); this.render(); this.focusList(); }
     });
     const shown = this.visible();
     if (!shown.length) list.append(h('p', { class: 'files-msg muted' }, t('Empty folder. Drop files here to upload them.', 'Dossier vide. Glissez des fichiers ici pour les envoyer.')));

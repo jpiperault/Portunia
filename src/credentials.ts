@@ -3,6 +3,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { Credential, credentials, errorText } from './api';
 import { h, icon } from './dom';
 import { t } from './i18n';
+import { sshAgentNote } from './platform';
 
 type Toast = (m: string, k?: 'info' | 'error') => void;
 
@@ -67,7 +68,7 @@ export function openCredentialManager(toast: Toast, onChange: () => void) {
                   onclick: async () => { const p = await open({ multiple: false, directory: false }); if (typeof p === 'string') keyPath.value = p; },
                 }, '…'))),
             h('label', { class: 'fld' }, t('Key passphrase', 'Phrase de passe de la clé'), secret))] : []),
-        ...(auth === 'agent' ? [h('p', { class: 'muted small', style: 'margin: 0' }, t('Keys loaded in Pageant or the Windows OpenSSH agent are used.', 'Les clés chargées dans Pageant ou l\'agent OpenSSH de Windows sont utilisées.'))] : []));
+        ...(auth === 'agent' ? [h('p', { class: 'muted small', style: 'margin: 0' }, sshAgentNote())] : []));
     };
     renderAuth();
 
