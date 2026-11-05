@@ -15,6 +15,8 @@ export interface AuditHost {
 export interface AuditRow {
   id: string; compte: string; serveur: string; type: string; detail: string; mode: string; adresse: string;
   debut: string; fin: string | null; enregistree: boolean; frappe: boolean; octets: number;
+  /** Fichiers copiés en Bureau à distance (Portunia Gate 0.28 et suivantes). */
+  fichiers?: number;
   /** Absent sur une Gate antérieur à la 0.8 : relisible si enregistrée. */
   relisible?: boolean;
   /** Session Bureau à distance relisible (Portunia Gate 0.10 et suivants). */
@@ -72,6 +74,7 @@ export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
       h('option', { value: '0' }, t('Today', 'Aujourd\'hui')), h('option', { value: '7', selected: true }, t('Last 7 days', '7 derniers jours')),
       h('option', { value: '30' }, t('Last 30 days', '30 derniers jours')), h('option', { value: '365' }, t('Last 12 months', '12 derniers mois')), h('option', { value: '' }, t('All', 'Tout'))) as HTMLSelectElement;
     const keys = h('input', { id: 'au-keys', type: 'checkbox' }) as HTMLInputElement;
+    const copied = h('input', { id: 'au-files', type: 'checkbox' }) as HTMLInputElement;
     const whoList = h('datalist', { id: 'au-who-list' });
     const srvList = h('datalist', { id: 'au-srv-list' });
     const list = h('div');
@@ -83,6 +86,7 @@ export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
       if (srv.value.trim()) q.set('serveur', srv.value.trim());
       if (when.value) q.set('depuis', dayBefore(Number(when.value)));
       if (keys.checked) q.set('frappe', 'true');
+      if (copied.checked) q.set('fichiers', 'true');
       const { sessions } = await call<{ sessions: AuditRow[] }>(`/audit/sessions?${q}`);
       const searching = !!text.value.trim();
       // Suggestions des filtres : comptes et serveurs déjà vus.
@@ -100,7 +104,8 @@ export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
           h('td', {}, live ? h('span', { class: 'chip ok' }, t('ongoing', 'en cours')) : duration(s)),
           full ? h('td', {}, s.compte) : null,
           h('td', {}, h('strong', {}, s.serveur), s.type !== 'shell' ? h('span', { class: 'muted small' }, ` · ${s.type}${s.detail && s.type === 'exec' ? ` ${s.detail}` : ''}`) : null),
-          h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null, s.frappe ? h('span', { class: 'chip keys', title: t('Keystrokes recorded', 'Frappe enregistrée') }, t('keystrokes', 'frappe')) : null),
+          h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null, s.frappe ? h('span', { class: 'chip keys', title: t('Keystrokes recorded', 'Frappe enregistrée') }, t('keystrokes', 'frappe')) : null,
+            s.fichiers ? h('span', { class: 'chip keys', title: t('Files copied through the clipboard (name, size and SHA-256 in the log)', 'Fichiers copiés par le presse-papiers (nom, taille et SHA-256 au journal)') }, t(`${s.fichiers} file(s)`, `${s.fichiers} fichier(s)`)) : null),
           searching ? h('td', { class: 'hit' }, s.trouve ? h('button', { class: 'hit-btn', title: t('Replay from this moment', 'Relire à ce moment'), onclick: () => replay(s.trouve!.t) }, h('span', { class: 'num' }, clock(s.trouve.t)), ' ', h('code', {}, s.trouve.extrait)) : h('span', { class: 'muted' }, '—')) : null,
           h('td', { class: 'acts' }, s.enregistree && (s.relisible_rdp || s.relisible !== false)
             ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, t('▶ Replay', '▶ Relire'))
@@ -117,11 +122,12 @@ export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
     let timer = 0;
     const later = () => { clearTimeout(timer); timer = window.setTimeout(() => load().catch(fail), 350); };
     for (const x of [text, who, srv]) x.addEventListener('input', later);
-    for (const x of [when, keys]) x.addEventListener('change', () => load().catch(fail));
+    for (const x of [when, keys, copied]) x.addEventListener('change', () => load().catch(fail));
     await load();
     return h('div', { class: 'admin-section' },
       full ? null : h('div', { class: 'banner info' }, t('The Gate lets you replay your own sessions.', 'La Gate vous permet de relire vos propres sessions.')),
-      h('div', { class: 'audit-filters' }, text, who, srv, when, h('label', { class: 'check-row' }, keys, h('span', {}, t('With keystrokes', 'Avec frappe'))), whoList, srvList),
+      h('div', { class: 'audit-filters' }, text, who, srv, when, h('label', { class: 'check-row' }, keys, h('span', {}, t('With keystrokes', 'Avec frappe'))),
+        h('label', { class: 'check-row' }, copied, h('span', {}, t('With file copies', 'Avec copie de fichiers'))), whoList, srvList),
       list, note);
   };
 

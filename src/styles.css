@@ -435,6 +435,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 .screen-canvas:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
 .screen-status { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; white-space: pre-line; color: var(--muted); background: rgb(11 11 13 / .85); cursor: pointer; }
 .screen-status.error { color: #ffb4b4; }
+.screen-progress { position: absolute; right: 12px; bottom: 12px; max-width: min(420px, calc(100% - 24px)); padding: 6px 10px; border-radius: 6px; background: rgb(11 11 13 / .85); color: var(--text); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 .badge-vnc { background: #3d2e1c; color: #f5be85; }
 
 /* Mise à jour disponible */

@@ -26,7 +26,9 @@ export type RdpEvent =
   | { t: number; k: 'unicode'; u: number; r: boolean }
   | { t: number; k: 'clic'; x: number; y: number; b: 'g' | 'd' | 'm' }
   | { t: number; k: 'souris'; x: number; y: number }
-  | { t: number; k: 'presse-papiers'; sens: 'vers-serveur' | 'vers-poste'; texte: string | null; longueur?: number; masque?: boolean };
+  | { t: number; k: 'presse-papiers'; sens: 'vers-serveur' | 'vers-poste'; texte: string | null; longueur?: number; masque?: boolean }
+  // Fichier copié par le presse-papiers (Portunia Gate 0.28 et suivantes).
+  | { t: number; k: 'fichier'; sens: 'vers-serveur' | 'vers-poste'; nom: string; taille: number; sha256: string; copie?: boolean; incomplet?: boolean };
 
 /** Messages du moteur RDP en relecture. */
 export type ReplayMessage =
@@ -71,6 +73,7 @@ export class RdpPlayer {
   private layout: LayoutChoice = 'auto';
   private readonly clicks: RdpEvent[];
   private readonly clips: Extract<RdpEvent, { k: 'presse-papiers' }>[];
+  private readonly files: Extract<RdpEvent, { k: 'fichier' }>[];
   private readonly moves: Extract<RdpEvent, { k: 'souris' | 'clic' }>[];
   private readonly withInput: boolean;
   private engine: ReplayEngine | null = null;
@@ -121,6 +124,7 @@ export class RdpPlayer {
     this.decodeKeys();
     this.clicks = this.events.filter((e) => e.k === 'clic');
     this.clips = this.events.filter((e): e is Extract<RdpEvent, { k: 'presse-papiers' }> => e.k === 'presse-papiers');
+    this.files = this.events.filter((e): e is Extract<RdpEvent, { k: 'fichier' }> => e.k === 'fichier');
     this.moves = this.events.filter((e): e is Extract<RdpEvent, { k: 'souris' | 'clic' }> => e.k === 'souris' || e.k === 'clic');
     this.build();
     this.resizer = new ResizeObserver(() => this.fit());
@@ -219,6 +223,7 @@ export class RdpPlayer {
     for (const l of this.lines) this.track.append(h('div', { class: `ap-mk ${l.level}`, style: `left:${pct(l.t)}%`, title: `${fmt(l.t)}  ${l.text || l.keys.map((k) => k.chip).join(' ')}` }));
     for (const c of this.clicks) this.track.append(h('div', { class: 'ap-mk rp-clic', style: `left:${pct(c.t)}%`, title: `${fmt(c.t)}  ${t('click', 'clic')}` }));
     for (const c of this.clips) this.track.append(h('div', { class: 'ap-mk rp-clip', style: `left:${pct(c.t)}%`, title: `${fmt(c.t)}  ${this.clipLabel(c)}` }));
+    for (const f of this.files) this.track.append(h('div', { class: 'ap-mk rp-clip', style: `left:${pct(f.t)}%`, title: `${fmt(f.t)}  ${this.fileLabel(f)}` }));
     this.track.append(this.knob);
     this.track.setAttribute('aria-valuemax', String(Math.round(this.duration)));
     const fromPointer = (e: PointerEvent) => {
@@ -297,6 +302,12 @@ export class RdpPlayer {
     return t(`${where} · ${c.longueur ?? 0} characters (masked)`, `${where} · ${c.longueur ?? 0} caractères (masqué)`);
   }
 
+  private fileLabel(f: Extract<RdpEvent, { k: 'fichier' }>): string {
+    const where = f.sens === 'vers-serveur' ? t('File sent to the server', 'Fichier envoyé au serveur') : t('File taken from the server', 'Fichier récupéré du serveur');
+    const size = f.taille >= 1048576 ? `${(f.taille / 1048576).toFixed(1)} Mo` : `${Math.max(1, Math.round(f.taille / 1024))} Ko`;
+    return `${where} : ${f.nom} · ${size}${f.incomplet ? t(' (incomplete)', ' (incomplet)') : ''} · SHA-256 ${f.sha256.slice(0, 16)}…${f.copie ? t(' · copy kept', ' · copie gardée') : ''}`;
+  }
+
   private info(): HTMLElement {
     const r = this.rec;
     const s = r.session;
@@ -313,6 +324,7 @@ export class RdpPlayer {
         ...row(t('Keystrokes', 'Frappe'), s.frappe ? t('recorded', 'enregistrée') : t('not recorded', 'non enregistrée')),
         ...row(t('Clicks', 'Clics'), String(this.clicks.length)),
         ...row(t('Copy-pastes', 'Copier-coller'), r.revele ? t(`${this.clips.length} (revealed)`, `${this.clips.length} (révélés)`) : String(this.clips.length)),
+        ...(this.files.length ? row(t('Files copied', 'Fichiers copiés'), String(this.files.length)) : []),
         ...row(t('Size', 'Taille'), `${Math.max(1, Math.round(s.octets / 1024 / 1024))} Mo`),
         ...row(t('Fingerprint', 'Empreinte'), h('code', {}, `SHA-256 ${r.empreinte}`)),
         ...row('Signature', h('span', { class: r.signature === 'alteree' ? 'ap-bad' : r.signature === 'verifiee' ? 'ap-ok' : '' }, sig))),
@@ -343,6 +355,7 @@ export class RdpPlayer {
     const items: Item[] = [
       ...this.lines.map((l) => ({ t: l.t, level: l.level, nodes: this.lineNodes(l, Infinity, 'ap-key sm') })),
       ...this.clips.map((c) => ({ t: c.t, level: 'clip', nodes: [document.createTextNode(this.clipLabel(c))] })),
+      ...this.files.map((f) => ({ t: f.t, level: 'clip', nodes: [document.createTextNode(this.fileLabel(f))] })),
     ].sort((a, b) => a.t - b.t);
     this.list.replaceChildren();
     items.forEach((it, i) => {
@@ -469,6 +482,7 @@ export class RdpPlayer {
       ...this.lines.map((l): [number, string] => [l.t, lineText(l)]),
       ...this.clicks.map((c): [number, string] => [c.t, t(`(click ${c.k === 'clic' ? `${c.x},${c.y}` : ''})`, `(clic ${c.k === 'clic' ? `${c.x},${c.y}` : ''})`)]),
       ...this.clips.map((c): [number, string] => [c.t, `(${this.clipLabel(c)})`]),
+      ...this.files.map((f): [number, string] => [f.t, `(${this.fileLabel(f)})`]),
     ].sort((a, b) => a[0] - b[0]);
     return [...head, ...rows.map(([at, text]) => `[${fmt(at)}] ${text}`), ''].join('\n');
   }

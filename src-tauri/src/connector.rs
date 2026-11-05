@@ -207,6 +207,15 @@ pub enum ScreenEvent {
     Bell,
     /// Le presse-papiers distant a changé.
     Clipboard { text: String },
+    /// Bureau à distance, copie de fichiers : possible dans la session.
+    Files { allowed: bool },
+    /// Le presse-papiers du serveur contient (ou plus) des fichiers.
+    RemoteFiles { available: bool },
+    FilesOffered { count: usize },
+    FileSent { name: String },
+    FileProgress { name: String, done: u64, total: u64 },
+    FilesSaved { dir: String, count: usize },
+    FileError { code: String, name: Option<String> },
 }
 
 /// Clavier, souris et presse-papiers envoyés à un écran distant.
@@ -225,6 +234,10 @@ pub enum InputEvent {
     /// L'onglet a changé de taille (pixels) : le bureau distant peut s'adapter.
     Resize { width: u16, height: u16 },
     Clipboard { text: String },
+    /// Bureau à distance : fichiers de ce poste mis au presse-papiers de la session.
+    SendFiles { paths: Vec<String> },
+    /// Bureau à distance : fichiers copiés sur le serveur, enregistrés dans ce dossier.
+    FetchFiles { dir: String },
 }
 
 /// Connexion terminal ouverte, pilotée par l'interface.

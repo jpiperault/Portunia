@@ -665,7 +665,9 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     },
 
     regles: async () => {
-      const [{ regles }, { groupes }, { cibles }] = await Promise.all([call<{ regles: any[] }>('GET', '/admin/regles'), call<{ groupes: any[] }>('GET', '/admin/groupes'), call<{ cibles: any[] }>('GET', '/admin/cibles')]);
+      const [{ regles }, { groupes }, { cibles }, reglages] = await Promise.all([call<{ regles: any[] }>('GET', '/admin/regles'), call<{ groupes: any[] }>('GET', '/admin/groupes'), call<{ cibles: any[] }>('GET', '/admin/cibles'), call<any>('GET', '/admin/reglages')]);
+      // Gate 0.28 et suivantes : copie de fichiers en Bureau à distance.
+      const hasFiles = 'copies_fichiers_mo' in reglages;
       const ruleDialog = (r?: any) => {
         const nom = input({ id: 'r-nom', value: r?.nom ?? '' });
         const groupe = select('r-groupe', groupes.map((g) => [g.nom, g.nom] as [string, string]), r?.groupe ?? groupes[0]?.nom ?? '');
@@ -679,6 +681,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         const sftp = checkbox('r-sftp', t('File transfers (SFTP, scp)', 'Transferts de fichiers (SFTP, scp)'), r?.sftp ?? false);
         const tunnels = checkbox('r-tunnels', t('Tunnels (port forwarding)', 'Tunnels (redirection de ports)'), r?.tunnels ?? false);
         const keys = checkbox('r-frappe', t('Also record keystrokes (captures typed passwords)', 'Enregistrer aussi la frappe (capte les mots de passe tapés)'), r?.frappe ?? false);
+        const files = checkbox('r-fichiers', t('Remote Desktop: file copy through the clipboard (logged with name, size and SHA-256)', 'Bureau à distance : copie de fichiers par le presse-papiers (tracée avec nom, taille et SHA-256)'), r?.fichiers ?? false);
         const expire = input({ id: 'r-expire', type: 'date', lang: 'fr', value: r?.expire ? String(r.expire).slice(0, 10) : '' });
         if (!groupes.length) return host.toast(t('First create a group (Groups tab)', 'Créez d\'abord un groupe (onglet Groupes)'), 'error');
         formDialog(r ? t(`Edit rule ${r.nom}`, `Modifier la règle ${r.nom}`) : t('New rule', 'Nouvelle règle'), [
@@ -686,12 +689,13 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           h('div', { class: 'fld' }, h('span', {}, t('Servers', 'Serveurs')), servers.el),
           h('div', { class: 'fld' }, h('span', {}, t('Days', 'Jours')), h('div', { class: 'days' }, ...days.map((d) => d.el))),
           h('div', { class: 'row2' }, field(t('From (hour)', 'De (heure)'), from), field(t('To (hour)', 'À (heure)'), to)),
-          sftp.row, tunnels.row, keys.row,
+          sftp.row, tunnels.row, keys.row, ...(hasFiles ? [files.row] : []),
           field(t('Expires on', 'Expire le'), expire, 'vide = jamais'),
         ], r ? t('Save', 'Enregistrer') : t('Create', 'Créer'), async () => {
           const mask = days.reduce((m, d, i) => m | (d.box.checked ? 1 << i : 0), 0);
           const payload = {
             nom: nom.value.trim(), groupe: groupe.value, cibles: servers.values(), sftp: sftp.box.checked, tunnels: tunnels.box.checked, frappe: keys.box.checked,
+            ...(hasFiles ? { fichiers: files.box.checked } : {}),
             jours: mask, heure_debut: from.value === '' ? null : Number(from.value), heure_fin: to.value === '' ? null : Number(to.value), expire: expire.value || null,
           };
           await (r ? call('PUT', `/admin/regles/${r.id}`, payload) : call('POST', '/admin/regles', payload));
@@ -704,7 +708,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const stateChip = (s: string) => h('span', { class: `chip ${s === 'active' ? 'ok' : s === 'expiree' ? 'off' : 'warn'}` }, s === 'active' ? 'active' : s === 'expiree' ? t('expired', 'expirée') : 'hors plage');
       const rows = regles.map((r) => h('tr', {},
         h('td', {}, h('strong', {}, r.nom)), h('td', {}, r.groupe), h('td', {}, r.cibles.join(', ')), h('td', {}, when(r)),
-        h('td', {}, [r.sftp && 'SFTP', r.tunnels && 'tunnels', r.frappe && t('keystrokes', 'frappe')].filter(Boolean).join(', ') || '—'),
+        h('td', {}, [r.sftp && 'SFTP', r.tunnels && 'tunnels', r.frappe && t('keystrokes', 'frappe'), r.fichiers && t('RDP files', 'fichiers RDP')].filter(Boolean).join(', ') || '—'),
         h('td', {}, stateChip(r.etat), r.expire ? h('span', { class: 'muted small' }, t(` until ${new Date(r.expire).toLocaleDateString(LOCALE)}`, ` jusqu'au ${new Date(r.expire).toLocaleDateString(LOCALE)}`)) : null),
         actions(small(t('Edit', 'Modifier'), () => ruleDialog(r)), small(t('Delete', 'Supprimer'), async () => {
           if (!confirm(t(`Delete rule ${r.nom}?`, `Supprimer la règle ${r.nom} ?`))) return;
@@ -1202,12 +1206,15 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const sensitive = h('textarea', { id: 's-sensitive', class: 'input', rows: 4, spellcheck: 'false' }, (r.commandes_sensibles ?? []).join('\n')) as HTMLTextAreaElement;
       // Langue de la Gate (Portunia Gate 0.9 et suivants) : menu SSH, bannière par défaut, journaux.
       const langue = r.langue === undefined ? null : select('s-langue', [['', t('System language', 'Langue du système')], ['en', 'English'], ['fr', 'Français']], r.langue);
+      // Gate 0.28 et suivantes : copies des fichiers copiés en Bureau à distance, gardées par session.
+      const copies = r.copies_fichiers_mo === undefined ? null : input({ id: 's-copies', type: 'number', min: 0, max: 10240, value: String(r.copies_fichiers_mo) });
       const saveBtn = h('button', { class: 'btn primary', onclick: async () => {
         try {
           await call('PUT', '/admin/reglages', {
             nom: nom.value, banniere: banner.value, politique: policy.value, duree_session_h: Number(hours.value), memo_mot_de_passe: memo.box.checked,
             relecture_propres: own.box.checked, commandes_sensibles: sensitive.value.split('\n').map((x) => x.trim()).filter(Boolean),
             ...(langue ? { langue: langue.value } : {}),
+            ...(copies ? { copies_fichiers_mo: Number(copies.value) || 0 } : {}),
           });
           host.toast(t('Settings saved', 'Réglages enregistrés'));
         } catch (e) { fail(e); }
@@ -1222,6 +1229,9 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         h('h3', {}, t('Session replay', 'Relecture des sessions')),
         own.row,
         field(t('Sensitive commands', 'Commandes sensibles'), sensitive, t('one per line; marked in red on the player\'s timeline', 'une par ligne ; repérées en rouge sur la barre de temps du lecteur')),
+        copies ? h('h3', {}, t('Remote Desktop file copy', 'Copie de fichiers en Bureau à distance')) : null,
+        copies ? field(t('Copies kept per session (MB)', 'Copies gardées par session (Mo)'), copies, t('0: none, only name, size and SHA-256 are logged; otherwise the files copied, up to this size, next to the recording', '0 : aucune, seuls nom, taille et SHA-256 sont tracés ; sinon les fichiers copiés, jusqu\'à cette taille, à côté de l\'enregistrement')) : null,
+        copies ? h('p', { class: 'muted small' }, t('File copy itself is allowed per rule (Rules › Remote Desktop file copy).', 'La copie elle-même se permet règle par règle (Règles › copie de fichiers).')) : null,
         h('div', {}, saveBtn));
     },
   };

@@ -233,6 +233,8 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     // où le mot de passe serait envoyé au serveur lui-même.
     settings["nlaOnly"] = json!(!ctx.bool("allowNoNla"));
     settings["quality"] = json!(ctx.str("quality").unwrap_or_default());
+    // Copie de fichiers par le presse-papiers ; une Gate dit si la règle la permet.
+    settings["files"] = json!(ctx.values.get("files").and_then(Value::as_bool).unwrap_or(true));
     // Gate, mode enregistré : passage RDCleanPath avec un jeton à usage unique.
     if let (Some(url), Some(token)) = (ctx.str("rdcleanpathUrl"), ctx.raw("rdcleanpathToken")) {
         settings["rdcleanpath"] = json!({ "url": url, "token": token });
@@ -351,6 +353,8 @@ impl TerminalConnection for RdpSession {
             InputEvent::Resize { width, height } => {
                 self.send(json!({ "type": "resize", "width": width, "height": height }))
             }
+            InputEvent::SendFiles { paths } => self.send(json!({ "type": "sendFiles", "paths": paths })),
+            InputEvent::FetchFiles { dir } => self.send(json!({ "type": "fetchFiles", "dir": dir })),
             // Le presse-papiers RDP est synchronisé directement par le moteur (presse-papiers Windows).
             InputEvent::Clipboard { .. } => Ok(()),
         }

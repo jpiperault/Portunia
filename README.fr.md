@@ -45,7 +45,7 @@ Pour produire l'installateur localement : définir `TAURI_SIGNING_PRIVATE_KEY` (
 | Protocole | Affichage | Remarques |
 |---|---|---|
 | SSH | Onglet terminal | Clé privée, mot de passe ou agent (Pageant / OpenSSH). Serveur de rebond (comme ProxyJump) : une session SSH enregistrée ou `utilisateur@hôte:port`, jusqu'à 3 rebonds enchaînés (`bastion1,bastion2`), repris de ~/.ssh/config à l'import. Les clés des serveurs sont mémorisées à la première connexion, et une clé qui change bloque la connexion. SSH-2 uniquement, compatible OpenSSH 10. Option « Compatibilité anciens équipements » pour les serveurs qui n'acceptent que des algorithmes anciens (diffie-hellman-group1/14-sha1, aes-cbc, 3des-cbc, hmac-sha1, ssh-dss) : ils ne sont utilisés qu'en dernier recours, avec un avertissement dans le terminal. |
-| Bureau à distance (RDP) | Onglet écran (IronRDP) ou client Windows | Dans un onglet avec le moteur IronRDP (authentification NLA, compte de domaine, presse-papiers partagé, écran adapté automatiquement à la taille de l'onglet), ou dans le client Bureau à distance de Windows au choix. |
+| Bureau à distance (RDP) | Onglet écran (IronRDP) ou client Windows | Dans un onglet avec le moteur IronRDP (authentification NLA, compte de domaine, presse-papiers partagé, copie de fichiers par boutons ou glisser-déposer, écran adapté automatiquement à la taille de l'onglet), ou dans le client Bureau à distance de Windows au choix. |
 | Interface web | Fenêtre dédiée | La fenêtre web n'a aucun accès à l'application. |
 | Telnet | Onglet terminal | Non chiffré : à réserver au réseau local. |
 | VNC | Onglet écran | Clavier, souris, molette, presse-papiers dans les deux sens, Ctrl+Alt+Suppr, ajustement à la fenêtre. Encodages Tight, ZRLE, CopyRect, Raw. |

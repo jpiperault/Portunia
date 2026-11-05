@@ -3,6 +3,7 @@ import { handleConfirm } from './confirm';
 import { api, ConnectResponse, errorText, InputEvent, ScreenEvent, TermEvent } from './api';
 import { h } from './dom';
 import type { TermState } from './terminal';
+import { open } from '@tauri-apps/plugin-dialog';
 import { t } from './i18n';
 
 /** Ouvre la connexion à la taille demandée (session enregistrée ou connexion rapide). */
@@ -51,6 +52,9 @@ export class ScreenView {
   private readonly canvas = h('canvas', { class: 'screen-canvas', tabindex: '0', 'aria-label': t('Remote screen', 'Écran distant') });
   private readonly ctx = this.canvas.getContext('2d', { alpha: false })!;
   private readonly status = h('div', { class: 'screen-status' });
+  /** Copie de fichiers en cours (Bureau à distance). */
+  private readonly progress = h('div', { class: 'screen-progress', hidden: true });
+  private progressTimer = 0;
   private connectionId: string | null = null;
   private opener: ScreenOpener | null = null;
   private label = '';
@@ -65,13 +69,20 @@ export class ScreenView {
   fit = true;
   /** La session s'est ouverte hors de Portunia (message à afficher). */
   onDetached?: (message: string) => void;
+  /** Bureau à distance : copie de fichiers possible dans la session (serveur et Gate d'accord). */
+  filesAllowed = false;
+  /** Le presse-papiers du serveur contient des fichiers à récupérer. */
+  remoteFiles = false;
+  /** Les deux valeurs ci-dessus ont changé (barre d'outils). */
+  onFiles?: () => void;
+  notify?: (message: string, kind?: 'info' | 'error') => void;
   private observer: ResizeObserver;
   private resizeTimer = 0;
   private lastSize = { width: 0, height: 0 };
 
   constructor(readonly container: HTMLElement, private readonly onState: (s: TermState, reason?: string) => void) {
     container.classList.add('screen-view');
-    container.append(this.canvas, this.status);
+    container.append(this.canvas, this.status, this.progress);
     this.applyFit();
     this.bindInput();
     // L'onglet change de taille : on demande au bureau distant de s'adapter
@@ -143,6 +154,7 @@ export class ScreenView {
     else if (e.event === 'closed') {
       this.connectionId = null;
       if (this.disposed) return;
+      this.setFiles(false, false);
       this.setStatus(e.data ? t(`Connection lost: ${e.data}\nClick here to reconnect.`, `Connexion perdue : ${e.data}\nCliquez ici pour vous reconnecter.`) : t('Session ended. Click here to reconnect.', 'Session terminée. Cliquez ici pour vous reconnecter.'), !!e.data);
       this.onState('closed', e.data ?? undefined);
     }
@@ -184,7 +196,75 @@ export class ScreenView {
         break;
       case 'bell':
         break;
+      case 'files':
+        this.setFiles(ev.allowed, this.remoteFiles && ev.allowed);
+        break;
+      case 'remoteFiles':
+        this.setFiles(this.filesAllowed, ev.available);
+        break;
+      case 'filesOffered':
+        this.notify?.(t(`${ev.count} file(s) ready: paste them on the server (Ctrl+V in the Explorer).`, `${ev.count} fichier(s) prêt(s) : collez-les sur le serveur (Ctrl+V dans l'Explorateur).`));
+        break;
+      case 'fileSent':
+        this.showProgress(t(`${ev.name} sent`, `${ev.name} envoyé`), true);
+        break;
+      case 'fileProgress':
+        this.showProgress(`${ev.name} · ${ev.total ? Math.floor((ev.done / ev.total) * 100) : 100} %`, ev.done >= ev.total);
+        break;
+      case 'filesSaved':
+        this.showProgress('', true);
+        this.notify?.(t(`${ev.count} file(s) saved in ${ev.dir}`, `${ev.count} fichier(s) enregistré(s) dans ${ev.dir}`));
+        break;
+      case 'fileError': {
+        const name = ev.name ?? '';
+        const messages: Record<string, string> = {
+          not_allowed: t('File copy is not allowed on this server.', 'La copie de fichiers n\'est pas permise sur ce serveur.'),
+          nothing_to_send: t('No file to send (folders are not sent).', 'Aucun fichier à envoyer (les dossiers ne sont pas envoyés).'),
+          no_remote_files: t('The server\'s clipboard holds no files: copy them on the server first (Ctrl+C in the Explorer).', 'Le presse-papiers du serveur ne contient pas de fichiers : copiez-les d\'abord sur le serveur (Ctrl+C dans l\'Explorateur).'),
+          busy: t('Files are already being retrieved.', 'Une récupération de fichiers est déjà en cours.'),
+          name_refused: t(`${name}: name refused`, `${name} : nom refusé`),
+          write: t(`Cannot write ${name}`, `Écriture impossible : ${name}`),
+          refused: t(`${name}: refused by the server`, `${name} : refusé par le serveur`),
+          size: t(`${name}: unreadable size`, `${name} : taille illisible`),
+          no_list: t('The server did not give the list of files.', 'Le serveur n\'a pas donné la liste des fichiers.'),
+        };
+        this.notify?.(messages[ev.code] ?? ev.code, 'error');
+        break;
+      }
     }
+  }
+
+  private setFiles(allowed: boolean, remote: boolean) {
+    if (allowed === this.filesAllowed && remote === this.remoteFiles) return;
+    this.filesAllowed = allowed;
+    this.remoteFiles = remote;
+    this.onFiles?.();
+  }
+
+  /** Ligne d'avancement en bas à droite ; `done` : s'efface après quelques secondes. */
+  private showProgress(text: string, done: boolean) {
+    window.clearTimeout(this.progressTimer);
+    this.progress.textContent = text;
+    this.progress.hidden = !text;
+    if (done) this.progressTimer = window.setTimeout(() => { this.progress.hidden = true; }, 3000);
+  }
+
+  /** Fichiers de ce poste mis au presse-papiers de la session (bouton ou glisser-déposer). */
+  sendFiles(paths: string[]) {
+    if (paths.length) this.send({ type: 'sendFiles', paths });
+    this.focus();
+  }
+
+  async chooseFiles() {
+    const chosen = await open({ multiple: true, title: t('Files to send to the server', 'Fichiers à envoyer au serveur') });
+    if (chosen) this.sendFiles(Array.isArray(chosen) ? chosen : [chosen]);
+  }
+
+  /** Enregistre dans un dossier de ce poste les fichiers copiés sur le serveur. */
+  async fetchFiles() {
+    const dir = await open({ directory: true, title: t('Folder for the server\'s files', 'Dossier pour les fichiers du serveur') });
+    if (typeof dir === 'string') this.send({ type: 'fetchFiles', dir });
+    this.focus();
   }
 
   private send(event: InputEvent) {

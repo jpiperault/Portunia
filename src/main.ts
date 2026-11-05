@@ -747,6 +747,8 @@ function renderToolbar() {
       action: () => (tab.recording ? stopRecording(tab) : startRecording(tab)), cls: tab.recording ? 'rec' : '', fold: { label: 5 },
     }] : []),
     ...(tab.screen ? [{ id: 'cad', icon: 'power', label: tr('Ctrl+Alt+Del', 'Ctrl+Alt+Suppr'), title: tr('Send Ctrl+Alt+Del to the remote screen', 'Envoyer Ctrl+Alt+Suppr à l’écran distant'), action: () => tab.screen?.sendCtrlAltDel(), fold: { label: 4, menu: 7 } }] : []),
+    ...(tab.screen?.filesAllowed ? [{ id: 'send-files', icon: 'upload', label: tr('Send files', 'Envoyer des fichiers'), title: tr('Put files of this PC on the server\'s clipboard, then paste them there (Ctrl+V). You can also drop them on the screen.', 'Mettre des fichiers de ce poste au presse-papiers du serveur, puis les y coller (Ctrl+V). Vous pouvez aussi les déposer sur l’écran.'), action: () => tab.screen?.chooseFiles(), fold: { label: 5, menu: 7 } }] : []),
+    ...(tab.screen?.remoteFiles ? [{ id: 'fetch-files', icon: 'download', label: tr('Get the files', 'Récupérer les fichiers'), title: tr('Save on this PC the files copied on the server (Ctrl+C)', 'Enregistrer sur ce poste les fichiers copiés sur le serveur (Ctrl+C)'), action: () => tab.screen?.fetchFiles(), cls: 'primary', fold: { label: 5, menu: 7 } }] : []),
     ...(tab.screen && session.protocol !== 'rdp' ? [{ id: 'clipboard', icon: 'copy', label: tr('Clipboard', 'Presse-papiers'), title: tr('Copy the Windows clipboard to the remote screen', 'Copier le presse-papiers de Windows vers l’écran distant'), action: () => tab.screen?.sendClipboard(), fold: { label: 3, menu: 8 } }] : []),
     ...(tab.screen ? [{ id: 'fit', icon: 'move', label: tab.screen.fit ? tr('Real size', 'Taille réelle') : tr('Fit to window', 'Ajuster à la fenêtre'), title: tr('Fit the image to the tab or show it at real size', 'Adapter l’image à l’onglet ou afficher en taille réelle'), action: () => { tab.screen?.toggleFit(); renderToolbar(); }, fold: { label: 4, menu: 9 } }] : []),
     { id: 'split', icon: 'split', label: tr('Split screen', 'Écran partagé'), title: tr('Show several sessions side by side', 'Afficher plusieurs sessions côte à côte'), action: (e: MouseEvent) => splitMenu(e), cls: isSplit() ? 'on' : '', fold: { label: 4, menu: 10 } },
@@ -1353,6 +1355,8 @@ async function openSession(session: Session, quick?: QuickTarget, custom?: Custo
   if (proto.view === 'screen') {
     tab.screen = new (await import('./screen')).ScreenView(termEl, onState);
     tab.screen.onDetached = (message) => { toast(message); closeTab(tab.id); };
+    tab.screen.onFiles = () => { if (state.active === tab.id) renderToolbar(); };
+    tab.screen.notify = toast;
     activate(tab.id);
     await tab.screen.connectWith(opener, session.name);
     return;
@@ -1532,6 +1536,9 @@ function overFiles(pos: { x: number; y: number }) {
 }
 getCurrentWebview().onDragDropEvent(({ payload }) => {
   const files = activeTab()?.files;
+  // Bureau à distance : fichiers déposés sur l'écran = mis au presse-papiers de la session.
+  const screen = activeTab()?.screen;
+  if (!files && screen?.filesAllowed && payload.type === 'drop') return screen.sendFiles(payload.paths);
   if (!files) return;
   if (payload.type === 'leave') return files.setDropping(false);
   // Deux volets : seul le volet du serveur reçoit les fichiers déposés.

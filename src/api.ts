@@ -134,13 +134,23 @@ export type ScreenEvent =
   | { type: 'jpeg'; x: number; y: number; width: number; height: number; data: string }
   | { type: 'copy'; x: number; y: number; width: number; height: number; srcX: number; srcY: number }
   | { type: 'bell' }
-  | { type: 'clipboard'; text: string };
+  | { type: 'clipboard'; text: string }
+  // Bureau à distance : copie de fichiers par le presse-papiers.
+  | { type: 'files'; allowed: boolean }
+  | { type: 'remoteFiles'; available: boolean }
+  | { type: 'filesOffered'; count: number }
+  | { type: 'fileSent'; name: string }
+  | { type: 'fileProgress'; name: string; done: number; total: number }
+  | { type: 'filesSaved'; dir: string; count: number }
+  | { type: 'fileError'; code: string; name: string | null };
 
 export type InputEvent =
   | { type: 'key'; keysym: number; down: boolean; code?: string }
   | { type: 'pointer'; x: number; y: number; buttons: number }
   | { type: 'clipboard'; text: string }
-  | { type: 'resize'; width: number; height: number };
+  | { type: 'resize'; width: number; height: number }
+  | { type: 'sendFiles'; paths: string[] }
+  | { type: 'fetchFiles'; dir: string };
 
 export interface ConnectResponse {
   connectionId: string | null;

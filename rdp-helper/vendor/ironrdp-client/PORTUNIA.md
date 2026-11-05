@@ -9,3 +9,7 @@ réglage « Qualité » des sessions. La version publiée annonce toujours les o
 
 Depuis Portunia 0.65 : `ironrdp-rdpsnd-native` sans ses options par défaut (`default-features = false`),
 donc sans le décodeur Opus, dont la compilation demande CMake. Le serveur envoie alors le son en PCM.
+
+Depuis Portunia 0.69 : `RdpClient::with_cliprdr_wrapper` (type `CliprdrWrapper`), qui enveloppe
+la fabrique du presse-papiers choisie ; `portunia-rdp` s'en sert pour la copie de fichiers
+(`src/files.rs`), le texte restant au presse-papiers de Windows.

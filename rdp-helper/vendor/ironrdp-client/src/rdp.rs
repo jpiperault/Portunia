@@ -92,7 +92,15 @@ pub struct RdpClient {
     output_event_sender: mpsc::Sender<RdpOutputEvent>,
     input_event_sender: mpsc::UnboundedSender<RdpInputEvent>,
     input_event_receiver: mpsc::UnboundedReceiver<RdpInputEvent>,
+    /// Portunia : enveloppe du presse-papiers (copie de fichiers).
+    #[cfg(feature = "clipboard")]
+    cliprdr_wrapper: Option<CliprdrWrapper>,
 }
+
+/// Portunia : reçoit la fabrique du presse-papiers choisie et en rend une autre qui l'enveloppe.
+#[cfg(feature = "clipboard")]
+pub type CliprdrWrapper =
+    Box<dyn FnOnce(Box<dyn CliprdrBackendFactory + Send>) -> Box<dyn CliprdrBackendFactory + Send> + Send>;
 
 impl RdpClient {
     pub fn new(config: Config, output_event_sender: mpsc::Sender<RdpOutputEvent>) -> Self {
@@ -102,7 +110,16 @@ impl RdpClient {
             output_event_sender,
             input_event_sender,
             input_event_receiver,
+            #[cfg(feature = "clipboard")]
+            cliprdr_wrapper: None,
         }
+    }
+
+    /// Portunia : enveloppe le presse-papiers (voir [`CliprdrWrapper`]).
+    #[cfg(feature = "clipboard")]
+    pub fn with_cliprdr_wrapper(mut self, wrapper: CliprdrWrapper) -> Self {
+        self.cliprdr_wrapper = Some(wrapper);
+        self
     }
 
     /// Return a clone of the input-event sender for injecting keyboard, mouse, and clipboard
@@ -125,7 +142,7 @@ impl RdpClient {
         let _win_clipboard;
 
         #[cfg(feature = "clipboard")]
-        let cliprdr_factory: Option<Box<dyn CliprdrBackendFactory + Send>>;
+        let mut cliprdr_factory: Option<Box<dyn CliprdrBackendFactory + Send>>;
 
         #[cfg(feature = "clipboard")]
         {
@@ -177,6 +194,11 @@ impl RdpClient {
                     }
                 }
             }
+        }
+
+        #[cfg(feature = "clipboard")]
+        if let (Some(wrap), Some(inner)) = (self.cliprdr_wrapper.take(), cliprdr_factory.take()) {
+            cliprdr_factory = Some(wrap(inner));
         }
 
         // Resolve the per-connection cliprdr factory reference once.  `Option<&dyn …>` is `Copy`,

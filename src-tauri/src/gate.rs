@@ -522,6 +522,8 @@ pub async fn gate_connect(
         values.insert("host".into(), t["hote"].clone());
         values.insert("port".into(), t["port"].clone());
         values.insert("client".into(), json!("tab"));
+        // Copie de fichiers : seulement si la règle de la Gate la permet (Gate 0.28 et suivantes).
+        values.insert("files".into(), json!(t["fichiers"].as_bool().unwrap_or(false)));
         values.insert("rdcleanpathUrl".into(), json!(format!("ws://127.0.0.1:{local}/api/v1/rdp")));
         values.insert("rdcleanpathToken".into(), json!(ticket));
         if vault {
@@ -537,6 +539,8 @@ pub async fn gate_connect(
         values.insert("host".into(), t["hote"].clone());
         values.insert("port".into(), t["port"].clone());
         values.insert("client".into(), json!("tab"));
+        // Copie de fichiers : seulement si la règle de la Gate la permet (Gate 0.28 et suivantes).
+        values.insert("files".into(), json!(t["fichiers"].as_bool().unwrap_or(false)));
         values.insert("jumpHost".into(), Value::Object(gate_values));
         values.extend(extra.into_iter().filter(|(k, _)| ["username", "password"].contains(&k.as_str())));
         return start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await;

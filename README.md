@@ -45,7 +45,7 @@ To build the installer locally: set `TAURI_SIGNING_PRIVATE_KEY` (path or content
 | Protocol | Display | Notes |
 |---|---|---|
 | SSH | Terminal tab | Private key, password or agent (Pageant / OpenSSH). Jump host (like ProxyJump): a saved SSH session or `user@host:port`, up to 3 chained jumps (`bastion1,bastion2`), taken from ~/.ssh/config on import. Server keys are remembered on first connection, and a changed key blocks the connection. SSH-2 only, compatible with OpenSSH 10. "Legacy equipment compatibility" option for servers that only accept old algorithms (diffie-hellman-group1/14-sha1, aes-cbc, 3des-cbc, hmac-sha1, ssh-dss): used only as a last resort, with a warning in the terminal. |
-| Remote Desktop (RDP) | Screen tab (IronRDP) or Windows client | In a tab with the IronRDP engine (NLA authentication, domain account, shared clipboard, screen automatically fitted to the tab), or in the Windows Remote Desktop client if you prefer. |
+| Remote Desktop (RDP) | Screen tab (IronRDP) or Windows client | In a tab with the IronRDP engine (NLA authentication, domain account, shared clipboard, file copy with buttons or drag-and-drop, screen automatically fitted to the tab), or in the Windows Remote Desktop client if you prefer. |
 | Web interface | Dedicated window | The web window has no access to the app. |
 | Telnet | Terminal tab | Unencrypted: keep it to the local network. |
 | VNC | Screen tab | Keyboard, mouse, wheel, clipboard both ways, Ctrl+Alt+Del, fit to window. Tight, ZRLE, CopyRect, Raw encodings. |

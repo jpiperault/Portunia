@@ -12,6 +12,7 @@
 //!
 //! Relecture (Gate) : 1re ligne { "replay": "fichier" }, voir `replay`.
 
+mod files;
 mod replay;
 mod scancodes;
 
@@ -67,6 +68,9 @@ struct Settings {
     #[serde(default, rename = "colorDepth")]
     color_depth: u32,
     /// Taille fixe du bureau : l'onglet ne la change pas en se redimensionnant.
+    /// Copie de fichiers par le presse-papiers (faux : jamais, par exemple si la Gate ne la permet pas).
+    #[serde(default = "yes")]
+    files: bool,
     #[serde(default, rename = "fixedSize")]
     fixed_size: bool,
 }
@@ -92,6 +96,10 @@ enum Input {
     Key { code: String, down: bool },
     Pointer { x: u16, y: u16, buttons: u8 },
     Resize { width: u16, height: u16 },
+    /// Fichiers de ce poste à mettre au presse-papiers de la session.
+    SendFiles { paths: Vec<String> },
+    /// Enregistre dans ce dossier les fichiers copiés sur le serveur.
+    FetchFiles { dir: String },
     Close,
     #[serde(other)]
     Other,
@@ -107,6 +115,23 @@ pub(crate) enum Output {
     Ready { duration: f64, frames: usize },
     /// Relecture : image à jour pour ce temps.
     Position { t: f64 },
+    /// Copie de fichiers possible dans cette session (négociée avec le serveur et la Gate).
+    Files { allowed: bool },
+    /// Le presse-papiers du serveur contient (ou plus) des fichiers.
+    RemoteFiles { available: bool },
+    /// Fichiers mis au presse-papiers de la session.
+    FilesOffered { count: usize },
+    /// Le serveur a lu un fichier offert en entier.
+    FileSent { name: String },
+    FileProgress { name: String, done: u64, total: u64 },
+    /// Récupération terminée.
+    FilesSaved { dir: String, count: usize },
+    /// `code` : not_allowed, nothing_to_send, no_remote_files, busy, name_refused, write, refused, size, no_list.
+    FileError { code: &'static str, name: Option<String> },
+}
+
+fn yes() -> bool {
+    true
 }
 
 pub(crate) fn emit(message: &Output) {
@@ -197,6 +222,10 @@ async fn run() -> Result<()> {
     let (out_tx, mut out_rx) = mpsc::channel(16);
     let client = RdpClient::new(config, out_tx);
     let input = client.input_sender();
+    // Copie de fichiers : le presse-papiers de Windows enveloppé (voir `files`).
+    let shared = files::shared(s.files, input.clone());
+    let wrapped = shared.clone();
+    let client = client.with_cliprdr_wrapper(Box::new(move |inner| Box::new(files::Factory { inner, files: wrapped })));
     // La boucle d'IronRDP n'est pas « Send » : elle tourne sur son propre fil.
     std::thread::spawn(move || {
         match tokio::runtime::Builder::new_current_thread().enable_all().build() {
@@ -276,6 +305,14 @@ async fn run() -> Result<()> {
                         last_buttons = buttons & 7;
                     }
                     out
+                }
+                Input::SendFiles { paths } => {
+                    shared.lock().unwrap_or_else(|e| e.into_inner()).offer(paths);
+                    continue;
+                }
+                Input::FetchFiles { dir } => {
+                    shared.lock().unwrap_or_else(|e| e.into_inner()).fetch(dir);
+                    continue;
                 }
                 Input::Close => {
                     let _ = keys.send(RdpInputEvent::Close);
