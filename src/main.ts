@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
 import { save } from '@tauri-apps/plugin-dialog';
 import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
 import { ProxmoxPanel, PROXMOX_EXTENSION } from './proxmox';
@@ -69,6 +69,8 @@ interface Tab {
   side?: SidePanel;
   /** Toutes les sessions en tableau (onglet « library »). */
   library?: SessionLibrary;
+  /** Supervision Proxmox (onglet « admin »). */
+  pveMonitor?: { dispose(): void };
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
   /** Relecture d'une session de Gate (onglet « replay »). */
@@ -332,11 +334,26 @@ const proxmoxPanel = new ProxmoxPanel($('proxmox'), {
     const connect = (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => connectProxmox(p.id, node, kind, vmid, cols, rows, onEvent);
     openSession(session, undefined, { connect, typing: false });
   },
+  openMonitor: (p, node) => openProxmoxMonitor(p, node),
   vncEnabled: () => extensionEnabled('vnc'),
   allowed: () => allows('proxmox'),
   filter: () => state.filter,
   clearFilter: () => { search.value = ''; state.filter = ''; renderTree(); },
 });
+
+/** Supervision d'un serveur Proxmox (ou d'un nœud) dans un onglet, relue tant qu'il est ouvert. */
+async function openProxmoxMonitor(p: Pve, node?: string) {
+  const title = tr(`Monitoring · ${node ?? p.name}`, `Supervision · ${node ?? p.name}`);
+  const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
+  if (existing) return activate(existing.id);
+  const { ProxmoxMonitor } = await import('./proxmon');
+  const monitor = new ProxmoxMonitor(p, node);
+  const view = h('div', { class: 'page-view' }, monitor.el);
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false, pveMonitor: monitor };
+  state.tabs.push(tab);
+  activate(tab.id);
+}
 
 /** Le bouton « Assistance à distance » de la barre latérale suit les deux extensions. */
 function showAssist() {
@@ -1101,6 +1118,7 @@ function closeTab(id: string) {
   tab.auditPlayer?.dispose();
   tab.netTools?.dispose();
   tab.multi?.dispose();
+  tab.pveMonitor?.dispose();
   tab.view.remove();
   const wasSplit = state.split.includes(id);
   state.split = state.split.filter((s) => s !== id);

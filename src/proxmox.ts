@@ -24,6 +24,8 @@ export interface ProxmoxHost {
   toast(message: string, kind?: 'info' | 'error'): void;
   /** Console VNC dans un onglet (machine virtuelle, conteneur, ou shell du nœud). */
   openConsole(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string): void;
+  /** Onglet de supervision du serveur, ou d'un seul de ses nœuds. */
+  openMonitor(p: Pve, node?: string): void;
   /** Console impossible sans l'extension VNC. */
   vncEnabled(): boolean;
   allowed(): boolean;
@@ -36,7 +38,7 @@ type Guest = PveResource & { type: 'qemu' | 'lxc'; vmid: number };
 const COLLAPSED_KEY = 'portunia.proxmox.replis';
 
 const pct = (v?: number) => `${Math.round((v ?? 0) * 100)} %`;
-function bytes(n?: number): string {
+export function bytes(n?: number): string {
   if (!n) return '0';
   const units = ['o', 'Ko', 'Mo', 'Go', 'To'];
   const unitsEn = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -46,7 +48,7 @@ function bytes(n?: number): string {
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${t(unitsEn[i], units[i])}`;
 }
 const date = (s?: number) => (s ? new Date(s * 1000).toLocaleString(LOCALE) : '');
-const guestLabel = (g: PveResource) => `${g.vmid} · ${g.name ?? ''}`;
+export const guestLabel = (g: PveResource) => `${g.vmid} · ${g.name ?? ''}`;
 const kindLabel = (g: PveResource) => (g.type === 'qemu' ? t('virtual machine', 'machine virtuelle') : t('container', 'conteneur'));
 
 // ---------- Barre latérale ----------
@@ -150,6 +152,7 @@ export class ProxmoxPanel {
   private serverMenu(p: Pve): (MenuItem | 'separator')[] {
     const nodes = this.nodes(p.id);
     return [
+      { label: t('Monitoring', 'Supervision'), icon: 'chart', action: () => this.host.openMonitor(p) },
       { label: t('Refresh', 'Actualiser'), icon: 'refresh', action: () => this.refresh(p.id) },
       { label: t('Tasks', 'Tâches'), icon: 'commands', action: () => openTasks(this, p) },
       { label: t('Storage', 'Stockages'), icon: 'drive', action: () => openStorage(this, p, nodes) },
@@ -197,6 +200,7 @@ export class ProxmoxPanel {
         h('span', { class: 'tree-item group-head gate-folder', title: online ? t(`CPU ${pct(node.cpu)} · memory ${bytes(node.mem)} / ${bytes(node.maxmem)}`, `Processeur ${pct(node.cpu)} · mémoire ${bytes(node.mem)} / ${bytes(node.maxmem)}`) : t('Node offline', 'Nœud hors ligne') },
           icon('server', 14), h('span', { class: 'grow ellipsis' }, node.node), h('span', { class: 'count' }, !online ? t('offline', 'hors ligne') : node.maxcpu ? pct(node.cpu) : '')));
       const nodeMenu = (): (MenuItem | 'separator')[] => [
+        { label: t('Monitoring', 'Supervision'), icon: 'chart', action: () => this.host.openMonitor(p, node.node) },
         { label: t('Node shell', 'Shell du nœud'), icon: 'terminal', action: () => this.console(p, node.node, 'node', null, `${node.node}`) },
         { label: t('Storage', 'Stockages'), icon: 'drive', action: () => openStorage(this, p, [node.node]) },
         { label: t('Tasks', 'Tâches'), icon: 'commands', action: () => openTasks(this, p, node.node) },
@@ -329,7 +333,7 @@ export class ProxmoxPanel {
 }
 
 /** Explication quand l'utilisateur ou le jeton ne voit aucune machine (vide si c'est juste un cluster sans machine). */
-async function rightsHint(id: string): Promise<string> {
+export async function rightsHint(id: string): Promise<string> {
   let perms: Record<string, Record<string, number>>;
   try {
     perms = await proxmox.api(id, 'GET', '/access/permissions');

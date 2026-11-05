@@ -972,3 +972,41 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .pve-actions .btn + .btn { margin-left: 4px; }
 .tbl tr.clickable { cursor: pointer; }
 .tbl tr.clickable:hover { background: var(--hover); }
+
+/* Supervision Proxmox */
+.pmon { max-width: 1300px; }
+.pmon h3 { margin: 4px 0 8px; font-size: 14px; }
+.pmon-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.pmon-tools { display: flex; gap: 8px; align-items: center; }
+.pmon-seg { display: flex; border: 1px solid var(--line-strong); border-radius: 6px; overflow: hidden; }
+.pmon-seg-btn { border: 0; background: var(--field); color: var(--text-2); padding: 6px 12px; cursor: pointer; font: inherit; font-size: 12px; }
+.pmon-seg-btn + .pmon-seg-btn { border-left: 1px solid var(--line-strong); }
+.pmon-seg-btn.on { background: var(--accent-soft); color: var(--text); }
+.pmon-note { margin: 0; padding: 10px 12px; border-left: 3px solid #d29922; background: var(--chip-bg); border-radius: 4px; line-height: 1.5; }
+.pmon-summary, .pmon-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.pmon-summary { padding: 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.pmon-node { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.pmon-node-head { display: flex; align-items: center; gap: 8px; margin: 0 !important; }
+.pmon-node-head .badge.off { color: var(--danger); }
+.pmon-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.pmon-chart { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pmon-chart-head { display: flex; justify-content: space-between; gap: 8px; }
+.pmon-chart-title { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pmon-plot { position: relative; height: 110px; border-bottom: 1px solid var(--line); cursor: crosshair; }
+.pmon-svg { width: 100%; height: 100%; display: block; }
+.pmon-svg polyline { fill: none; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.pmon-svg .pmon-s1 { stroke: var(--accent); } .pmon-svg .pmon-s2 { stroke: #d29922; } .pmon-svg .pmon-s3 { stroke: var(--ok); }
+.pmon-grid { stroke: var(--line); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-dasharray: 3 4; }
+.pmon-cursor { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.pmon-max { position: absolute; top: 0; left: 2px; font-size: 10px; pointer-events: none; }
+.pmon-axis { display: flex; justify-content: space-between; font-size: 10px; }
+.pmon-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; }
+.pmon-key { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pmon-key i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+.pmon-k1 { background: var(--accent); } .pmon-k2 { background: #d29922; } .pmon-k3 { background: var(--ok); }
+.pmon .tbl td.num, .pmon .tbl th.num { text-align: right; white-space: nowrap; }
+.pmon .tbl th.sortable { cursor: pointer; user-select: none; }
+.pmon .tbl th.sorted { color: var(--text); }
+.pmon .tbl tr.pmon-off td { opacity: .55; }
+.pmon .tbl tr.pmon-detail td { background: var(--bg); padding: 12px; }
+.pmon-barcell { width: 22%; min-width: 90px; }

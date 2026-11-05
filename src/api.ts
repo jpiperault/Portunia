@@ -459,6 +459,15 @@ export interface PveResource {
   storage?: string;
   tags?: string;
   lock?: string;
+  /** Compteurs cumulés (octets) des machines. */
+  netin?: number;
+  netout?: number;
+  diskread?: number;
+  diskwrite?: number;
+  /** Stockage : type (dir, lvmthin, zfspool, nfs…), contenus, partagé entre nœuds. */
+  plugintype?: string;
+  content?: string;
+  shared?: number;
 }
 
 export const proxmox = {
