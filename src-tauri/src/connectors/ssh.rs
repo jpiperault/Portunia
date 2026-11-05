@@ -18,11 +18,13 @@ use russh::{
     client::{self, KeyboardInteractiveAuthResponse},
     kex,
     keys::{
-        agent::client::AgentClient, load_secret_key, Algorithm, HashAlg, PrivateKeyWithHashAlg,
+        load_secret_key, Algorithm, HashAlg, PrivateKeyWithHashAlg,
         PublicKey, PublicKeyOrCertificate,
     },
     mac, ChannelMsg, Disconnect, Names, Preferred,
 };
+#[cfg(windows)]
+use russh::keys::agent::client::AgentClient;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use super::forward::{serve_remote, RemoteForwards, SshForwarder};
@@ -575,7 +577,14 @@ async fn auth_password(handle: &mut client::Handle<Handler>, user: &str, passwor
     Ok(false)
 }
 
+/// Hors Windows : pas encore d'agent (SSH_AUTH_SOCK arrive au sprint 2).
+#[cfg(not(windows))]
+async fn auth_agent(_handle: &mut client::Handle<Handler>, _user: &str) -> Result<bool> {
+    bail!(t!("SSH agent is not supported on this platform yet", "L'agent SSH n'est pas encore pris en charge sur cette plateforme"))
+}
+
 /// Agent OpenSSH de Windows, sinon Pageant.
+#[cfg(windows)]
 async fn auth_agent(handle: &mut client::Handle<Handler>, user: &str) -> Result<bool> {
     if let Ok(agent) = AgentClient::connect_named_pipe(r"\\.\pipe\openssh-ssh-agent").await {
         if try_agent(handle, user, agent).await? {
@@ -588,6 +597,7 @@ async fn auth_agent(handle: &mut client::Handle<Handler>, user: &str) -> Result<
     bail!(t!("No SSH agent found (« OpenSSH Authentication Agent » service or Pageant)", "Aucun agent SSH trouvé (service « OpenSSH Authentication Agent » ou Pageant)"))
 }
 
+#[cfg(windows)]
 async fn try_agent<S>(handle: &mut client::Handle<Handler>, user: &str, mut agent: AgentClient<S>) -> Result<bool>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,

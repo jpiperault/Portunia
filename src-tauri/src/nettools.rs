@@ -263,6 +263,8 @@ mod tests {
         assert_eq!(&p[96..], &mac);
     }
 
+    // Le ping ICMP n'est réalisé que sous Windows (voir le stub d'`echo`).
+    #[cfg(windows)]
     #[test]
     fn ping_de_la_boucle_locale() {
         let echo = echo(Ipv4Addr::LOCALHOST, 64, Duration::from_secs(2)).unwrap();

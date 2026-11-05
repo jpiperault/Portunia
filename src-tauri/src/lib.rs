@@ -1,5 +1,6 @@
 #[macro_use]
 mod lang;
+mod platform;
 mod gate;
 mod proxmox;
 mod commands;
@@ -100,6 +101,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             lang::set_language,
+            platform::platform_os,
             commands::list_protocols,
             commands::list_sessions,
             commands::save_session,
