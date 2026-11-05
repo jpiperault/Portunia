@@ -1,0 +1,47 @@
+# Version d'essai de Portunia pour macOS (Apple Silicon) : compile un .dmg non signé,
+# disponible comme artefact du workflow. Rien n'est publié dans Portunia-releases
+# et aucun secret n'est utilisé (ni clé de mise à jour, ni certificat Apple).
+# Lancement : Actions › « Version macOS (essai) » › Run workflow, ou en modifiant ce fichier sur main.
+name: Version macOS (essai)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/macos.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            rdp-helper -> target
+
+      - run: npm ci
+
+      # Sans les fichiers propres à Windows (console conpty) ni les fichiers de mise à jour signés.
+      - name: Compiler le .dmg
+        run: npx tauri build --bundles dmg --config '{"bundle":{"createUpdaterArtifacts":false,"resources":null}}'
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Portunia-macos
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          retention-days: 14
