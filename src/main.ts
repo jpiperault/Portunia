@@ -233,6 +233,7 @@ const gatePanel = new GatePanel($('gates'), {
 /** Serveur d'une Gate : session SSH par la Gate, avec un jeton à usage unique par connexion. */
 function openGateServer(b: Gate, s: GateServer) {
   if (s.protocole === 'rdp') return openGateDesktop(b, s);
+  if (s.protocole === 'http' || s.protocole === 'https') return openGateWeb(b, s);
   const rebond = s.mode === 'rebond';
   const session: Session = {
     id: '', name: `${s.nom} · ${b.name}`, folder: '', protocol: 'ssh', tags: [], secretKeys: [],
@@ -249,6 +250,24 @@ function openGateServer(b: Gate, s: GateServer) {
     }
   };
   return openSession(session, undefined, { connect, typing: rebond });
+}
+
+/**
+ * Interface web d'un serveur de la Gate : fenêtre web sur un relais local vers la Gate, qui
+ * relaie vers le serveur et note les pages ouvertes.
+ */
+function openGateWeb(b: Gate, s: GateServer) {
+  const session: Session = { id: '', name: `${s.nom} · ${b.name}`, folder: '', protocol: 'web', tags: [], secretKeys: [], values: { url: `${s.protocole}://${s.hote}:${s.port}` } };
+  const connect = async (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
+    try {
+      return await connectGate(b.id, s.nom, {}, cols, rows, onEvent);
+    } catch (e) {
+      if (errorText(e) !== 'SESSION_EXPIREE') throw e;
+      if (await gatePanel.reconnect(b.id)) return connectGate(b.id, s.nom, {}, cols, rows, onEvent);
+      throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
+    }
+  };
+  return openSession(session, undefined, { connect, typing: false });
 }
 
 /**

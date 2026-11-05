@@ -331,7 +331,7 @@ export interface GateServer {
   dossier: string;
   mode: 'coffre' | 'enregistre' | 'rebond';
   /** Absent sur une Gate antérieur à la 0.6 : SSH. */
-  protocole?: 'ssh' | 'rdp';
+  protocole?: 'ssh' | 'rdp' | 'http' | 'https';
   hote: string;
   port: number;
   compte: string | null;

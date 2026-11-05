@@ -174,6 +174,35 @@ async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u1
     Ok(local)
 }
 
+/// Relais local de longue durée vers l'API de la Gate (interfaces web) : la fenêtre web ouvre
+/// plusieurs connexions, chacune part en TLS épinglé. Fermé après `lifetime`.
+async fn pinned_listener(host: String, port: u16, fingerprint: String, lifetime: std::time::Duration) -> Result<u16> {
+    // Vérifie tout de suite que la Gate répond avec le bon certificat.
+    drop(pinned_tls(&host, port, &fingerprint).await?);
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
+    let local = listener.local_addr()?.port();
+    tauri::async_runtime::spawn(async move {
+        let end = tokio::time::sleep(lifetime);
+        tokio::pin!(end);
+        loop {
+            tokio::select! {
+                accepted = listener.accept() => {
+                    let Ok((mut socket, _)) = accepted else { continue };
+                    let (host, fingerprint) = (host.clone(), fingerprint.clone());
+                    tauri::async_runtime::spawn(async move {
+                        if let Ok(mut tls) = pinned_tls(&host, port, &fingerprint).await {
+                            let _ = socket.set_nodelay(true);
+                            let _ = tokio::io::copy_bidirectional(&mut socket, &mut tls).await;
+                        }
+                    });
+                }
+                _ = &mut end => break,
+            }
+        }
+    });
+    Ok(local)
+}
+
 /// Configuration TLS qui n'accepte que le certificat de cette empreinte (Gate, Proxmox).
 pub(crate) fn pinned_config(fingerprint: &str) -> Result<ClientConfig> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
@@ -477,6 +506,13 @@ pub async fn gate_connect(
     .collect();
     let mut values: HashMap<String, Value> = HashMap::new();
     let name = format!("{server} · {}", b.name);
+    // Interface web : fenêtre web sur un relais local vers la Gate, qui relaie vers le serveur
+    // et note les pages ouvertes. Le jeton ouvre une session web de 8 heures.
+    if matches!(t["protocole"].as_str(), Some("http" | "https")) {
+        let local = pinned_listener(b.host.clone(), b.api_port, b.api_fingerprint.clone(), std::time::Duration::from_secs(8 * 3600)).await.map_err(full)?;
+        values.insert("url".into(), json!(format!("http://127.0.0.1:{local}/web/entree?jeton={}", urlencode(&ticket))));
+        return start_connection(&app, &state, "web", name, values, cols, rows, on_event).await;
+    }
     let vault = t["mode"].as_str() == Some("coffre");
     if t["protocole"].as_str() == Some("rdp") && (t["mode"].as_str() == Some("enregistre") || vault) {
         // Bureau à distance enregistré : passage RDCleanPath de la Gate (qui relaie et enregistre) ;

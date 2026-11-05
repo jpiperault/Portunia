@@ -207,25 +207,29 @@ export class GatePanel {
 
   private renderServer(b: Gate, s: GateServer, depth: number): HTMLElement {
     const rdp = s.protocole === 'rdp';
-    // Sans l'extension Bureau à distance, le serveur reste visible mais ne s'ouvre pas.
-    const missing = rdp && !this.host.protocolEnabled('rdp');
+    const web = s.protocole === 'http' || s.protocole === 'https';
+    // Sans l'extension Bureau à distance (ou Interface web), le serveur reste visible mais ne s'ouvre pas.
+    const missing = (rdp && !this.host.protocolEnabled('rdp')) || (web && !this.host.protocolEnabled('web'));
     const open = () => {
-      if (missing) return this.host.toast(t('Enable the Remote Desktop extension (Extensions) to open this server', 'Activez l’extension Bureau à distance (Extensions) pour ouvrir ce serveur'), 'error');
+      if (missing) return this.host.toast(web ? t('Enable the Web interface extension (Extensions) to open this server', 'Activez l’extension Interface web (Extensions) pour ouvrir ce serveur') : t('Enable the Remote Desktop extension (Extensions) to open this server', 'Activez l’extension Bureau à distance (Extensions) pour ouvrir ce serveur'), 'error');
       return b.connected ? this.host.openServer(b, s) : this.reconnect(b.id).then((ok) => ok && this.host.openServer(b, s));
     };
-    const command = rdp ? `${s.hote}:${s.port}` : `ssh -p ${b.sshPort} ${b.login}%${s.nom}@${b.host}`;
+    const command = web ? `${s.protocole}://${s.hote}:${s.port}` : rdp ? `${s.hote}:${s.port}` : `ssh -p ${b.sshPort} ${b.login}%${s.nom}@${b.host}`;
     const menu = (): (MenuItem | 'separator')[] => [
       { label: t('Open', 'Ouvrir'), icon: 'play', action: open },
-      rdp
+      rdp || web
         ? { label: t('Copy the server address', 'Copier l\'adresse du serveur'), icon: 'copy', action: () => navigator.clipboard.writeText(command) }
         : { label: t('Copy the ssh command', 'Copier la commande ssh'), icon: 'copy', action: () => navigator.clipboard.writeText(command) },
     ];
-    const title = missing ? t('Enable the Remote Desktop extension to open this server', 'Activez l’extension Bureau à distance pour ouvrir ce serveur') : t(`${rdp ? 'Remote Desktop · ' : ''}${MODE_TITLE[s.mode]}\n${command}`, `${rdp ? 'Bureau à distance · ' : ''}${MODE_TITLE[s.mode]}\n${command}`);
+    const title = web && !missing ? t(`Web interface through the Gate; pages visited are logged
+${command}`, `Interface web par la Gate ; pages visitées journalisées
+${command}`) : missing ? t('Enable the Remote Desktop extension to open this server', 'Activez l’extension Bureau à distance pour ouvrir ce serveur') : t(`${rdp ? 'Remote Desktop · ' : ''}${MODE_TITLE[s.mode]}\n${command}`, `${rdp ? 'Bureau à distance · ' : ''}${MODE_TITLE[s.mode]}\n${command}`);
     const row = h('div', { class: `tree-row${b.connected && !missing ? '' : ' disabled'}` },
       h('button', { class: 'tree-item session', style: `padding-left: ${16 + depth * 16}px`, title, onclick: open },
         h('span', { class: `dot${b.connected ? ' on' : ''}` }),
         h('span', { class: 'grow ellipsis' }, s.nom),
         rdp ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null,
+        web ? h('span', { class: 'badge proto-rdp' }, 'WEB') : null,
         h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode])));
     row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu()); });
     return row;
@@ -513,15 +517,21 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     const secretKey = h('textarea', { id: 't-secret-key', class: 'input', rows: 5, spellcheck: 'false', placeholder: '-----BEGIN OPENSSH PRIVATE KEY-----' }) as HTMLTextAreaElement;
     const passField = field(t('Account\'s current password', 'Mot de passe actuel du compte'), secretPass, t('used only once', 'utilisé une seule fois'));
     const keyField = field(t('Private key (without passphrase)', 'Clé privée (sans phrase de passe)'), secretKey);
-    const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', t('Remote Desktop (RDP)', 'Bureau à distance (RDP)')]], cur?.protocole ?? 'ssh');
+    const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', t('Remote Desktop (RDP)', 'Bureau à distance (RDP)')], ['https', t('Web interface (HTTPS)', 'Interface web (HTTPS)')], ['http', t('Web interface (HTTP)', 'Interface web (HTTP)')]], cur?.protocole ?? 'ssh');
+    const webNote = h('p', { class: 'muted small', hidden: true }, t('Web interface (Gate 0.30 and later): administration consoles (vCenter, iDRAC, firewall…). The Gate relays every request, recorded mode only: the pages opened are logged. Opens from Portunia (dedicated window) and from the web portal. Credentials are typed in the page.', 'Interface web (Gate 0.30 et suivantes) : consoles d\'administration (vCenter, iDRAC, pare-feu…). La Gate relaie chaque requête, en mode enregistré seulement : les pages ouvertes sont journalisées. S\'ouvre depuis Portunia (fenêtre dédiée) et depuis le portail web. Les identifiants se tapent dans la page.'));
     const rdpNote = h('p', { class: 'muted small', hidden: true }, t('Remote Desktop. Jump: the Gate relays the encrypted connection without reading it from Portunia; from the web portal it relays without recording. Recorded: the Gate relays and records the session, without seeing the password. In both, the user types their Windows credentials at each opening. Vault: the Gate signs in to Windows with the account it keeps (NLA required on the server) and records; the user never sees the password (Gate 0.29 and later).', 'Bureau à distance. Rebond : depuis Portunia, la Gate relaie la connexion chiffrée sans la lire ; depuis le portail web, elle relaie sans enregistrer. Enregistré : la Gate relaie et enregistre la session, sans voir le mot de passe. Dans les deux cas, l\'utilisateur tape ses identifiants Windows à chaque ouverture. Coffre : la Gate ouvre la session Windows avec le compte qu\'elle garde (NLA exigé sur le serveur) et enregistre ; l\'utilisateur ne voit jamais le mot de passe (Gate 0.29 et suivantes).'));
     // Port par défaut du protocole, tant que l'administrateur ne l'a pas changé.
     proto.addEventListener('change', () => {
-      if (['22', '3389', ''].includes(port.value.trim())) port.value = proto.value === 'rdp' ? '3389' : '22';
+      if (['22', '3389', '443', '80', ''].includes(port.value.trim())) port.value = ({ rdp: '3389', https: '443', http: '80' } as Record<string, string>)[proto.value] ?? '22';
       sync();
     });
     const sync = () => {
       const rdp = proto.value === 'rdp';
+      const web = proto.value === 'http' || proto.value === 'https';
+      // Interface web : mode enregistré seulement.
+      for (const o of mode.options) o.disabled = web && o.value !== 'enregistre';
+      if (web) mode.value = 'enregistre';
+      webNote.hidden = !web;
       // Bureau à distance : le coffre garde un mot de passe, pas de clé SSH.
       for (const o of secretKind.options) o.disabled = rdp && ['generer', 'cle'].includes(o.value);
       if (rdp && ['generer', 'cle'].includes(secretKind.value)) secretKind.value = 'mot_de_passe';
@@ -538,7 +548,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       field(t('Protocol', 'Protocole'), proto),
       h('div', { class: 'row2' }, field(t('Name', 'Nom'), nom, t('no spaces', 'sans espace')), field(t('Folder', 'Dossier'), dossier)),
       h('div', { class: 'quick-row' }, field(t('Address', 'Adresse'), hote), field('Port', port)),
-      field('Mode', mode), rdpNote, field(t('Account on the server', 'Compte sur le serveur'), compte, t('required in vault mode; for Remote Desktop: DOMAIN\\account, offered at opening', 'obligatoire en mode coffre ; en Bureau à distance : DOMAINE\\compte, proposé à l\'ouverture')),
+      field('Mode', mode), rdpNote, webNote, field(t('Account on the server', 'Compte sur le serveur'), compte, t('required in vault mode; for Remote Desktop: DOMAIN\\account, offered at opening', 'obligatoire en mode coffre ; en Bureau à distance : DOMAINE\\compte, proposé à l\'ouverture')),
       field(t('Vault secret', 'Secret du coffre'), secretKind), passField, keyField,
       h('p', { class: 'muted small' }, t('The secret is encrypted by the Gate and can never be read back. « Generate » creates a key, installs it with the password given only once, then checks that it works.', 'Le secret est chiffré par la Gate et ne se relit jamais. « Générer » crée une clé, l\'installe avec le mot de passe donné une seule fois, puis vérifie qu\'elle fonctionne.')),
     ];
@@ -549,7 +559,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         : kind === 'mot_de_passe' ? { type: 'mot_de_passe', valeur: secretPass.value }
         : kind === 'cle' ? { type: 'cle', valeur: secretKey.value } : undefined;
       const payload = {
-        nom: nom.value.trim(), dossier: dossier.value.trim(), hote: hote.value.trim(), port: Number(port.value) || (proto.value === 'rdp' ? 3389 : 22),
+        nom: nom.value.trim(), dossier: dossier.value.trim(), hote: hote.value.trim(), port: Number(port.value) || (({ rdp: 3389, https: 443, http: 80 } as Record<string, number>)[proto.value] ?? 22),
         mode: mode.value, compte: compte.value.trim() || null, secret, protocole: proto.value,
       };
       await (cur ? call('PUT', `/admin/cibles/${cur.id}`, payload) : call('POST', '/admin/cibles', payload));
