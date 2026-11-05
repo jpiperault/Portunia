@@ -137,7 +137,7 @@ impl ServerCertVerifier for Pinned {
     }
 }
 
-fn client(expected: Option<&str>) -> Result<(reqwest::Client, Arc<Mutex<Option<String>>>)> {
+pub(crate) fn client(expected: Option<&str>) -> Result<(reqwest::Client, Arc<Mutex<Option<String>>>)> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let seen = Arc::new(Mutex::new(None));
     let verifier = Pinned { expected: expected.map(str::to_owned), seen: seen.clone(), provider: provider.clone() };
@@ -172,6 +172,13 @@ async fn pinned_forwarder(host: &str, port: u16, fingerprint: &str) -> Result<u1
         }
     });
     Ok(local)
+}
+
+/// Configuration TLS qui n'accepte que le certificat de cette empreinte (Gate, Proxmox).
+pub(crate) fn pinned_config(fingerprint: &str) -> Result<ClientConfig> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let verifier = Pinned { expected: Some(fingerprint.to_string()), seen: Arc::default(), provider: provider.clone() };
+    Ok(ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions()?.dangerous().with_custom_certificate_verifier(Arc::new(verifier)).with_no_client_auth())
 }
 
 /// Connexion TLS à l'API de la Gate, certificat vérifié par son empreinte.
@@ -214,7 +221,7 @@ async fn call(host: &str, port: u16, fingerprint: &str, token: Option<&str>, met
     Ok(value)
 }
 
-fn root_cause(e: &dyn std::error::Error) -> String {
+pub(crate) fn root_cause(e: &dyn std::error::Error) -> String {
     let mut cur = e;
     while let Some(next) = cur.source() {
         cur = next;
@@ -429,7 +436,7 @@ pub async fn gate_journal_csv(state: State<'_, AppState>, id: String, query: Str
     std::fs::write(&dest, bytes).map_err(|e| format!("Écriture impossible : {e}"))
 }
 
-fn urlencode(text: &str) -> String {
+pub(crate) fn urlencode(text: &str) -> String {
     text.bytes()
         .map(|b| match b {
             b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (b as char).to_string(),

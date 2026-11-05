@@ -1,8 +1,9 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, Gate, gates, GateServer, connectAssist, connectGate, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
+import { api, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Session, Snippet, TermEvent } from './api';
 import { save } from '@tauri-apps/plugin-dialog';
 import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
+import { ProxmoxPanel, PROXMOX_EXTENSION } from './proxmox';
 import { ASSIST_EXTENSION, openAssistDialog } from './assist';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
@@ -302,6 +303,22 @@ function openAssist(b: Gate, code: string) {
   return openSession(session, undefined, { connect, typing: false });
 }
 
+// ---------- Extension Proxmox VE ----------
+
+const proxmoxPanel = new ProxmoxPanel($('proxmox'), {
+  toast,
+  openConsole: (p, node, kind, vmid, title) => {
+    // Console VNC de Proxmox, relayée par Portunia : onglet VNC habituel.
+    const session: Session = { id: '', name: `${title} · ${p.name}`, folder: '', protocol: 'vnc', tags: [], secretKeys: [], values: { host: p.host, port: p.port } };
+    const connect = (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => connectProxmox(p.id, node, kind, vmid, cols, rows, onEvent);
+    openSession(session, undefined, { connect, typing: false });
+  },
+  vncEnabled: () => extensionEnabled('vnc'),
+  allowed: () => allows('proxmox'),
+  filter: () => state.filter,
+  clearFilter: () => { search.value = ''; state.filter = ''; renderTree(); },
+});
+
 /** Le bouton « Assistance à distance » de la barre latérale suit les deux extensions. */
 function showAssist() {
   $('open-assist').hidden = !(extensionEnabled('assistance') && extensionEnabled('gate'));
@@ -420,7 +437,7 @@ async function act(action: () => Promise<unknown>) {
 
 // ---------- Barre latérale : rail et panneaux ----------
 
-type Pane = 'sessions' | 'gates' | 'pc';
+type Pane = 'sessions' | 'gates' | 'proxmox' | 'pc';
 const PANE_KEY = 'portunia.panneau';
 const RECENT_KEY = 'portunia.recentes';
 let pane: Pane = (() => { try { return (localStorage.getItem(PANE_KEY) as Pane | null) ?? 'sessions'; } catch { return 'sessions'; } })();
@@ -431,11 +448,12 @@ let chip = 'all';
 function showPane(next: Pane, fromRail = false) {
   const app = document.querySelector<HTMLElement>('.app')!;
   if (next === 'gates' && !extensionEnabled('gate')) next = 'sessions';
+  if (next === 'proxmox' && !extensionEnabled('proxmox')) next = 'sessions';
   const fold = fromRail && next === pane && !app.classList.contains('folded');
   app.classList.toggle('folded', fold);
   pane = next;
   try { localStorage.setItem(PANE_KEY, next); } catch { /* stockage indisponible */ }
-  for (const p of ['sessions', 'gates', 'pc'] as Pane[]) {
+  for (const p of ['sessions', 'gates', 'proxmox', 'pc'] as Pane[]) {
     $(`pane-${p}`).hidden = p !== next;
     $(`rail-${p}`).classList.toggle('on', p === next && !fold);
     $(`rail-${p}`).setAttribute('aria-pressed', String(p === next && !fold));
@@ -444,6 +462,7 @@ function showPane(next: Pane, fromRail = false) {
 
 function syncRail() {
   $('rail-gates').hidden = !extensionEnabled('gate');
+  $('rail-proxmox').hidden = !extensionEnabled('proxmox');
   showPane(pane);
 }
 
@@ -503,6 +522,7 @@ function renderTree() {
   });
   $('session-count').textContent = String(all.length);
   if (extensionEnabled('gate')) gatePanel.render();
+  if (extensionEnabled('proxmox')) proxmoxPanel.render();
   state.tabs.find((t) => t.kind === 'library')?.library?.render();
 }
 
@@ -1400,8 +1420,9 @@ function extensionsPage(): HTMLElement {
   const usage: Record<string, number> = {};
   for (const s of state.sessions) usage[s.protocol] = (usage[s.protocol] ?? 0) + 1;
   usage.gate = gatePanel.list.length;
-  const nameOf = (id: string) => protocolOf(id)?.name ?? (id === 'gate' ? GATE_EXTENSION.name : id === 'assistance' ? ASSIST_EXTENSION.name : id);
-  return renderExtensions([...state.protocols, GATE_EXTENSION, ASSIST_EXTENSION], usage, {
+  usage.proxmox = proxmoxPanel.list.length;
+  const nameOf = (id: string) => protocolOf(id)?.name ?? (id === 'gate' ? GATE_EXTENSION.name : id === 'proxmox' ? PROXMOX_EXTENSION.name : id === 'assistance' ? ASSIST_EXTENSION.name : id);
+  return renderExtensions([...state.protocols, GATE_EXTENSION, PROXMOX_EXTENSION, ASSIST_EXTENSION], usage, {
     installed: extensionInstalled,
     enabled: extensionEnabled,
     setEnabled: (id, on) => {
@@ -1446,6 +1467,7 @@ function railButton(id: string, ico: string, label: string, run: () => void) {
 }
 railButton('rail-sessions', 'server', tr('Sessions (Ctrl Shift K)', 'Sessions (Ctrl Maj K)'), () => showPane('sessions', true));
 railButton('rail-gates', 'shield', 'Gates', () => showPane('gates', true));
+railButton('rail-proxmox', 'layers', 'Proxmox', () => showPane('proxmox', true));
 railButton('rail-pc', 'prompt', tr('This PC: local shells', 'Ce PC : shells locaux'), () => showPane('pc', true));
 railButton('open-snippets', 'commands', tr('Saved commands', 'Commandes enregistrées'), () => openSnippetManager(snippetContext()));
 railButton('open-credentials', 'user', tr('Shared credentials', 'Identifiants partagés'), () => openCredentialManager(toast, () => reload()));
@@ -1515,7 +1537,7 @@ onSettingsChange((s) => {
   const key = `${s.disabledExtensions.join(',')}|${s.installedExtensions.join(',')}`;
   if (key === extensionsKey) return;
   extensionsKey = key;
-  gatePanel.show(extensionEnabled('gate')); syncRail();
+  gatePanel.show(extensionEnabled('gate')); proxmoxPanel.show(extensionEnabled('proxmox')); syncRail();
   showAssist();
   state.tabs.find((t) => t.kind === 'extensions')?.view.replaceChildren(extensionsPage());
   renderAll();
@@ -1530,8 +1552,8 @@ onSettingsChange((s) => {
   if (key !== monitorKey) { monitorKey = key; monitor.start(); renderAll(); }
 });
 monitorKey = `${settings().monitoring}|${settings().monitorInterval}`;
-initLock(() => { reload(); gatePanel.show(extensionEnabled('gate')); syncRail(); });
-gatePanel.show(extensionEnabled('gate')); syncRail();
+initLock(() => { reload(); gatePanel.show(extensionEnabled('gate')); proxmoxPanel.show(extensionEnabled('proxmox')); syncRail(); });
+gatePanel.show(extensionEnabled('gate')); proxmoxPanel.show(extensionEnabled('proxmox')); syncRail();
 
 /** Nom du dossier coloré le plus proche (affiché en étiquette dans la barre d'outils). */
 function envFolder(folder: string): string {

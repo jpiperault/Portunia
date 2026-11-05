@@ -52,10 +52,12 @@ pub enum Feature {
     FileSync,
     /// Administration d'une Gate depuis Portunia.
     GateAdmin,
+    /// Serveurs Proxmox VE : inventaire, actions, consoles, instantanés, sauvegardes.
+    Proxmox,
 }
 
 impl Feature {
-    pub const ALL: [Feature; 11] = [
+    pub const ALL: [Feature; 12] = [
         Feature::SessionRecording,
         Feature::MonitoringAlerts,
         Feature::Sync,
@@ -67,6 +69,7 @@ impl Feature {
         Feature::CloudStorage,
         Feature::FileSync,
         Feature::GateAdmin,
+        Feature::Proxmox,
     ];
 
     /// Édition minimale qui débloque la fonctionnalité.
@@ -90,6 +93,7 @@ impl Feature {
             Feature::CloudStorage => t!("S3 storage", "Stockage S3"),
             Feature::GateAdmin => t!("Gate administration", "Administration des Gates"),
             Feature::FileSync => t!("Compare and synchronise folders", "Comparer et synchroniser des dossiers"),
+            Feature::Proxmox => t!("Proxmox VE servers", "Serveurs Proxmox VE"),
         }
     }
 }

@@ -1,6 +1,7 @@
 #[macro_use]
 mod lang;
 mod gate;
+mod proxmox;
 mod commands;
 mod connector;
 mod connectors;
@@ -106,6 +107,12 @@ pub fn run() {
             commands::connect,
             commands::connect_quick,
             gate::gate_list,
+            proxmox::pve_list,
+            proxmox::pve_probe,
+            proxmox::pve_save,
+            proxmox::pve_remove,
+            proxmox::pve_api,
+            proxmox::pve_console,
             gate::gate_probe,
             gate::gate_login,
             gate::gate_logout,

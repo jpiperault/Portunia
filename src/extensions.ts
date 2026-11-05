@@ -17,6 +17,7 @@ const CORE = new Set(['local']);
 const OFFER: Record<string, string> = {
   sftp: t('Free', 'Gratuit'),
   ftp: t('Free', 'Gratuit'),
+  proxmox: 'Pro',
 };
 
 export interface ExtensionHost {

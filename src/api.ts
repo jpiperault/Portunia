@@ -415,6 +415,68 @@ export function connectGate(id: string, server: string, extra: Record<string, un
   return invoke<ConnectResponse>('gate_connect', { id, server, extra, cols, rows, onEvent: channel });
 }
 
+// ---------- Proxmox VE ----------
+
+export interface Pve {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  fingerprint: string;
+  user: string;
+  /** Nom du jeton d'API ; vide : mot de passe. */
+  tokenId: string;
+  hasSecret: boolean;
+}
+
+export interface PveSave {
+  id?: string;
+  name: string;
+  host: string;
+  port: number;
+  fingerprint: string;
+  user: string;
+  tokenId: string;
+  secret?: string;
+}
+
+/** Ligne de /cluster/resources : nœud, machine virtuelle (qemu), conteneur (lxc) ou stockage. */
+export interface PveResource {
+  id: string;
+  type: 'node' | 'qemu' | 'lxc' | 'storage' | string;
+  node: string;
+  vmid?: number;
+  name?: string;
+  status?: string;
+  template?: number;
+  cpu?: number;
+  maxcpu?: number;
+  mem?: number;
+  maxmem?: number;
+  disk?: number;
+  maxdisk?: number;
+  uptime?: number;
+  storage?: string;
+  tags?: string;
+  lock?: string;
+}
+
+export const proxmox = {
+  list: () => invoke<Pve[]>('pve_list'),
+  probe: (address: string) => invoke<{ host: string; port: number; fingerprint: string }>('pve_probe', { address }),
+  save: (request: PveSave) => invoke<Pve>('pve_save', { request }),
+  remove: (id: string) => invoke<void>('pve_remove', { id }),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  api: <T = any>(id: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, params?: Record<string, unknown>) => invoke<T>('pve_api', { id, method, path, params: params ?? null }),
+};
+
+/** Console d'une machine virtuelle, d'un conteneur ou d'un nœud (onglet VNC). */
+export function connectProxmox(id: string, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+  const channel = new Channel<TermEvent>();
+  channel.onmessage = onEvent;
+  return invoke<ConnectResponse>('pve_console', { id, node, kind, vmid, cols, rows, onEvent: channel });
+}
+
 // ---------- Clés SSH ----------
 
 export interface KeyInfo {

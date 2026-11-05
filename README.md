@@ -85,6 +85,7 @@ Other features:
 - appearance: dark, light or Windows theme, 9 terminal palettes (Dracula, Nord, Solarized…), colour per folder (band on sessions, tabs and toolbar, "PRODUCTION" label);
 - server dashboard (Pro, SSH sessions to Linux): CPU and memory with charts, swap, load, disks, busiest processes, failed systemd services ("View" shows their log), refreshed every 5 s while the panel is visible;
 - command on several servers (Pro): choice of SSH sessions or a whole folder (right click), command or saved command, 8 servers at a time, results side by side (exit code, duration, output, failure filter, copy), stronger confirmation for red folders;
+- Proxmox VE (Pro): Proxmox servers in their own sidebar section — nodes, virtual machines and containers with their state, start/stop, consoles (Proxmox VNC relayed by Portunia), snapshots, backups and restore, clone, migrate, resources, tasks and storage; API token or password, certificate pinned by its fingerprint;
 - containers (Pro, SSH sessions): the server's Docker or Podman containers and Kubernetes pods, shell in a container or log follow-up in one click (new tab), start, stop, restart;
 - monitoring: green or red dot and latency for each server, overview, notifications when a server goes down or comes back (Pro);
 - terminal session recording (Pro): asciicast + text files, built-in player with speed and navigation;
