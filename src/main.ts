@@ -39,7 +39,16 @@ import type { AuditRow } from './audit';
 import { folderColors, recordings, shells, ShellSpec } from './api';
 import { defaultShell, hideShell, loadShells, setDefaultShell, shellIcon, shellsLoaded, visibleShells } from './localshells';
 import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
-import { LOCALE, t as tr } from './i18n';
+import { LANG, LOCALE, t as tr } from './i18n';
+import { invoke } from '@tauri-apps/api/core';
+import { appShortcut, canElevate, initPlatform, IS_MAC, keys, localizeShortcutTitles, runUnlessBusy } from './platform';
+import { listen } from '@tauri-apps/api/event';
+
+// Plateforme connue avant le premier rendu (menus, raccourcis, textes).
+await initPlatform();
+// Menu natif macOS : installé avant que la langue de l'interface soit connue du cœur, on la lui donne ici.
+// Sans attendre : le premier rendu ne dépend pas du menu.
+if (IS_MAC) invoke('appmenu_refresh', { lang: LANG }).catch((err) => console.warn('Menu natif : langue non appliquée', errorText(err)));
 
 interface Tab {
   id: string;
@@ -705,13 +714,13 @@ function renderTabs() {
           t.kind === 'local' && t.shell ? shellIcon(t.shell, 14) : t.kind === 'session' ? h('span', { class: `dot ${t.state === 'connected' ? 'on' : t.state === 'connecting' || t.state === 'reconnecting' ? 'wait' : ''}` }) : icon(t.kind === 'replay' ? 'play' : t.kind === 'library' ? 'files' : 'puzzle', 14),
           h('span', { class: 'ellipsis' }, t.title),
           t.protocol && badge(t.protocol)),
-        h('button', { class: 'icon-btn sm', 'aria-label': tr(`Close ${t.title}`, `Fermer ${t.title}`), title: tr('Close (Ctrl Shift W)', 'Fermer (Ctrl Maj W)'), onclick: () => closeTab(t.id) }, icon('close', 13)));
+        h('button', { class: 'icon-btn sm', 'aria-label': tr(`Close ${t.title}`, `Fermer ${t.title}`), title: keys(tr('Close (Ctrl Shift W)', 'Fermer (Ctrl Maj W)')), onclick: () => closeTab(t.id) }, icon('close', 13)));
       tabEl.addEventListener('contextmenu', (e) => tabMenu(t, e));
       paint(tabEl, colorOf(sessionOf(t.sessionId)?.folder ?? '', state.folderColors));
       return tabEl;
     }),
-    h('button', { class: 'icon-btn', 'aria-label': tr('Palette: sessions, shells, actions and quick connect', 'Palette : sessions, shells, actions et connexion rapide'), title: tr('Go to… or quick connect (Ctrl Shift O)', 'Aller à… ou connexion rapide (Ctrl Maj O)'), onclick: () => openGlobalPalette() }, icon('search')),
-    h('button', { class: 'icon-btn', 'aria-label': tr('Open a session or a local shell', 'Ouvrir une session ou un shell local'), title: tr('New session or local shell (Ctrl Shift T: default shell)', 'Nouvelle session ou shell local (Ctrl Maj T : shell par défaut)'), onclick: (e: MouseEvent) => openPlusMenu(e) }, icon('plus')),
+    h('button', { class: 'icon-btn', 'aria-label': tr('Palette: sessions, shells, actions and quick connect', 'Palette : sessions, shells, actions et connexion rapide'), title: keys(tr('Go to… or quick connect (Ctrl Shift O)', 'Aller à… ou connexion rapide (Ctrl Maj O)')), onclick: () => openGlobalPalette() }, icon('search')),
+    h('button', { class: 'icon-btn', 'aria-label': tr('Open a session or a local shell', 'Ouvrir une session ou un shell local'), title: keys(tr('New session or local shell (Ctrl Shift T: default shell)', 'Nouvelle session ou shell local (Ctrl Maj T : shell par défaut)')), onclick: (e: MouseEvent) => openPlusMenu(e) }, icon('plus')),
   );
 }
 
@@ -739,8 +748,8 @@ function renderToolbar() {
   const items: (ToolbarItem | '|' | 'panels')[] = [
     ...(tab.state === 'closed' ? [{ id: 'reconnect', icon: 'refresh', label: tr('Reconnect', 'Reconnecter'), action: () => reconnect(tab), cls: 'primary', fold: { label: 20 } }] : []),
     ...(tab.state === 'reconnecting' ? [{ id: 'cancel', icon: 'close', label: tr('Cancel the reconnection', 'Annuler la reconnexion'), action: () => viewOf(tab)?.cancelReconnect(), fold: { label: 20 } }] : []),
-    ...(tab.term ? [{ id: 'commands', icon: 'commands', label: tr('Commands', 'Commandes'), title: tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)'), action: () => openPalette(snippetContext()), fold: { label: 9 } }] : []),
-    ...(tab.term ? [{ id: 'search', icon: 'search', label: tr('Search in the terminal', 'Rechercher dans le terminal'), title: tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)'), action: () => tab.term?.openSearch(), iconOnly: true }] : []),
+    ...(tab.term ? [{ id: 'commands', icon: 'commands', label: tr('Commands', 'Commandes'), title: keys(tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)')), action: () => openPalette(snippetContext()), fold: { label: 9 } }] : []),
+    ...(tab.term ? [{ id: 'search', icon: 'search', label: tr('Search in the terminal', 'Rechercher dans le terminal'), title: keys(tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)')), action: () => tab.term?.openSearch(), iconOnly: true }] : []),
     ...(tab.term && tab.state === 'connected' ? [{
       id: 'record', lead: h('span', { class: 'rec-dot' }), label: tab.recording ? tr('Stop recording', 'Arrêter l’enregistrement') : tr('Record', 'Enregistrer'),
       title: tab.recording ? `${tr('Recording', 'Enregistrement en cours')} : ${tab.recording}` : tr('Record this session (asciicast + text)', 'Enregistrer cette session (asciicast + texte)'),
@@ -749,12 +758,12 @@ function renderToolbar() {
     ...(tab.screen ? [{ id: 'cad', icon: 'power', label: tr('Ctrl+Alt+Del', 'Ctrl+Alt+Suppr'), title: tr('Send Ctrl+Alt+Del to the remote screen', 'Envoyer Ctrl+Alt+Suppr à l’écran distant'), action: () => tab.screen?.sendCtrlAltDel(), fold: { label: 4, menu: 7 } }] : []),
     ...(tab.screen?.filesAllowed ? [{ id: 'send-files', icon: 'upload', label: tr('Send files', 'Envoyer des fichiers'), title: tr('Put files of this PC on the server\'s clipboard, then paste them there (Ctrl+V). You can also drop them on the screen.', 'Mettre des fichiers de ce poste au presse-papiers du serveur, puis les y coller (Ctrl+V). Vous pouvez aussi les déposer sur l’écran.'), action: () => tab.screen?.chooseFiles(), fold: { label: 5, menu: 7 } }] : []),
     ...(tab.screen?.remoteFiles ? [{ id: 'fetch-files', icon: 'download', label: tr('Get the files', 'Récupérer les fichiers'), title: tr('Save on this PC the files copied on the server (Ctrl+C)', 'Enregistrer sur ce poste les fichiers copiés sur le serveur (Ctrl+C)'), action: () => tab.screen?.fetchFiles(), cls: 'primary', fold: { label: 5, menu: 7 } }] : []),
-    ...(tab.screen && session.protocol !== 'rdp' ? [{ id: 'clipboard', icon: 'copy', label: tr('Clipboard', 'Presse-papiers'), title: tr('Copy the Windows clipboard to the remote screen', 'Copier le presse-papiers de Windows vers l’écran distant'), action: () => tab.screen?.sendClipboard(), fold: { label: 3, menu: 8 } }] : []),
+    ...(tab.screen && session.protocol !== 'rdp' ? [{ id: 'clipboard', icon: 'copy', label: tr('Clipboard', 'Presse-papiers'), title: IS_MAC ? tr('Copy the Mac clipboard to the remote screen', 'Copier le presse-papiers du Mac vers l’écran distant') : tr('Copy the Windows clipboard to the remote screen', 'Copier le presse-papiers de Windows vers l’écran distant'), action: () => tab.screen?.sendClipboard(), fold: { label: 3, menu: 8 } }] : []),
     ...(tab.screen ? [{ id: 'fit', icon: 'move', label: tab.screen.fit ? tr('Real size', 'Taille réelle') : tr('Fit to window', 'Ajuster à la fenêtre'), title: tr('Fit the image to the tab or show it at real size', 'Adapter l’image à l’onglet ou afficher en taille réelle'), action: () => { tab.screen?.toggleFit(); renderToolbar(); }, fold: { label: 4, menu: 9 } }] : []),
     { id: 'split', icon: 'split', label: tr('Split screen', 'Écran partagé'), title: tr('Show several sessions side by side', 'Afficher plusieurs sessions côte à côte'), action: (e: MouseEvent) => splitMenu(e), cls: isSplit() ? 'on' : '', fold: { label: 4, menu: 10 } },
     ...(isSplit() ? [{
       id: 'broadcast', icon: 'broadcast', label: state.broadcast ? tr('Multi-input: ON', 'Saisie multiple : ACTIVE') : tr('Multi-input', 'Saisie multiple'),
-      title: tr('Send keystrokes to all displayed sessions (Ctrl Shift B)', 'Envoyer la frappe à toutes les sessions affichées (Ctrl Maj B)'), action: () => toggleBroadcast(), cls: state.broadcast ? 'warn' : '', pressed: state.broadcast, fold: { label: 6 },
+      title: keys(tr('Send keystrokes to all displayed sessions (Ctrl Shift B)', 'Envoyer la frappe à toutes les sessions affichées (Ctrl Maj B)')), action: () => toggleBroadcast(), cls: state.broadcast ? 'warn' : '', pressed: state.broadcast, fold: { label: 6 },
     }] : []),
     '|',
     ...(!tab.quick && tab.state === 'connected' && protocolOf(session.protocol)?.portForwarding ? [{
@@ -1506,7 +1515,7 @@ function railButton(id: string, ico: string, label: string, run: () => void) {
   b.setAttribute('aria-label', label);
   b.addEventListener('click', run);
 }
-railButton('rail-sessions', 'server', tr('Sessions (Ctrl Shift K)', 'Sessions (Ctrl Maj K)'), () => showPane('sessions', true));
+railButton('rail-sessions', 'server', keys(tr('Sessions (Ctrl Shift K)', 'Sessions (Ctrl Maj K)')), () => showPane('sessions', true));
 railButton('rail-gates', 'shield', 'Gates', () => showPane('gates', true));
 railButton('rail-proxmox', 'layers', 'Proxmox', () => showPane('proxmox', true));
 railButton('rail-pc', 'prompt', tr('This PC: local shells', 'Ce PC : shells locaux'), () => showPane('pc', true));
@@ -1526,7 +1535,7 @@ setPlayerHandler(openReplay);
 showAssist();
 search.addEventListener('input', () => { state.filter = search.value; renderTree(); });
 
-// Glisser-déposer depuis l'Explorateur Windows sur le panneau Fichiers = envoi au serveur.
+// Glisser-déposer depuis le Finder ou l'Explorateur sur le panneau Fichiers (chemins fournis par Tauri) = envoi au serveur.
 function overFiles(pos: { x: number; y: number }) {
   if (details.hidden) return false;
   const r = details.getBoundingClientRect();
@@ -1548,20 +1557,41 @@ getCurrentWebview().onDragDropEvent(({ payload }) => {
   if (payload.type === 'drop' && inside) files.uploadPaths(payload.paths);
 });
 
+// Windows : Ctrl+Maj+lettre. Mac : ⌘+Maj+lettre (sauf Q : la connexion rapide y est ⌘K, via le menu natif).
 document.addEventListener('keydown', (e) => {
-  if (!e.ctrlKey || !e.shiftKey || document.querySelector('dialog[open]') || isLocked()) return;
-  const key = e.key.toLowerCase();
-  if (key === 'k') { e.preventDefault(); document.querySelector('.app')?.classList.remove('folded'); showPane('sessions'); search.focus(); search.select(); }
-  else if (key === 'n') { e.preventDefault(); newSession(); }
-  else if (key === 'q') { e.preventDefault(); quickConnect(); }
-  else if (key === 't') { e.preventDefault(); const def = defaultShell(); if (def) openLocalShell(def); else toast(tr('No local shell found', 'Aucun shell local trouvé'), 'error'); }
-  else if (key === 'w' && state.active) { e.preventDefault(); closeTab(state.active); }
-  else if (key === 'f') { e.preventDefault(); activeTab()?.term?.openSearch(); }
-  else if (key === 'b') { e.preventDefault(); toggleBroadcast(); }
-  else if (key === 'p') { e.preventDefault(); openPalette(snippetContext()); }
-  else if (key === 'l') { e.preventDefault(); lockNow(toast, () => reload()); }
-  else if (key === 'o') { e.preventDefault(); openGlobalPalette(); }
+  const action = appShortcut(e);
+  if (!action || document.querySelector('dialog[open]') || isLocked()) return;
+  if (action === 'search-sessions') { e.preventDefault(); focusSessionSearch(); }
+  else if (action === 'new-session') { e.preventDefault(); newSession(); }
+  else if (action === 'quick-connect') { e.preventDefault(); quickConnect(); }
+  else if (action === 'local-shell') { e.preventDefault(); const def = defaultShell(); if (def) openLocalShell(def); else toast(tr('No local shell found', 'Aucun shell local trouvé'), 'error'); }
+  else if (action === 'close-tab' && state.active) { e.preventDefault(); closeTab(state.active); }
+  else if (action === 'find') { e.preventDefault(); activeTab()?.term?.openSearch(); }
+  else if (action === 'broadcast') { e.preventDefault(); toggleBroadcast(); }
+  else if (action === 'commands') { e.preventDefault(); openPalette(snippetContext()); }
+  else if (action === 'lock') { e.preventDefault(); lockNow(toast, () => reload()); }
+  else if (action === 'palette') { e.preventDefault(); openGlobalPalette(); }
 });
+
+function focusSessionSearch() {
+  document.querySelector('.app')?.classList.remove('folded');
+  showPane('sessions');
+  search.focus();
+  search.select();
+}
+
+// Menu natif macOS : chaque élément personnalisé émet `menu://<id>` (voir src-tauri/src/appmenu.rs).
+// Mêmes gardes que les raccourcis : rien sous une boîte de dialogue ouverte ou quand l'application est verrouillée.
+if (IS_MAC) {
+  const guarded = (fn: () => void) => () => { runUnlessBusy(document, isLocked, fn); };
+  void listen('menu://new-session', guarded(() => newSession()));
+  void listen('menu://quick-connect', guarded(() => quickConnect()));
+  void listen('menu://settings', guarded(() => openSettingsDialog(toast)));
+  void listen('menu://close-tab', guarded(() => { if (state.active) closeTab(state.active); }));
+  void listen('menu://find', guarded(() => activeTab()?.term?.openSearch()));
+  // Infobulles de index.html (écrites en « Ctrl Maj X ») : forme ⌘.
+  localizeShortcutTitles(document);
+}
 
 initTheme();
 reload();
@@ -1644,8 +1674,8 @@ function shellMenu(shell: ShellSpec, e: MouseEvent) {
   e.preventDefault();
   showMenu(e.clientX, e.clientY, [
     { label: tr('Open', 'Ouvrir'), icon: 'prompt', action: () => openLocalShell(shell) },
-    { label: tr('Open as administrator (separate window)', 'Ouvrir en administrateur (fenêtre séparée)'), icon: 'lock', action: () => shells.openElevated(shell).catch((err) => toast(errorText(err), 'error')) },
-    { label: tr('Default shell (Ctrl+Shift+T)', 'Shell par défaut (Ctrl+Maj+T)'), icon: 'check', action: () => setDefaultShell(shell.id) },
+    ...(canElevate(shell) ? [{ label: tr('Open as administrator (separate window)', 'Ouvrir en administrateur (fenêtre séparée)'), icon: 'lock', action: () => shells.openElevated(shell).catch((err) => toast(errorText(err), 'error')) }] : []),
+    { label: keys(tr('Default shell (Ctrl+Shift+T)', 'Shell par défaut (Ctrl+Maj+T)')), icon: 'check', action: () => setDefaultShell(shell.id) },
     'separator',
     { label: tr('Hide', 'Masquer'), icon: 'close', action: () => hideShell(shell.id) },
   ]);
@@ -1659,7 +1689,7 @@ function renderShells() {
   box.replaceChildren(...(list.length ? list.map((s) => {
     const running = state.tabs.some((t) => t.kind === 'local' && t.shell?.id === s.id && t.state === 'connected');
     const btn = h('button', {
-      class: 'tree-item shell-item', title: tr(`${s.command} ${s.args.join(' ')}${def?.id === s.id ? '\nDefault shell (Ctrl+Shift+T)' : ''}`, `${s.command} ${s.args.join(' ')}${def?.id === s.id ? '\nShell par défaut (Ctrl+Maj+T)' : ''}`),
+      class: 'tree-item shell-item', title: keys(tr(`${s.command} ${s.args.join(' ')}${def?.id === s.id ? '\nDefault shell (Ctrl+Shift+T)' : ''}`, `${s.command} ${s.args.join(' ')}${def?.id === s.id ? '\nShell par défaut (Ctrl+Maj+T)' : ''}`)),
       onclick: () => openLocalShell(s),
     }, shellIcon(s), h('span', { class: 'grow ellipsis' }, s.name), running && h('span', { class: 'dot on' }));
     btn.addEventListener('contextmenu', (e) => shellMenu(s, e));
@@ -1673,8 +1703,8 @@ function openPlusMenu(e: MouseEvent) {
   showMenu(e.clientX, e.clientY, [
     { label: tr('New session…', 'Nouvelle session…'), icon: 'plus', action: () => newSession() },
     'separator',
-    ...visibleShells().map((s) => ({ label: s.id === def?.id ? `${s.name}  (Ctrl+Maj+T)` : s.name, icon: s.icon === 'wsl' ? 'wsl' : s.icon === 'git' ? 'git' : 'prompt', action: () => openLocalShell(s) })),
-    ...(def ? [{ label: `${def.name} en administrateur`, icon: 'lock', action: () => shells.openElevated(def).catch((err) => toast(errorText(err), 'error')) }] : []),
+    ...visibleShells().map((s) => ({ label: s.id === def?.id ? `${s.name}  ${keys('(Ctrl+Maj+T)')}` : s.name, icon: s.icon === 'wsl' ? 'wsl' : s.icon === 'git' ? 'git' : 'prompt', action: () => openLocalShell(s) })),
+    ...(def && canElevate(def) ? [{ label: `${def.name} en administrateur`, icon: 'lock', action: () => shells.openElevated(def).catch((err) => toast(errorText(err), 'error')) }] : []),
     'separator',
     { label: tr('Manage local shells…', 'Gérer les shells locaux…'), icon: 'settings', action: () => openSettingsDialog(toast) },
   ]);
@@ -1697,8 +1727,8 @@ function renderLocalToolbar(tab: Tab, shell: ShellSpec) {
         id: 'record', lead: h('span', { class: 'rec-dot' }), label: tab.recording ? tr('Stop recording', 'Arrêter l’enregistrement') : tr('Record', 'Enregistrer'),
         action: () => (tab.recording ? stopRecording(tab) : startRecording(tab)), cls: tab.recording ? 'rec' : '', fold: { label: 5 },
       }] : []),
-      { id: 'commands', icon: 'commands', label: tr('Commands', 'Commandes'), title: tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)'), action: () => openPalette(snippetContext()), fold: { label: 9 } },
-      { id: 'search', icon: 'search', label: tr('Search in the terminal', 'Rechercher dans le terminal'), title: tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)'), action: () => tab.term?.openSearch(), iconOnly: true },
+      { id: 'commands', icon: 'commands', label: tr('Commands', 'Commandes'), title: keys(tr('Saved commands (Ctrl Shift P)', 'Commandes enregistrées (Ctrl Maj P)')), action: () => openPalette(snippetContext()), fold: { label: 9 } },
+      { id: 'search', icon: 'search', label: tr('Search in the terminal', 'Rechercher dans le terminal'), title: keys(tr('Search (Ctrl Shift F)', 'Rechercher (Ctrl Maj F)')), action: () => tab.term?.openSearch(), iconOnly: true },
       { id: 'split', icon: 'split', label: tr('Split screen', 'Écran partagé'), action: (e: MouseEvent) => splitMenu(e), cls: isSplit() ? 'on' : '', fold: { label: 4, menu: 10 } },
       ...(isSplit() ? [{ id: 'broadcast', icon: 'broadcast', label: state.broadcast ? tr('Multi-input: ON', 'Saisie multiple : ACTIVE') : tr('Multi-input', 'Saisie multiple'), action: () => toggleBroadcast(), cls: state.broadcast ? 'warn' : '', fold: { label: 6 } }] : []),
       { id: 'disconnect', icon: 'close', label: tr('Close', 'Fermer'), action: () => closeTab(tab.id), fold: { label: 11 } },
@@ -1728,10 +1758,10 @@ function paletteEntries(): PaletteEntry[] {
     hint: `${s.command} ${s.args.join(' ')}`, keywords: 'shell local terminal', action: () => openLocalShell(s),
   }));
   const actions: PaletteEntry[] = [
-    { label: tr('New session', 'Nouvelle session'), group: 'Action', icon: 'plus', hint: tr('Ctrl+Shift+N', 'Ctrl+Maj+N'), action: () => newSession() },
+    { label: tr('New session', 'Nouvelle session'), group: 'Action', icon: 'plus', hint: keys(tr('Ctrl+Shift+N', 'Ctrl+Maj+N')), action: () => newSession() },
     { label: tr('All sessions in a table', 'Toutes les sessions en tableau'), group: 'Action', icon: 'files', keywords: tr('library list table sort select', 'bibliothèque liste tableau trier sélection'), action: () => openLibrary() },
-    { label: tr('Quick connect', 'Connexion rapide'), group: 'Action', icon: 'link', hint: tr('Ctrl+Shift+Q', 'Ctrl+Maj+Q'), keywords: tr('address server login password unsaved adresse serveur identifiant mot de passe sans enregistrer', 'adresse serveur identifiant mot de passe sans enregistrer'), action: () => quickConnect() },
-    { label: tr('Saved commands', 'Commandes enregistrées'), group: 'Action', icon: 'commands', hint: tr('Ctrl+Shift+P', 'Ctrl+Maj+P'), action: () => openSnippetManager(snippetContext()) },
+    { label: tr('Quick connect', 'Connexion rapide'), group: 'Action', icon: 'link', hint: keys(tr('Ctrl+Shift+Q', 'Ctrl+Maj+Q')), keywords: tr('address server login password unsaved adresse serveur identifiant mot de passe sans enregistrer', 'adresse serveur identifiant mot de passe sans enregistrer'), action: () => quickConnect() },
+    { label: tr('Saved commands', 'Commandes enregistrées'), group: 'Action', icon: 'commands', hint: keys(tr('Ctrl+Shift+P', 'Ctrl+Maj+P')), action: () => openSnippetManager(snippetContext()) },
     { label: tr('Recordings', 'Enregistrements'), group: 'Action', icon: 'play', action: () => openRecordings(toast) },
     { label: tr('Import / export', 'Importer / exporter'), group: 'Action', icon: 'upload', action: () => openImportExport((msg) => { toast(msg); reload(); }, toast) },
     { label: 'Extensions', group: 'Action', icon: 'puzzle', action: () => openExtensions() },
@@ -1741,7 +1771,7 @@ function paletteEntries(): PaletteEntry[] {
     { label: tr('Command on several servers', 'Commande sur plusieurs serveurs'), group: 'Action', icon: 'commands', hint: 'Pro', keywords: tr('multi exec run all servers parallel ansible lancer tous serveurs parallèle', 'multi exec lancer tous serveurs parallèle ansible'), action: () => openMultiExec() },
     { label: tr('Network tools', 'Outils réseau'), group: 'Action', icon: 'broadcast', hint: 'Ping, traceroute, ports, DNS, Wake-on-LAN', keywords: 'ping tracert traceroute port scan dns nslookup wol wake', action: () => openNetTools() },
     { label: tr('Settings', 'Paramètres'), group: 'Action', icon: 'settings', action: () => openSettingsDialog(toast) },
-    { label: tr('Lock Portunia', 'Verrouiller Portunia'), group: 'Action', icon: 'lock', hint: tr('Ctrl+Shift+L', 'Ctrl+Maj+L'), action: () => lockNow(toast, () => reload()) },
+    { label: tr('Lock Portunia', 'Verrouiller Portunia'), group: 'Action', icon: 'lock', hint: keys(tr('Ctrl+Shift+L', 'Ctrl+Maj+L')), action: () => lockNow(toast, () => reload()) },
   ];
   return [...sessionEntries, ...shellEntries, ...actions];
 }

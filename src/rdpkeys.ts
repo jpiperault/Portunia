@@ -4,6 +4,57 @@ import { LANG, t } from './i18n';
 import type { RdpEvent } from './rdpplayer';
 
 
+/** Réglage « Touche ⌘ envoyée comme » (Mac) : Ctrl par défaut, ou la touche Windows. */
+export type MetaMapping = 'ctrl' | 'windows';
+
+/**
+ * Touche physique réellement transmise à la session distante (RDP : le code, VNC : le keysym).
+ * Sur Mac, ⌘ devient Contrôle sauf si le réglage dit « Windows » ; les autres touches (⌥ = Alt…) ne changent pas.
+ */
+export function remapMeta(code: string, keysym: number, mapping: MetaMapping, mac: boolean): { code: string; keysym: number } {
+  if (!mac || mapping !== 'ctrl') return { code, keysym };
+  if (code === 'MetaLeft') return { code: 'ControlLeft', keysym: 0xffe3 };
+  if (code === 'MetaRight') return { code: 'ControlRight', keysym: 0xffe4 };
+  return { code, keysym };
+}
+
+/**
+ * Frappe en direct (écran RDP ou VNC) : touche transmise, et `releaseNow` quand il faut la relâcher aussitôt.
+ * Sur Mac, WebKit n'envoie pas `keyup` pour une touche pressée pendant que ⌘ est maintenue.
+ */
+export function liveKey(
+  e: { code: string; metaKey: boolean },
+  keysym: number,
+  mapping: MetaMapping,
+  mac: boolean,
+): { code: string; keysym: number; releaseNow: boolean } {
+  const mapped = remapMeta(e.code, keysym, mapping, mac);
+  return { ...mapped, releaseNow: mac && e.metaKey && !MODIFIER_CODE.test(e.code) };
+}
+
+/** Modificateurs : WebKit envoie bien leur keyup (flagsChanged), on ne les relâche jamais d'avance (⌘⌥X garde Alt, AltGr reste entier). */
+const MODIFIER_CODE = /^(Shift|Alt|Control|Meta)(Left|Right)$|^CapsLock$/;
+
+/** Touche enfoncée côté session distante, retenue pour le relâchement. */
+export interface HeldKey { keysym: number; code: string }
+
+/**
+ * Au keyup d'une touche ⌘ : touches restées enfoncées côté serveur (leur keyup ayant été avalé par WebKit),
+ * à relâcher pour qu'aucune ne reste bloquée. Les touches ⌘ elles-mêmes ne sont pas concernées.
+ */
+export function releaseOnMetaUp(pressed: ReadonlyMap<string, HeldKey>, upCode: string): (HeldKey & { held: string })[] {
+  if (!upCode.startsWith('Meta')) return [];
+  return [...pressed].filter(([held]) => !held.startsWith('Meta')).map(([held, key]) => ({ ...key, held }));
+}
+
+/** Combinaisons ⌘ qui restent à macOS ou à Portunia quand l'écran distant a le focus : Quitter, Masquer, Réduire, Réglages. */
+export const MAC_APP_KEYS: readonly string[] = ['q', 'h', 'm', ','];
+
+/** ⌘Q/⌘H/⌘M/⌘, (sans Maj) : ni interceptés ni envoyés à la session. Toutes les autres combinaisons ⌘ partent vers elle. */
+export function isMacAppKey(e: { key: string; metaKey: boolean; shiftKey: boolean }, mac: boolean): boolean {
+  return mac && e.metaKey && !e.shiftKey && MAC_APP_KEYS.includes(e.key.toLowerCase());
+}
+
 /** Une touche par code (jeu 1) : [normal, majuscule, AltGr]. */
 type Layout = Record<number, [string, string, string?]>;
 

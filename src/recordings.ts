@@ -7,6 +7,7 @@ import { formatSize } from './files';
 import { settings, updateSettings } from './settings';
 import { proChip } from './security';
 import { LOCALE, t } from './i18n';
+import { revealLabels } from './platform';
 
 type Toast = (message: string, kind?: 'info' | 'error') => void;
 
@@ -68,7 +69,7 @@ export function openRecordings(toast: Toast, onPlay?: (title: string, cast: stri
             } catch (e) { toast(errorText(e), 'error'); }
           },
         }, icon('play', 14), t('Play', 'Lire')),
-        h('button', { class: 'icon-btn sm', 'aria-label': t(`Show ${r.name} in Explorer`, `Afficher ${r.name} dans l'Explorateur`), title: t('Show in Explorer', 'Afficher dans l\'Explorateur'), onclick: () => revealItemInDir(r.path).catch(() => {}) }, icon('folder', 14)),
+        h('button', { class: 'icon-btn sm', 'aria-label': revealLabels(r.name).aria, title: revealLabels(r.name).title, onclick: () => revealItemInDir(r.path).catch(() => {}) }, icon('folder', 14)),
         h('button', {
           class: 'icon-btn sm', 'aria-label': t(`Delete ${r.name}`, `Supprimer ${r.name}`), title: t('Delete', 'Supprimer'),
           onclick: async () => {

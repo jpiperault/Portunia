@@ -9,6 +9,11 @@ import { recordingSettings } from './recordings';
 import { TERMINAL_THEMES } from './theme';
 import { shellSettings } from './localshells';
 import { t } from './i18n';
+import { IS_MAC, keys } from './platform';
+import type { MetaMapping } from './rdpkeys';
+
+/** « Comme Windows » / « Comme macOS » : libellé du réglage qui suit le système. */
+const likeSystem = () => (IS_MAC ? t('Like macOS', 'Comme macOS') : t('Like Windows', 'Comme Windows'));
 
 export interface Settings {
   fontFamily: string;
@@ -53,6 +58,8 @@ export interface Settings {
   language: 'auto' | 'en' | 'fr';
   /** Sessions épinglées en tête de la barre latérale. */
   favorites: string[];
+  /** Mac : la touche ⌘ est envoyée comme Ctrl (défaut) ou comme la touche Windows, en Bureau à distance. */
+  metaKeyAs: MetaMapping;
 }
 
 export const DEFAULTS: Settings = {
@@ -80,6 +87,7 @@ export const DEFAULTS: Settings = {
   installedExtensions: [],
   language: 'auto',
   favorites: [],
+  metaKeyAs: 'ctrl',
 };
 
 export const FONTS = ['Cascadia Mono', 'Cascadia Code', 'Consolas', 'Lucida Console', 'Courier New'];
@@ -132,7 +140,7 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         h('div', { class: 'row2' },
           h('label', { class: 'fld' }, t('Theme', 'Thème'),
             h('select', { onchange: (e: Event) => updateSettings({ uiTheme: (e.target as HTMLSelectElement).value as Settings['uiTheme'] }) },
-              ...([['dark', t('Dark', 'Sombre')], ['light', t('Light', 'Clair')], ['system', t('Like Windows', 'Comme Windows')]] as const).map(([v, l]) => h('option', { value: v, selected: v === s.uiTheme }, l)))),
+              ...([['dark', t('Dark', 'Sombre')], ['light', t('Light', 'Clair')], ['system', likeSystem()]] as const).map(([v, l]) => h('option', { value: v, selected: v === s.uiTheme }, l)))),
           h('label', { class: 'fld' }, t('Terminal colours', 'Couleurs du terminal'),
             h('select', { onchange: (e: Event) => updateSettings({ termTheme: (e.target as HTMLSelectElement).value }) },
               h('option', { value: 'auto', selected: s.termTheme === 'auto' }, t('Automatic (follows the theme)', 'Automatique (selon le thème)')),
@@ -141,14 +149,14 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         h('div', { class: 'row2' },
           h('label', { class: 'fld' }, 'Language · Langue',
             h('select', { onchange: (e: Event) => { updateSettings({ language: (e.target as HTMLSelectElement).value as Settings['language'] }); langNote.hidden = false; } },
-              ...([['auto', t('Like Windows', 'Comme Windows')], ['en', 'English'], ['fr', 'Français']] as const).map(([v, l]) => h('option', { value: v, selected: v === s.language }, l))))),
+              ...([['auto', likeSystem()], ['en', 'English'], ['fr', 'Français']] as const).map(([v, l]) => h('option', { value: v, selected: v === s.language }, l))))),
         langNote,
         h('h3', { class: 'label' }, 'Terminal'),
         h('div', { class: 'row2' },
           h('label', { class: 'fld' }, t('Font', 'Police'),
             h('select', { onchange: (e: Event) => updateSettings({ fontFamily: (e.target as HTMLSelectElement).value }) },
               ...FONTS.map((f) => h('option', { value: f, selected: f === s.fontFamily }, f)))),
-          h('label', { class: 'fld' }, t('Size (Ctrl + wheel in the terminal)', 'Taille (Ctrl + molette dans le terminal)'),
+          h('label', { class: 'fld' }, keys(t('Size (Ctrl + wheel in the terminal)', 'Taille (Ctrl + molette dans le terminal)')),
             h('input', { type: 'number', min: '8', max: '32', value: String(s.fontSize), oninput: (e: Event) => {
               const v = Number((e.target as HTMLInputElement).value);
               if (v >= 8 && v <= 32) updateSettings({ fontSize: v });
@@ -173,6 +181,10 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
         highlightSettings(),
         h('h3', { class: 'label' }, t('Connection', 'Connexion')),
         check('autoReconnect', t('Automatic reconnection', 'Reconnexion automatique'), t('After a network cut or sleep, Portunia reconnects by itself.', 'Après une coupure réseau ou une mise en veille, Portunia se reconnecte tout seul.')),
+        IS_MAC && h('label', { class: 'fld' }, t('⌘ key sent as', 'Touche ⌘ envoyée comme'),
+          h('select', { onchange: (e: Event) => updateSettings({ metaKeyAs: (e.target as HTMLSelectElement).value as MetaMapping }) },
+            ...([['ctrl', 'Ctrl'], ['windows', 'Windows']] as const).map(([v, l]) => h('option', { value: v, selected: v === s.metaKeyAs }, l)))),
+        IS_MAC && h('p', { class: 'muted small', style: 'margin: 0' }, t('Remote Desktop and VNC screens. With Ctrl, ⌘C and ⌘V copy and paste on Windows; ⌥ is always Alt.', 'Écrans Bureau à distance et VNC. Avec Ctrl, ⌘C et ⌘V copient et collent sous Windows ; ⌥ reste toujours Alt.')),
         h('h3', { class: 'label' }, t('Security', 'Sécurité')),
         securitySection(toastFn, () => {}),
         h('h3', { class: 'label' }, t('Licence', 'Licence')),
@@ -190,11 +202,11 @@ export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'e
             ...[[30, t('Every 30 seconds', 'Toutes les 30 secondes')], [60, t('Every minute', 'Toutes les minutes')], [300, t('Every 5 minutes', 'Toutes les 5 minutes')]].map(([v, l]) => h('option', { value: String(v), selected: v === s.monitorInterval }, String(l))))),
         h('label', { class: 'check setting' },
           h('input', { type: 'checkbox', checked: s.monitorAlerts, onchange: (e: Event) => updateSettings({ monitorAlerts: (e.target as HTMLInputElement).checked }) }),
-          h('span', {}, t('Notify me when a server goes down or comes back ', 'Me prévenir quand un serveur tombe ou revient '), proChip('monitoringAlerts'), h('span', { class: 'muted small block' }, t('Windows notification, even when Portunia is in the background.', 'Notification Windows, même quand Portunia est en arrière-plan.')))),
+          h('span', {}, t('Notify me when a server goes down or comes back ', 'Me prévenir quand un serveur tombe ou revient '), proChip('monitoringAlerts'), h('span', { class: 'muted small block' }, IS_MAC ? t('macOS notification, even when Portunia is in the background.', 'Notification macOS, même quand Portunia est en arrière-plan.') : t('Windows notification, even when Portunia is in the background.', 'Notification Windows, même quand Portunia est en arrière-plan.')))),
         h('h3', { class: 'label' }, t('Updates', 'Mises à jour')),
         check('autoUpdate', t('Check for updates at startup', 'Vérifier les mises à jour au démarrage'), t('A banner offers the new version; nothing installs without your consent.', 'Une bannière propose la nouvelle version ; rien ne s’installe sans votre accord.')),
         h('button', { type: 'button', class: 'btn', style: 'align-self: flex-start', onclick: () => checkForUpdates(toastFn) }, icon('refresh', 14), t('Check now', 'Rechercher maintenant')),
-        h('p', { class: 'muted small' }, t('Shortcuts: Ctrl+Shift+F search in the terminal · Ctrl+click a link to open it · Ctrl+Shift+C / V copy / paste.', 'Raccourcis : Ctrl+Maj+F rechercher dans le terminal · Ctrl+clic sur un lien pour l\'ouvrir · Ctrl+Maj+C / V copier / coller.'))),
+        h('p', { class: 'muted small' }, keys(t('Shortcuts: Ctrl+Shift+F search in the terminal · Ctrl+click a link to open it · Ctrl+Shift+C / V copy / paste.', 'Raccourcis : Ctrl+Maj+F rechercher dans le terminal · Ctrl+clic sur un lien pour l\'ouvrir · Ctrl+Maj+C / V copier / coller.')))),
       h('footer', { class: 'dlg-foot' },
         h('button', { type: 'button', class: 'btn', onclick: () => { updateSettings({ ...DEFAULTS }); dialog.close(); openSettingsDialog(toastFn); } }, t('Defaults', 'Valeurs par défaut')),
         h('button', { type: 'submit', class: 'btn primary' }, t('Close', 'Fermer')))));

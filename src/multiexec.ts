@@ -3,6 +3,7 @@
 import { errorText, multiExec, MultiEvent, net, Session, Snippet } from './api';
 import { h, icon } from './dom';
 import { t } from './i18n';
+import { isMod, keys } from './platform';
 
 interface Row {
   session: Session;
@@ -113,7 +114,7 @@ export function createMultiExec(
         onclick: () => navigator.clipboard.writeText(rows.map((r) => t(`### ${r.session.name} (${r.state === 'ok' ? 'succeeded' : r.state === 'waiting' ? 'running' : 'failed'})\n${r.output ?? ''}`, `### ${r.session.name} (${r.state === 'ok' ? 'réussi' : r.state === 'waiting' ? t('ongoing', 'en cours') : 'échec'})\n${r.output ?? ''}`)).join('\n\n')).then(() => toast(t('Results copied', 'Résultats copiés'))),
       }, icon('copy', 14), t('Copy', 'Copier')),
       h('button', { type: 'button', class: 'btn sm', onclick: () => { for (const r of rows) r.open = true; renderResults(); } }, t('Expand all', 'Tout déplier')),
-    ] : [h('span', { class: 'muted' }, t('Choose servers, type a command, then « Run » (Ctrl+Enter).', 'Choisissez des serveurs, tapez une commande, puis « Lancer » (Ctrl+Entrée).'))]));
+    ] : [h('span', { class: 'muted' }, keys(t('Choose servers, type a command, then « Run » (Ctrl+Enter).', 'Choisissez des serveurs, tapez une commande, puis « Lancer » (Ctrl+Entrée).')))]));
   };
 
   const onEvent = (e: MultiEvent) => {
@@ -160,7 +161,7 @@ export function createMultiExec(
     }
   };
   runBtn.addEventListener('click', run);
-  command.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.ctrlKey) { e.preventDefault(); run(); } });
+  command.addEventListener('keydown', (e) => { if (e.key === 'Enter' && isMod(e)) { e.preventDefault(); run(); } });
   search.addEventListener('input', renderPicker);
 
   const el = h('div', { class: 'mx' },

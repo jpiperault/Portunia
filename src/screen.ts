@@ -5,6 +5,9 @@ import { h } from './dom';
 import type { TermState } from './terminal';
 import { open } from '@tauri-apps/plugin-dialog';
 import { t } from './i18n';
+import { IS_MAC, isMod } from './platform';
+import { isMacAppKey, liveKey, releaseOnMetaUp } from './rdpkeys';
+import { settings } from './settings';
 
 /** Ouvre la connexion à la taille demandée (session enregistrée ou connexion rapide). */
 export type ScreenOpener = (width: number, height: number, onEvent: (e: TermEvent) => void) => Promise<ConnectResponse>;
@@ -62,7 +65,7 @@ export class ScreenView {
   private disposed = false;
   /** Les images JPEG se décodent de façon asynchrone : on garde l'ordre des dessins. */
   private drawing: Promise<void> = Promise.resolve();
-  private pressed = new Map<string, number>();
+  private pressed = new Map<string, { keysym: number; code: string }>();
   private buttons = 0;
   private lastMove = 0;
   /** true : l'image s'adapte à l'onglet ; false : taille réelle avec défilement. */
@@ -311,24 +314,44 @@ export class ScreenView {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
 
     c.addEventListener('keydown', (e) => {
-      // Ctrl+Maj+… reste aux raccourcis de Portunia.
-      if (e.ctrlKey && e.shiftKey && !e.altKey) return;
-      const keysym = keysymOf(e);
-      if (keysym === null) return;
+      // Ctrl+Maj+… (⌘+Maj+… sur Mac) reste aux raccourcis de Portunia.
+      if (isMod(e) && e.shiftKey && !e.altKey) return;
+      // Mac : ⌘Q, ⌘H, ⌘M et ⌘, restent à macOS et à l'application (ni interceptés ni envoyés).
+      if (isMacAppKey(e, IS_MAC)) return;
+      const raw = keysymOf(e);
+      if (raw === null) return;
       e.preventDefault();
-      this.pressed.set(e.code, keysym);
-      this.send({ type: 'key', keysym, down: true, code: e.code });
+      // Sur Mac, ⌘ part comme Ctrl (ou comme la touche Windows, selon le réglage) ; ⌥ reste Alt.
+      const key = liveKey(e, raw, settings().metaKeyAs, IS_MAC);
+      this.send({ type: 'key', keysym: key.keysym, down: true, code: key.code });
+      if (key.releaseNow) this.send({ type: 'key', keysym: key.keysym, down: false, code: key.code });
+      else this.pressed.set(e.code, { keysym: key.keysym, code: key.code });
     });
     c.addEventListener('keyup', (e) => {
-      const keysym = this.pressed.get(e.code) ?? keysymOf(e);
+      if (isMacAppKey({ key: e.key, metaKey: true, shiftKey: e.shiftKey }, IS_MAC) && !this.pressed.has(e.code)) return;
+      const held = this.pressed.get(e.code);
       this.pressed.delete(e.code);
-      if (keysym === null) return;
+      // ⌘ relâchée : WebKit a pu avaler les keyup des touches pressées sous ⌘, on les libère côté serveur.
+      if (IS_MAC) {
+        for (const stuck of releaseOnMetaUp(this.pressed, e.code)) {
+          this.pressed.delete(stuck.held);
+          this.send({ type: 'key', keysym: stuck.keysym, down: false, code: stuck.code });
+        }
+      }
+      if (!held) {
+        const raw = keysymOf(e);
+        if (raw === null) return;
+        const key = liveKey(e, raw, settings().metaKeyAs, IS_MAC);
+        e.preventDefault();
+        this.send({ type: 'key', keysym: key.keysym, down: false, code: key.code });
+        return;
+      }
       e.preventDefault();
-      this.send({ type: 'key', keysym, down: false, code: e.code });
+      this.send({ type: 'key', keysym: held.keysym, down: false, code: held.code });
     });
     // Fenêtre quittée touches enfoncées : on les relâche côté serveur.
     c.addEventListener('blur', () => {
-      for (const [code, keysym] of this.pressed) this.send({ type: 'key', keysym, down: false, code });
+      for (const held of this.pressed.values()) this.send({ type: 'key', keysym: held.keysym, down: false, code: held.code });
       this.pressed.clear();
     });
 

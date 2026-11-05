@@ -11,6 +11,7 @@ import { showMenu } from './menu';
 import { fontStack, onSettingsChange, settings, updateSettings } from './settings';
 import { terminalTheme } from './theme';
 import { t } from './i18n';
+import { IS_MAC, isMod, termShortcut } from './platform';
 
 export type TermState = 'connecting' | 'connected' | 'reconnecting' | 'closed';
 
@@ -127,9 +128,9 @@ export class TerminalView {
     });
     this.term.loadAddon(this.fit);
     this.term.loadAddon(this.search);
-    // Ctrl+clic sur un lien : ouvert dans le navigateur (un simple clic sélectionne).
+    // Ctrl+clic (⌘+clic sur Mac) sur un lien : ouvert dans le navigateur (un simple clic sélectionne).
     this.term.loadAddon(new WebLinksAddon((event, uri) => {
-      if (event.ctrlKey) openUrl(uri).catch(() => {});
+      if (isMod(event)) openUrl(uri).catch(() => {});
     }));
     this.term.open(container);
     // Collage natif (Ctrl+V, menu du navigateur) : même vérification que les autres collages.
@@ -146,13 +147,12 @@ export class TerminalView {
 
     // Ctrl+Maj+… est réservé à l'application : Ctrl+W, Ctrl+K… restent aux programmes du terminal.
     this.term.attachCustomKeyEventHandler((e) => {
-      if (!(e.ctrlKey && e.shiftKey)) return true;
-      if (e.type !== 'keydown') return false;
-      const key = e.key.toLowerCase();
-      if (key === 'c' && this.term.hasSelection()) copy(this.term.getSelection());
-      else if (key === 'v') this.pasteClipboard();
-      else if (key === 'f') this.openSearch();
-      return false;
+      // Sur Mac, ⌘+Maj+… est réservé ; ⌘C copie, ⌘V est laissé à l'événement paste natif (menu Édition), Ctrl+C reste au shell.
+      const { pass, action } = termShortcut(e, IS_MAC, this.term.hasSelection());
+      if (action === 'copy') copy(this.term.getSelection());
+      else if (action === 'paste') this.pasteClipboard();
+      else if (action === 'search') this.openSearch();
+      return pass;
     });
 
     this.term.onData((data) => {
@@ -200,7 +200,7 @@ export class TerminalView {
 
     // Ctrl + molette : taille du texte (pour tous les terminaux).
     container.addEventListener('wheel', (e) => {
-      if (!e.ctrlKey) return;
+      if (!isMod(e)) return;
       e.preventDefault();
       e.stopPropagation();
       updateSettings({ fontSize: settings().fontSize + (e.deltaY < 0 ? 1 : -1) });
