@@ -35,6 +35,7 @@ jobs:
       - run: node scripts/build-rdp.mjs
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path rdp-helper/Cargo.toml
+      - run: npm test
       - run: npm run build
       - run: npm run tauri build -- --no-bundle
 
@@ -63,4 +64,5 @@ jobs:
       - run: node scripts/build-rdp.mjs
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path rdp-helper/Cargo.toml
+      - run: npm test
       - run: npm run build
