@@ -490,10 +490,10 @@ export const proxmox = {
 };
 
 /** Console d'une machine virtuelle, d'un conteneur ou d'un nœud (onglet VNC). */
-export function connectProxmox(id: string, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+export function connectProxmox(id: string, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, cols: number, rows: number, onEvent: (e: TermEvent) => void, upgrade = false) {
   const channel = new Channel<TermEvent>();
   channel.onmessage = onEvent;
-  return invoke<ConnectResponse>('pve_console', { id, node, kind, vmid, cols, rows, onEvent: channel });
+  return invoke<ConnectResponse>('pve_console', { id, node, kind, vmid, upgrade, cols, rows, onEvent: channel });
 }
 
 // ---------- Clés SSH ----------

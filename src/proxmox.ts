@@ -1,17 +1,19 @@
 // Extension Proxmox VE : serveurs Proxmox dans la barre latérale, nœuds, machines virtuelles et
 // conteneurs avec leur état ; actions, consoles, instantanés, sauvegardes, clonage, migration,
 // ressources, tâches et stockages. Tout passe par l'API de Proxmox (commande pve_api).
+// Création de machines et gestion des nœuds : proxmoxadmin.ts.
 import { errorText, Manifest, proxmox, Pve, PveResource } from './api';
 import { h, icon } from './dom';
 import { LOCALE, t } from './i18n';
 import { MenuItem, showMenu } from './menu';
+import { nodePower, openCreateCt, openCreateVm, openDisks, openJournal, openNetwork, openServices, openUpdates } from './proxmoxadmin';
 
 /** Proxmox VE apparaît dans la page Extensions comme les protocoles. */
 export const PROXMOX_EXTENSION: Manifest = {
   id: 'proxmox',
   name: 'Proxmox VE',
   version: '1.0.0',
-  description: t('Proxmox servers in the sidebar: virtual machines and containers, start and stop, consoles, snapshots, backups, clone, migrate, tasks and storage.', 'Serveurs Proxmox dans la barre latérale : machines virtuelles et conteneurs, démarrage et arrêt, consoles, instantanés, sauvegardes, clonage, migration, tâches et stockages.'),
+  description: t('Proxmox servers in the sidebar: create, start and stop virtual machines and containers, consoles, snapshots, backups, clone, migrate, tasks and storage; node updates, services, log, network and disks.', 'Serveurs Proxmox dans la barre latérale : création, démarrage et arrêt des machines virtuelles et conteneurs, consoles, instantanés, sauvegardes, clonage, migration, tâches et stockages ; mises à jour, services, journal, réseau et disques des nœuds.'),
   view: 'screen',
   builtin: true,
   catalog: true,
@@ -23,7 +25,7 @@ export const PROXMOX_EXTENSION: Manifest = {
 export interface ProxmoxHost {
   toast(message: string, kind?: 'info' | 'error'): void;
   /** Console VNC dans un onglet (machine virtuelle, conteneur, ou shell du nœud). */
-  openConsole(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string): void;
+  openConsole(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string, upgrade?: boolean): void;
   /** Onglet de supervision du serveur, ou d'un seul de ses nœuds. */
   openMonitor(p: Pve, node?: string): void;
   /** Console impossible sans l'extension VNC. */
@@ -47,7 +49,7 @@ export function bytes(n?: number): string {
   while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
   return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${t(unitsEn[i], units[i])}`;
 }
-const date = (s?: number) => (s ? new Date(s * 1000).toLocaleString(LOCALE) : '');
+export const date = (s?: number) => (s ? new Date(s * 1000).toLocaleString(LOCALE) : '');
 export const guestLabel = (g: PveResource) => `${g.vmid} · ${g.name ?? ''}`;
 const kindLabel = (g: PveResource) => (g.type === 'qemu' ? t('virtual machine', 'machine virtuelle') : t('container', 'conteneur'));
 
@@ -153,6 +155,8 @@ export class ProxmoxPanel {
     const nodes = this.nodes(p.id);
     return [
       { label: t('Monitoring', 'Supervision'), icon: 'chart', action: () => this.host.openMonitor(p) },
+      { label: t('Create a virtual machine…', 'Créer une machine virtuelle…'), icon: 'desktop', action: () => openCreateVm(this, p) },
+      { label: t('Create a container…', 'Créer un conteneur…'), icon: 'box', action: () => openCreateCt(this, p) },
       { label: t('Refresh', 'Actualiser'), icon: 'refresh', action: () => this.refresh(p.id) },
       { label: t('Tasks', 'Tâches'), icon: 'commands', action: () => openTasks(this, p) },
       { label: t('Storage', 'Stockages'), icon: 'drive', action: () => openStorage(this, p, nodes) },
@@ -168,6 +172,11 @@ export class ProxmoxPanel {
         },
       },
     ];
+  }
+
+  /** Machines et conteneurs connus d'un serveur (dernier inventaire). */
+  guests(id: string): PveResource[] {
+    return (this.resources.get(id) ?? []).filter((r) => r.type === 'qemu' || r.type === 'lxc');
   }
 
   nodes(id: string): string[] {
@@ -202,8 +211,20 @@ export class ProxmoxPanel {
       const nodeMenu = (): (MenuItem | 'separator')[] => [
         { label: t('Monitoring', 'Supervision'), icon: 'chart', action: () => this.host.openMonitor(p, node.node) },
         { label: t('Node shell', 'Shell du nœud'), icon: 'terminal', action: () => this.console(p, node.node, 'node', null, `${node.node}`) },
+        'separator',
+        { label: t('Create a virtual machine…', 'Créer une machine virtuelle…'), icon: 'desktop', action: () => openCreateVm(this, p, node.node) },
+        { label: t('Create a container…', 'Créer un conteneur…'), icon: 'box', action: () => openCreateCt(this, p, node.node) },
+        'separator',
+        { label: t('Updates', 'Mises à jour'), icon: 'download', action: () => openUpdates(this, p, node.node) },
+        { label: t('Services', 'Services'), icon: 'settings', action: () => openServices(this, p, node.node) },
+        { label: t('System log', 'Journal système'), icon: 'commands', action: () => openJournal(this, p, node.node) },
+        { label: t('Network', 'Réseau'), icon: 'broadcast', action: () => openNetwork(this, p, node.node) },
+        { label: t('Disks', 'Disques'), icon: 'drive', action: () => openDisks(this, p, node.node) },
         { label: t('Storage', 'Stockages'), icon: 'drive', action: () => openStorage(this, p, [node.node]) },
         { label: t('Tasks', 'Tâches'), icon: 'commands', action: () => openTasks(this, p, node.node) },
+        'separator',
+        { label: t('Restart the node…', 'Redémarrer le nœud…'), icon: 'refresh', danger: true, action: () => nodePower(this, p, node.node, 'reboot') },
+        { label: t('Shut down the node…', 'Éteindre le nœud…'), icon: 'power', danger: true, action: () => nodePower(this, p, node.node, 'shutdown') },
       ];
       row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, nodeMenu()); });
       out.push(row);
@@ -286,9 +307,9 @@ export class ProxmoxPanel {
     return items;
   }
 
-  console(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string) {
+  console(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string, upgrade = false) {
     if (!this.host.vncEnabled()) return this.host.toast(t('Enable the VNC extension (Extensions): Proxmox consoles use it.', 'Activez l\'extension VNC (Extensions) : les consoles Proxmox s\'en servent.'), 'error');
-    this.host.openConsole(p, node, kind, vmid, title);
+    this.host.openConsole(p, node, kind, vmid, title, upgrade);
   }
 
   /** Lance une action (tâche Proxmox), la suit jusqu'à sa fin et actualise. */
@@ -352,7 +373,7 @@ function matches(r: PveResource, filter: string): boolean {
 
 // ---------- Fenêtres ----------
 
-function modal(title: string, body: (HTMLElement | null)[], buttons: HTMLElement[], wide = false) {
+export function modal(title: string, body: (HTMLElement | null)[], buttons: HTMLElement[], wide = false) {
   const error = h('p', { class: 'form-error', role: 'alert' });
   const form = h('form', { method: 'dialog' },
     h('header', { class: 'dlg-head' }, h('h2', {}, title)),
@@ -364,29 +385,29 @@ function modal(title: string, body: (HTMLElement | null)[], buttons: HTMLElement
   return { dialog, form, error };
 }
 
-function field(label: string, control: HTMLElement, hint?: string) {
+export function field(label: string, control: HTMLElement, hint?: string) {
   return h('label', { class: 'fld' }, h('span', {}, label, hint ? h('span', { class: 'muted small' }, ` ${hint}`) : null), control);
 }
 
-function input(attrs: Record<string, unknown>) {
+export function input(attrs: Record<string, unknown>) {
   return h('input', { type: 'text', spellcheck: 'false', autocomplete: 'off', class: 'input', ...attrs }) as HTMLInputElement;
 }
 
-function select(options: [string, string][], value?: string) {
+export function select(options: [string, string][], value?: string) {
   const s = h('select', { class: 'input' }, ...options.map(([v, label]) => h('option', { value: v, selected: v === value }, label))) as HTMLSelectElement;
   return s;
 }
 
-function check(label: string, checked = false) {
+export function check(label: string, checked = false) {
   const box = h('input', { type: 'checkbox', checked }) as HTMLInputElement;
   return { box, row: h('label', { class: 'check-row' }, box, h('span', {}, label)) };
 }
 
-function table(head: string[], rows: HTMLElement[]) {
+export function table(head: string[], rows: HTMLElement[]) {
   return h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, ...head.map((x) => h('th', {}, x)))), h('tbody', {}, ...rows)));
 }
 
-const closeButton = (dialog: HTMLDialogElement) => h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, t('Close', 'Fermer'));
+export const closeButton = (dialog: HTMLDialogElement) => h('button', { type: 'button', class: 'btn', onclick: () => dialog.close() }, t('Close', 'Fermer'));
 
 /** Ajout ou modification d'un serveur : adresse, empreinte à vérifier, compte et secret. */
 function openServerForm(existing?: Pve): Promise<Pve | null> {

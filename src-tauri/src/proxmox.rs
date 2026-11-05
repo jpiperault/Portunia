@@ -347,7 +347,7 @@ pub async fn pve_api(state: State<'_, AppState>, id: String, method: String, pat
 /// (`node`) : la console VNC de Proxmox, relayée sur un port local, ouverte par le moteur VNC.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub async fn pve_console(app: AppHandle, state: State<'_, AppState>, id: String, node: String, kind: String, vmid: Option<u32>, cols: u16, rows: u16, on_event: Channel) -> CmdResult<ConnectResponse> {
+pub async fn pve_console(app: AppHandle, state: State<'_, AppState>, id: String, node: String, kind: String, vmid: Option<u32>, upgrade: Option<bool>, cols: u16, rows: u16, on_event: Channel) -> CmdResult<ConnectResponse> {
     require(&state)?;
     let p = find(&state.data_dir, &id).map_err(full)?;
     if node.is_empty() || !node.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') {
@@ -359,6 +359,8 @@ pub async fn pve_console(app: AppHandle, state: State<'_, AppState>, id: String,
         _ => return Err("console inconnue".into()),
     };
     let (start, params) = match kind.as_str() {
+        // « upgrade » : le shell lance la mise à jour des paquets (apt dist-upgrade), comme dans Proxmox.
+        "node" if upgrade == Some(true) => (format!("{base}/vncshell"), json!({ "websocket": true, "cmd": "upgrade" })),
         "node" => (format!("{base}/vncshell"), json!({ "websocket": true })),
         // Les machines virtuelles donnent un mot de passe VNC à part ; ailleurs, le ticket en sert.
         "qemu" => (format!("{base}/vncproxy"), json!({ "websocket": true, "generate-password": true })),

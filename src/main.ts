@@ -328,10 +328,10 @@ function openAssist(b: Gate, code: string) {
 
 const proxmoxPanel = new ProxmoxPanel($('proxmox'), {
   toast,
-  openConsole: (p, node, kind, vmid, title) => {
+  openConsole: (p, node, kind, vmid, title, upgrade) => {
     // Console VNC de Proxmox, relayée par Portunia : onglet VNC habituel.
     const session: Session = { id: '', name: `${title} · ${p.name}`, folder: '', protocol: 'vnc', tags: [], secretKeys: [], values: { host: p.host, port: p.port } };
-    const connect = (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => connectProxmox(p.id, node, kind, vmid, cols, rows, onEvent);
+    const connect = (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => connectProxmox(p.id, node, kind, vmid, cols, rows, onEvent, upgrade);
     openSession(session, undefined, { connect, typing: false });
   },
   openMonitor: (p, node) => openProxmoxMonitor(p, node),
