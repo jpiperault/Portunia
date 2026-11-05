@@ -3,6 +3,8 @@
 pub mod forward;
 pub mod ftp;
 pub mod local;
+#[cfg(unix)]
+pub mod local_unix;
 pub mod rdp;
 pub mod s3;
 pub mod serial;

@@ -32,8 +32,8 @@ pub struct KeyInfo {
 }
 
 pub fn ssh_dir() -> Result<PathBuf> {
-    let home = std::env::var_os("USERPROFILE").ok_or_else(|| anyhow!(t!("Home folder not found", "Dossier personnel introuvable")))?;
-    Ok(PathBuf::from(home).join(".ssh"))
+    let home = crate::platform::home_dir().ok_or_else(|| anyhow!(t!("Home folder not found", "Dossier personnel introuvable")))?;
+    Ok(home.join(".ssh"))
 }
 
 /// Clés de ~/.ssh : chaque fichier .pub accompagné de sa clé privée.

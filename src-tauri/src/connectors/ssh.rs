@@ -23,7 +23,6 @@ use russh::{
     },
     mac, ChannelMsg, Disconnect, Names, Preferred,
 };
-#[cfg(windows)]
 use russh::keys::agent::client::AgentClient;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
@@ -577,10 +576,62 @@ async fn auth_password(handle: &mut client::Handle<Handler>, user: &str, passwor
     Ok(false)
 }
 
-/// Hors Windows : pas encore d'agent (SSH_AUTH_SOCK arrive au sprint 2).
-#[cfg(not(windows))]
-async fn auth_agent(_handle: &mut client::Handle<Handler>, _user: &str) -> Result<bool> {
-    bail!(t!("SSH agent is not supported on this platform yet", "L'agent SSH n'est pas encore pris en charge sur cette plateforme"))
+/// Agent SSH Unix : la socket désignée par `SSH_AUTH_SOCK` (launchd sur macOS).
+#[cfg(unix)]
+async fn auth_agent(handle: &mut client::Handle<Handler>, user: &str) -> Result<bool> {
+    let path = std::env::var_os("SSH_AUTH_SOCK").map(PathBuf::from).ok_or_else(|| {
+        anyhow!("{}", t!("No SSH agent found: SSH_AUTH_SOCK is not set", "Aucun agent SSH trouvé : la variable SSH_AUTH_SOCK n'est pas définie"))
+    })?;
+    let stream = connect_agent_socket(&path).await?;
+    try_agent(handle, user, AgentClient::connect(stream)).await
+}
+
+/// Se connecte d'abord, puis vérifie l'identité du pair sur la socket déjà connectée : on ne
+/// re-résout pas le chemin entre le contrôle et la connexion (pas de fenêtre TOCTOU).
+#[cfg(unix)]
+async fn connect_agent_socket(path: &Path) -> Result<tokio::net::UnixStream> {
+    // Erreur précoce et lisible : fichier ordinaire, socket d'un autre utilisateur.
+    check_agent_socket(path, current_uid())?;
+    let stream = tokio::net::UnixStream::connect(path)
+        .await
+        .map_err(|e| anyhow!("{}", t!(format!("Cannot reach the SSH agent: {e}"), format!("Agent SSH injoignable : {e}"))))?;
+    let peer = stream
+        .peer_cred()
+        .map_err(|e| anyhow!("{}", t!(format!("Cannot identify the SSH agent: {e}"), format!("Agent SSH non identifiable : {e}"))))?;
+    check_peer_uid(peer.uid(), current_uid())?;
+    Ok(stream)
+}
+
+/// Décision : le processus au bout de la socket doit tourner sous notre uid.
+#[cfg(unix)]
+fn check_peer_uid(peer_uid: u32, uid: u32) -> Result<()> {
+    if peer_uid != uid {
+        bail!(t!("The SSH agent runs under another user", "L'agent SSH tourne sous un autre utilisateur"));
+    }
+    Ok(())
+}
+
+/// Identifiant de l'utilisateur courant.
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    // SAFETY: getuid n'a aucun argument, ne touche aucune mémoire et ne peut pas échouer.
+    unsafe { libc::getuid() }
+}
+
+/// Refuse tout chemin qui n'est pas une socket Unix appartenant à `uid` : on ne confie pas la
+/// signature à un fichier ou à une socket posés par un autre utilisateur.
+#[cfg(unix)]
+fn check_agent_socket(path: &Path, uid: u32) -> Result<()> {
+    use std::os::unix::fs::{FileTypeExt, MetadataExt};
+    let meta = fs::metadata(path)
+        .map_err(|e| anyhow!("{}", t!(format!("SSH agent socket unreadable: {e}"), format!("Socket de l'agent SSH illisible : {e}"))))?;
+    if !meta.file_type().is_socket() {
+        bail!(t!("SSH_AUTH_SOCK does not point to a Unix socket", "SSH_AUTH_SOCK ne désigne pas une socket Unix"));
+    }
+    if meta.uid() != uid {
+        bail!(t!("The SSH agent socket belongs to another user", "La socket de l'agent SSH appartient à un autre utilisateur"));
+    }
+    Ok(())
 }
 
 /// Agent OpenSSH de Windows, sinon Pageant.
@@ -597,7 +648,6 @@ async fn auth_agent(handle: &mut client::Handle<Handler>, user: &str) -> Result<
     bail!(t!("No SSH agent found (« OpenSSH Authentication Agent » service or Pageant)", "Aucun agent SSH trouvé (service « OpenSSH Authentication Agent » ou Pageant)"))
 }
 
-#[cfg(windows)]
 async fn try_agent<S>(handle: &mut client::Handle<Handler>, user: &str, mut agent: AgentClient<S>) -> Result<bool>
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -675,7 +725,7 @@ fn weak_algorithms(names: &Names) -> Vec<String> {
 }
 
 fn default_key() -> Option<PathBuf> {
-    let home = std::env::var_os("USERPROFILE")?;
+    let home = crate::platform::home_dir()?;
     ["id_ed25519", "id_ecdsa", "id_rsa"]
         .iter()
         .map(|name| Path::new(&home).join(".ssh").join(name))
@@ -920,7 +970,7 @@ fn read_known(path: &Path) -> HashMap<String, String> {
 /// Empreintes (SHA256) que ~/.ssh/known_hosts d'OpenSSH associe à cet hôte,
 /// noms hachés compris (« |1|sel|hachage »). Les lignes @revoked / @cert-authority sont ignorées.
 fn openssh_fingerprints(host: &str, port: u16) -> Vec<String> {
-    let Some(home) = std::env::var_os("USERPROFILE") else { return Vec::new() };
+    let Some(home) = crate::platform::home_dir() else { return Vec::new() };
     let Ok(text) = fs::read_to_string(Path::new(&home).join(".ssh").join("known_hosts")) else { return Vec::new() };
     known_hosts_fingerprints(&text, host, port)
 }
@@ -981,5 +1031,67 @@ mod known_hosts_tests {
         assert_eq!(known_hosts_fingerprints(&text, "SRV1", 22).len(), 1);
         assert!(known_hosts_fingerprints(&text, "srv2", 22).is_empty(), "les clés révoquées ne valent pas confiance");
         assert!(known_hosts_fingerprints(&text, "srv3", 22).is_empty(), "motif nié");
+    }
+}
+
+#[cfg(all(test, unix))]
+mod agent_socket_tests {
+    use super::*;
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("portunia-agent-{tag}-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn un_fichier_ordinaire_est_refuse() {
+        let dir = temp_dir("file");
+        let file = dir.join("agent.sock");
+        fs::write(&file, "pas une socket").unwrap();
+        let err = check_agent_socket(&file, current_uid()).unwrap_err().to_string();
+        assert!(err.contains("socket"), "{err}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn un_chemin_absent_est_refuse() {
+        assert!(check_agent_socket(Path::new("/nonexistent/portunia/agent.sock"), current_uid()).is_err());
+    }
+
+    #[test]
+    fn une_socket_du_bon_utilisateur_est_acceptee_et_celle_d_un_autre_refusee() {
+        let dir = temp_dir("sock");
+        let path = dir.join("agent.sock");
+        let _listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+        assert!(check_agent_socket(&path, current_uid()).is_ok());
+        assert!(check_agent_socket(&path, current_uid().wrapping_add(1)).is_err());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn le_pair_d_un_autre_uid_est_refuse() {
+        assert!(check_peer_uid(current_uid(), current_uid()).is_ok());
+        assert!(check_peer_uid(current_uid().wrapping_add(1), current_uid()).is_err());
+        assert!(check_peer_uid(0, 501).is_err());
+    }
+
+    #[tokio::test]
+    async fn connexion_a_une_socket_via_un_lien_symbolique() {
+        let dir = temp_dir("link");
+        let real = dir.join("agent.sock");
+        let link = dir.join("link.sock");
+        let _listener = std::os::unix::net::UnixListener::bind(&real).unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        // Le lien est suivi une seule fois, par connect ; le pair est bien nous.
+        let stream = connect_agent_socket(&link).await.unwrap();
+        assert_eq!(stream.peer_cred().unwrap().uid(), current_uid());
+        // Un lien vers un fichier ordinaire reste refusé.
+        let file = dir.join("plain");
+        fs::write(&file, "x").unwrap();
+        let plain_link = dir.join("plain.sock");
+        std::os::unix::fs::symlink(&file, &plain_link).unwrap();
+        assert!(connect_agent_socket(&plain_link).await.is_err());
+        fs::remove_dir_all(&dir).unwrap();
     }
 }
