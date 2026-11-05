@@ -14,7 +14,7 @@ export const PROXMOX_EXTENSION: Manifest = {
   description: t('Proxmox servers in the sidebar: virtual machines and containers, start and stop, consoles, snapshots, backups, clone, migrate, tasks and storage.', 'Serveurs Proxmox dans la barre latérale : machines virtuelles et conteneurs, démarrage et arrêt, consoles, instantanés, sauvegardes, clonage, migration, tâches et stockages.'),
   view: 'screen',
   builtin: true,
-  catalog: false,
+  catalog: true,
   fileBrowser: false,
   portForwarding: false,
   fields: [],
@@ -56,6 +56,8 @@ export class ProxmoxPanel {
   /** Dernier inventaire de chaque serveur (/cluster/resources), ou l'erreur rencontrée. */
   private resources = new Map<string, PveResource[]>();
   private errors = new Map<string, string>();
+  /** Droits manquants (jeton sans permission) : explication à afficher sous le serveur. */
+  private hints = new Map<string, string>();
   private collapsed: Set<string>;
   private timer = 0;
 
@@ -95,6 +97,9 @@ export class ProxmoxPanel {
       const res = await proxmox.api<PveResource[]>(id, 'GET', '/cluster/resources');
       this.resources.set(id, res);
       this.errors.delete(id);
+      // Sans droit, Proxmox liste quand même les nœuds, mais ni leurs chiffres ni les machines.
+      if (res.some((r) => r.type === 'qemu' || r.type === 'lxc')) this.hints.delete(id);
+      else this.hints.set(id, await rightsHint(id));
     } catch (e) {
       this.errors.set(id, errorText(e));
       if (!quiet) this.host.toast(errorText(e), 'error');
@@ -172,15 +177,17 @@ export class ProxmoxPanel {
     const state = res && !error ? 'on' : 'off';
     const guests = (res ?? []).filter((r): r is Guest => r.type === 'qemu' || r.type === 'lxc');
     const running = guests.filter((g) => g.status === 'running').length;
+    const hint = !error && this.hints.get(p.id);
     const card = h('div', { class: `gate-card ${state}` },
       h('button', { class: 'gate-main', title: error ?? `${p.host}:${p.port} · ${p.user}${p.tokenId ? `!${p.tokenId}` : ''}`, onclick: () => this.toggle(p.id) },
         h('span', { class: `led ${state}` }),
         h('span', { class: 'grow' },
           h('span', { class: 'gate-name ellipsis' }, p.name),
-          h('span', { class: 'gate-sub ellipsis' }, error ? error : res ? t(`${running} running out of ${guests.length}`, `${running} en marche sur ${guests.length}`) : t('loading…', 'chargement…')))),
+          h('span', { class: 'gate-sub ellipsis' }, error ? error : hint ? t('No right to see the machines', 'Aucun droit de voir les machines') : res ? t(`${running} running out of ${guests.length}`, `${running} en marche sur ${guests.length}`) : t('loading…', 'chargement…')))),
       h('button', { class: 'icon-btn sm', 'aria-label': t(`Actions for ${p.name}`, `Actions de ${p.name}`), title: t('More actions', 'Plus d\'actions'), onclick: (e: MouseEvent) => showMenu(e.clientX, e.clientY, this.serverMenu(p)) }, icon('more', 14)));
     card.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, this.serverMenu(p)); });
     const out: HTMLElement[] = [card];
+    if (hint) out.push(h('p', { class: 'gate-filter muted small' }, hint));
     if ((this.collapsed.has(p.id) && !filter) || !res) return out;
     for (const node of (res ?? []).filter((r) => r.type === 'node').sort((a, b) => a.node.localeCompare(b.node))) {
       const list = guests.filter((g) => g.node === node.node && matches(g, filter)).sort((a, b) => a.vmid - b.vmid);
@@ -188,7 +195,7 @@ export class ProxmoxPanel {
       const online = node.status === 'online';
       const row = h('div', { class: `tree-row${online ? '' : ' disabled'}` },
         h('span', { class: 'tree-item group-head gate-folder', title: online ? t(`CPU ${pct(node.cpu)} · memory ${bytes(node.mem)} / ${bytes(node.maxmem)}`, `Processeur ${pct(node.cpu)} · mémoire ${bytes(node.mem)} / ${bytes(node.maxmem)}`) : t('Node offline', 'Nœud hors ligne') },
-          icon('server', 14), h('span', { class: 'grow ellipsis' }, node.node), h('span', { class: 'count' }, online ? pct(node.cpu) : t('offline', 'hors ligne'))));
+          icon('server', 14), h('span', { class: 'grow ellipsis' }, node.node), h('span', { class: 'count' }, !online ? t('offline', 'hors ligne') : node.maxcpu ? pct(node.cpu) : '')));
       const nodeMenu = (): (MenuItem | 'separator')[] => [
         { label: t('Node shell', 'Shell du nœud'), icon: 'terminal', action: () => this.console(p, node.node, 'node', null, `${node.node}`) },
         { label: t('Storage', 'Stockages'), icon: 'drive', action: () => openStorage(this, p, [node.node]) },
@@ -319,6 +326,19 @@ export class ProxmoxPanel {
     try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...this.collapsed])); } catch { /* ignoré */ }
     this.render();
   }
+}
+
+/** Explication quand l'utilisateur ou le jeton ne voit aucune machine (vide si c'est juste un cluster sans machine). */
+async function rightsHint(id: string): Promise<string> {
+  let perms: Record<string, Record<string, number>>;
+  try {
+    perms = await proxmox.api(id, 'GET', '/access/permissions');
+  } catch {
+    return '';
+  }
+  if (Object.values(perms ?? {}).some((p) => p['VM.Audit'])) return '';
+  return t('Proxmox gives this account no right on the machines. In Proxmox: Datacenter › Permissions › Add › API Token Permission (or User Permission), path « / », role PVEVMAdmin (or PVEAuditor to only look), then Refresh. A token with « Privilege Separation » needs its own permission, even for root@pam.',
+    'Proxmox ne donne à ce compte aucun droit sur les machines. Dans Proxmox : Datacenter › Permissions › Ajouter › Permission de jeton d\'API (ou d\'utilisateur), chemin « / », rôle PVEVMAdmin (ou PVEAuditor pour seulement regarder), puis Actualiser. Un jeton avec « Privilege Separation » demande sa propre permission, même pour root@pam.');
 }
 
 function matches(r: PveResource, filter: string): boolean {

@@ -117,7 +117,7 @@ const search = $<HTMLInputElement>('search');
 const protocolOf = (id?: string) => state.protocols.find((p) => p.id === id);
 /** Extension installée : intégrée d'office, ou prise dans le catalogue, ou déjà utilisée par des sessions. */
 const extensionInstalled = (id: string) =>
-  !protocolOf(id)?.catalog || settings().installedExtensions.includes(id) || state.sessions.some((s) => s.protocol === id);
+  !(id === 'proxmox' ? PROXMOX_EXTENSION : protocolOf(id))?.catalog || settings().installedExtensions.includes(id) || state.sessions.some((s) => s.protocol === id);
 /** Extension activée (Paramètres › Extensions). */
 const extensionEnabled = (id: string) => extensionInstalled(id) && !settings().disabledExtensions.includes(id);
 /** Catalogue : installer (ou retirer) une extension. Ses sessions éventuelles restent. */
