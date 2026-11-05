@@ -349,6 +349,8 @@ export interface GateServer {
   tunnels: boolean;
   /** Gate 0.31 : entrée RDP native ouverte pour ce serveur (mstsc, Windows App…). */
   rdp_natif?: boolean;
+  /** Gate 0.33 : texte choisi par l'administrateur (vignette du portail, info-bulle). */
+  description?: string;
 }
 
 export interface Gate {

@@ -91,7 +91,7 @@ export class GatePanel {
 
   /** Serveurs des Gates connectées que le filtre retient. */
   countMatches(filter: string): number {
-    return this.list.filter((b) => b.connected).reduce((n, b) => n + b.servers.filter((s) => s.nom.toLowerCase().includes(filter) || s.dossier.toLowerCase().includes(filter)).length, 0);
+    return this.list.filter((b) => b.connected).reduce((n, b) => n + b.servers.filter((s) => s.nom.toLowerCase().includes(filter) || s.dossier.toLowerCase().includes(filter) || (s.description ?? '').toLowerCase().includes(filter)).length, 0);
   }
 
   /** Active ou coupe le panneau (extension activée ou non). */
@@ -236,7 +236,7 @@ export class GatePanel {
       out.push(h('button', { class: 'gate-warn', onclick: () => openBypass(this.host, b, bypass) },
         t(`${bypass.length} session(s) go directly to servers of this Gate`, `${bypass.length} session(s) vont directement sur des serveurs de cette Gate`)));
     }
-    const servers = b.servers.filter((s) => !filter || s.nom.toLowerCase().includes(filter) || s.dossier.toLowerCase().includes(filter));
+    const servers = b.servers.filter((s) => !filter || s.nom.toLowerCase().includes(filter) || s.dossier.toLowerCase().includes(filter) || (s.description ?? '').toLowerCase().includes(filter));
     const groups = new Map<string, GateServer[]>();
     for (const s of servers) groups.set(s.dossier, [...(groups.get(s.dossier) ?? []), s]);
     for (const [folder, list] of [...groups].sort((a, b) => a[0].localeCompare(b[0]))) {
@@ -268,7 +268,7 @@ export class GatePanel {
 ${command}`, `Interface web par la Gate ; pages visitées journalisées
 ${command}`) : missing ? t('Enable the Remote Desktop extension to open this server', 'Activez l’extension Bureau à distance pour ouvrir ce serveur') : t(`${rdp ? 'Remote Desktop · ' : ''}${MODE_TITLE[s.mode]}\n${command}`, `${rdp ? 'Bureau à distance · ' : ''}${MODE_TITLE[s.mode]}\n${command}`);
     const row = h('div', { class: `tree-row${b.connected && !missing ? '' : ' disabled'}` },
-      h('button', { class: 'tree-item session', style: `padding-left: ${16 + depth * 16}px`, title, onclick: open },
+      h('button', { class: 'tree-item session', style: `padding-left: ${16 + depth * 16}px`, title: s.description ? `${s.description}\n${title}` : title, onclick: open },
         h('span', { class: `dot${b.connected ? ' on' : ''}` }),
         h('span', { class: 'grow ellipsis' }, s.nom),
         rdp ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null,
@@ -547,6 +547,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
   const targetDialog = (cur?: any) => {
     const nom = input({ id: 't-nom', value: cur?.nom ?? '' });
     const dossier = input({ id: 't-dossier', value: cur?.dossier ?? '', placeholder: t('Production, Staging…', 'Production, Recette…') });
+    const description = input({ id: 't-description', value: cur?.description ?? '', maxlength: 200, placeholder: t('Agency mail, accounting app…', 'Messagerie de l\'agence, compta…') });
     const hote = input({ id: 't-hote', value: cur?.hote ?? '' });
     const port = input({ id: 't-port', value: String(cur?.port ?? 22), inputmode: 'numeric' });
     const mode = select('t-mode', [['coffre', t('Vault: account provided by the Gate', 'Coffre : compte fourni par la Gate')], ['enregistre', t('Recorded: the user\'s credentials', 'Enregistré : identifiants de l\'utilisateur')], ['rebond', t('Jump: end-to-end relay', 'Rebond : relais de bout en bout')]], cur?.mode ?? 'coffre');
@@ -599,6 +600,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       field(t('Protocol', 'Protocole'), proto),
       h('div', { class: 'row2' }, field(t('Name', 'Nom'), nom, t('no spaces', 'sans espace')), field(t('Folder', 'Dossier'), dossier)),
       h('div', { class: 'quick-row' }, field(t('Address', 'Adresse'), hote), field('Port', port)),
+      field(t('Description', 'Description'), description, t('shown on the server\'s tile in the web portal and in Portunia; empty: automatic text (Gate 0.33)', 'affichée sur la vignette du serveur dans le portail web et dans Portunia ; vide : texte automatique (Gate 0.33)')),
       field('Mode', mode), rdpNote, webNote, field(t('Account on the server', 'Compte sur le serveur'), compte, t('required in vault mode; for Remote Desktop: DOMAIN\\account, offered at opening', 'obligatoire en mode coffre ; en Bureau à distance : DOMAINE\\compte, proposé à l\'ouverture')),
       webLoginField, field(t('Vault secret', 'Secret du coffre'), secretKind), passField, keyField,
       h('p', { class: 'muted small' }, t('The secret is encrypted by the Gate and can never be read back. « Generate » creates a key, installs it with the password given only once, then checks that it works.', 'Le secret est chiffré par la Gate et ne se relit jamais. « Générer » crée une clé, l\'installe avec le mot de passe donné une seule fois, puis vérifie qu\'elle fonctionne.')),
@@ -613,6 +615,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         nom: nom.value.trim(), dossier: dossier.value.trim(), hote: hote.value.trim(), port: Number(port.value) || (({ rdp: 3389, https: 443, http: 80 } as Record<string, number>)[proto.value] ?? 22),
         mode: mode.value, compte: compte.value.trim() || null, secret, protocole: proto.value,
         ...(proto.value === 'http' || proto.value === 'https' ? { connexion_web: webLogin.value } : {}),
+        description: description.value.trim(),
       };
       await (cur ? call('PUT', `/admin/cibles/${cur.id}`, payload) : call('POST', '/admin/cibles', payload));
       host.toast(cur ? t('Server updated', 'Serveur modifié') : t('Server added', 'Serveur ajouté'));
