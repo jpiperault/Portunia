@@ -26,6 +26,10 @@ export interface GateHost {
   removeSessions(ids: string[]): Promise<void>;
   openAdmin(b: Gate): void;
   openAudit(b: Gate): void;
+  /** Page des approbations (Gate 0.38 et suivantes). */
+  openApprovals(b: Gate): void;
+  /** Demandes d'accès à décider sur cette Gate (badge du menu). */
+  pendingApprovals(b: Gate): number;
   allowsAdmin(): boolean;
   /** Extension de protocole activée (Bureau à distance pour les serveurs RDP). */
   protocolEnabled(id: string): boolean;
@@ -202,6 +206,7 @@ export class GatePanel {
       ...(b.role === 'admin' && b.connected ? [{ label: t('Administer', 'Administrer'), icon: 'settings', action: () => this.host.openAdmin(b) }] : []),
       ...((b.role === 'admin' || b.role === 'auditor' || b.ownReplay) && b.connected
         ? [{ label: b.role === 'user' ? t('My sessions', 'Mes sessions') : 'Audit', icon: 'play', action: () => this.host.openAudit(b) }] : []),
+      ...(b.connected ? [{ label: this.host.pendingApprovals(b) ? t(`Approvals (${this.host.pendingApprovals(b)} waiting)`, `Approbations (${this.host.pendingApprovals(b)} en attente)`) : t('Approvals', 'Approbations'), icon: 'check', action: () => this.host.openApprovals(b) }] : []),
       { label: t(`Copy the certificate fingerprint`, `Copier l'empreinte du certificat`), icon: 'copy', action: () => navigator.clipboard.writeText(b.apiFingerprint) },
       'separator',
       ...(b.connected ? [{ label: t('Sign out', 'Se déconnecter'), icon: 'power', action: async () => { await gates.logout(b.id).catch(() => {}); this.load(); } }] : []),
@@ -654,13 +659,16 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         const policy = select('u-policy', known ? POLICIES : [...POLICIES, [u.politique, u.politique]], u?.politique ?? '');
         const groups = multi('u-g', groupNames, u?.groupes ?? []);
         const disabled = checkbox('u-disabled', t('Account disabled', 'Compte désactivé'), !!u?.desactive);
+        // Gate 0.38 et suivantes : adresse e-mail (approbation, alertes).
+        const email = input({ id: 'u-email', type: 'email', value: u?.email ?? '', placeholder: 'prenom.nom@exemple.fr' });
         formDialog(u ? t(`Edit ${u.login}`, `Modifier ${u.login}`) : t('Create an account', 'Créer un compte'), [
           h('div', { class: 'row2' }, field(t('Login', 'Identifiant'), login), field(t('Role', 'Rôle'), role)),
           field(t('Sign-in', 'Connexion'), policy, t(`global: ${politique_generale}`, `général : ${politique_generale}`)),
+          field(t('E-mail', 'E-mail'), email, t('access requests and alerts (Gate 0.38)', 'demandes d\'accès et alertes (Gate 0.38)')),
           h('div', { class: 'fld' }, h('span', {}, t('Groups', 'Groupes')), groupNames.length ? groups.el : h('p', { class: 'muted small' }, t('No group: create some in the Groups tab.', 'Aucun groupe : créez-en dans l\'onglet Groupes.'))),
           u ? disabled.row : h('p', { class: 'muted small' }, t('A temporary password will be shown once. The user will enrol their code at their first sign-in in Portunia.', 'Un mot de passe provisoire sera affiché une fois. Le code sera enrôlé par l\'utilisateur à sa première connexion dans Portunia.')),
         ], u ? t('Save', 'Enregistrer') : t('Create', 'Créer'), async () => {
-          const payload = { login: login.value.trim(), role: role.value, politique: policy.value || null, groupes: groups.values(), desactive: disabled.box.checked };
+          const payload = { login: login.value.trim(), role: role.value, politique: policy.value || null, groupes: groups.values(), desactive: disabled.box.checked, email: email.value.trim() };
           if (u) {
             await call('PUT', `/admin/comptes/${u.id}`, payload);
             host.toast(t('Account updated', 'Compte modifié'));
@@ -738,6 +746,9 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         const keys = checkbox('r-frappe', t('Also record keystrokes (captures typed passwords)', 'Enregistrer aussi la frappe (capte les mots de passe tapés)'), r?.frappe ?? false);
         const files = checkbox('r-fichiers', t('Remote Desktop: file copy through the clipboard (logged with name, size and SHA-256)', 'Bureau à distance : copie de fichiers par le presse-papiers (tracée avec nom, taille et SHA-256)'), r?.fichiers ?? false);
         const expire = input({ id: 'r-expire', type: 'date', lang: 'fr', value: r?.expire ? String(r.expire).slice(0, 10) : '' });
+        // Gate 0.38 et suivantes : accès seulement après approbation.
+        const approval = checkbox('r-approbation', t('Access only after approval (reason asked, duration chosen by the approver)', 'Accès seulement après approbation (motif demandé, durée choisie par l\'approbateur)'), !!r?.approbation);
+        const approvers = select('r-approbateurs', [['', t('Administrators', 'Les administrateurs')], ...groupes.map((g) => [g.nom, g.nom] as [string, string])], r?.approbateurs ?? '');
         if (!groupes.length) return host.toast(t('First create a group (Groups tab)', 'Créez d\'abord un groupe (onglet Groupes)'), 'error');
         formDialog(r ? t(`Edit rule ${r.nom}`, `Modifier la règle ${r.nom}`) : t('New rule', 'Nouvelle règle'), [
           h('div', { class: 'row2' }, field(t('Name', 'Nom'), nom), field(t('Group', 'Groupe'), groupe)),
@@ -746,12 +757,15 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           h('div', { class: 'row2' }, field(t('From (hour)', 'De (heure)'), from), field(t('To (hour)', 'À (heure)'), to)),
           sftp.row, tunnels.row, keys.row, ...(hasFiles ? [files.row] : []),
           field(t('Expires on', 'Expire le'), expire, 'vide = jamais'),
+          approval.row,
+          field(t('Approvers', 'Approbateurs'), approvers, t('a member of this group grants access; never their own request', 'un membre de ce groupe accorde l\'accès ; jamais sa propre demande')),
         ], r ? t('Save', 'Enregistrer') : t('Create', 'Créer'), async () => {
           const mask = days.reduce((m, d, i) => m | (d.box.checked ? 1 << i : 0), 0);
           const payload = {
             nom: nom.value.trim(), groupe: groupe.value, cibles: servers.values(), sftp: sftp.box.checked, tunnels: tunnels.box.checked, frappe: keys.box.checked,
             ...(hasFiles ? { fichiers: files.box.checked } : {}),
             jours: mask, heure_debut: from.value === '' ? null : Number(from.value), heure_fin: to.value === '' ? null : Number(to.value), expire: expire.value || null,
+            approbation: approval.box.checked, approbateurs: approvers.value,
           };
           await (r ? call('PUT', `/admin/regles/${r.id}`, payload) : call('POST', '/admin/regles', payload));
         });
@@ -763,7 +777,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const stateChip = (s: string) => h('span', { class: `chip ${s === 'active' ? 'ok' : s === 'expiree' ? 'off' : 'warn'}` }, s === 'active' ? 'active' : s === 'expiree' ? t('expired', 'expirée') : 'hors plage');
       const rows = regles.map((r) => h('tr', {},
         h('td', {}, h('strong', {}, r.nom)), h('td', {}, r.groupe), h('td', {}, r.cibles.join(', ')), h('td', {}, when(r)),
-        h('td', {}, [r.sftp && 'SFTP', r.tunnels && 'tunnels', r.frappe && t('keystrokes', 'frappe'), r.fichiers && t('RDP files', 'fichiers RDP')].filter(Boolean).join(', ') || '—'),
+        h('td', {}, [r.sftp && 'SFTP', r.tunnels && 'tunnels', r.frappe && t('keystrokes', 'frappe'), r.fichiers && t('RDP files', 'fichiers RDP'), r.approbation && t(`approval (${r.approbateurs || 'admins'})`, `approbation (${r.approbateurs || 'admins'})`)].filter(Boolean).join(', ') || '—'),
         h('td', {}, stateChip(r.etat), r.expire ? h('span', { class: 'muted small' }, t(` until ${new Date(r.expire).toLocaleDateString(LOCALE)}`, ` jusqu'au ${new Date(r.expire).toLocaleDateString(LOCALE)}`)) : null),
         actions(small(t('Edit', 'Modifier'), () => ruleDialog(r)), small(t('Delete', 'Supprimer'), async () => {
           if (!confirm(t(`Delete rule ${r.nom}?`, `Supprimer la règle ${r.nom} ?`))) return;
@@ -1305,6 +1319,8 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
 
     reglages: async () => {
       const r = await call<any>('GET', '/admin/reglages');
+      // Gate 0.38 et suivantes : notifications (courriel, Teams, webhook).
+      const n = await call<any>('GET', '/admin/notifications').catch(() => null);
       const nom = input({ id: 's-nom', value: r.nom });
       const banner = h('textarea', { id: 's-banner', class: 'input', rows: 3 }, r.banniere) as HTMLTextAreaElement;
       const policy = select('s-policy', POLICIES.slice(1).some(([v]) => v === r.politique) ? POLICIES.slice(1) : [...POLICIES.slice(1), [r.politique, r.politique]], r.politique);
@@ -1318,6 +1334,47 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const langue = r.langue === undefined ? null : select('s-langue', [['', t('System language', 'Langue du système')], ['en', 'English'], ['fr', 'Français']], r.langue);
       // Gate 0.28 et suivantes : copies des fichiers copiés en Bureau à distance, gardées par session.
       const copies = r.copies_fichiers_mo === undefined ? null : input({ id: 's-copies', type: 'number', min: 0, max: 10240, value: String(r.copies_fichiers_mo) });
+      const notificationsBlock = (n: any) => {
+        const host_ = input({ id: 'n-host', value: n.smtp_hote, placeholder: 'smtp.exemple.fr' });
+        const port = input({ id: 'n-port', type: 'number', min: 1, max: 65535, value: String(n.smtp_port || 587) });
+        const security = select('n-sec', [['starttls', 'STARTTLS (587)'], ['tls', 'TLS (465)'], ['aucune', t('None (25)', 'Aucune (25)')]], n.smtp_securite || 'starttls');
+        const user = input({ id: 'n-user', value: n.smtp_compte, autocomplete: 'off' });
+        const pass = input({ id: 'n-pass', type: 'password', autocomplete: 'new-password', placeholder: n.smtp_mot_de_passe ? t('saved — type to replace', 'enregistré — tapez pour remplacer') : '' });
+        const from = input({ id: 'n-from', value: n.smtp_expediteur, placeholder: 'Portunia Gate <gate@exemple.fr>' });
+        const teams = input({ id: 'n-teams', value: n.teams_url, placeholder: 'https://…' });
+        const hook = input({ id: 'n-hook', value: n.webhook_url, placeholder: 'https://…' });
+        const newSecret = checkbox('n-secret', n.webhook_secret ? t('New signing secret (the current one stops working)', 'Nouveau secret de signature (l\'actuel ne marchera plus)') : t('Sign the webhook (secret shown once)', 'Signer le webhook (secret affiché une fois)'), false);
+        const testTo = input({ id: 'n-test', type: 'email', placeholder: t('address for the test e-mail', 'adresse du courriel d\'essai') });
+        const save = h('button', { class: 'btn primary', onclick: async () => {
+          try {
+            const res = await call<any>('PUT', '/admin/notifications', {
+              smtp_hote: host_.value, smtp_port: Number(port.value) || 587, smtp_securite: security.value, smtp_compte: user.value,
+              ...(pass.value ? { smtp_mot_de_passe: pass.value } : {}), smtp_expediteur: from.value, teams_url: teams.value, webhook_url: hook.value,
+              nouveau_secret_webhook: newSecret.box.checked,
+            });
+            pass.value = '';
+            host.toast(t('Notification settings saved', 'Réglages des notifications enregistrés'));
+            if (res.secret_webhook) showSecret(t('Webhook signing secret', 'Secret de signature du webhook'), t('Give it to the receiving service; it is shown only once:', 'Donnez-le au service destinataire ; il n\'est affiché qu\'une fois :'), res.secret_webhook);
+          } catch (e) { fail(e); }
+        } }, t('Save', 'Enregistrer'));
+        const test = h('button', { class: 'btn', onclick: async () => {
+          try {
+            const res = await call<any>('POST', '/admin/notifications/essai', { email: testTo.value || null });
+            const line = (name: string, x: any) => (x ? `${name} : ${x.ok ? '✓' : `✗ ${x.erreur}`}` : '');
+            host.toast([line(t('E-mail', 'Courriel'), res.courriel), line('Teams', res.teams), line('Webhook', res.webhook)].filter(Boolean).join('\n') || t('Nothing to test: set up a channel first.', 'Rien à essayer : réglez d\'abord un canal.'));
+          } catch (e) { fail(e); }
+        } }, t('Send a test', 'Envoyer un essai'));
+        return h('div', { class: 'admin-section form-narrow' },
+          h('h3', {}, t('Notifications', 'Notifications')),
+          h('p', { class: 'muted small' }, t('Used by access approval (and alerts): e-mail to the approvers and to the requester, Microsoft Teams channel, signed JSON webhook.', 'Utilisées par l\'approbation des accès (et les alertes) : courriel aux approbateurs et au demandeur, canal Microsoft Teams, webhook JSON signé.')),
+          h('div', { class: 'row2' }, field(t('SMTP server', 'Serveur SMTP'), host_), field('Port', port)),
+          h('div', { class: 'row2' }, field(t('Security', 'Sécurité'), security), field(t('Sender', 'Expéditeur'), from)),
+          h('div', { class: 'row2' }, field(t('SMTP account', 'Compte SMTP'), user, t('empty: no authentication', 'vide : sans authentification')), field(t('SMTP password', 'Mot de passe SMTP'), pass)),
+          field('Microsoft Teams', teams, t('« Workflows » webhook of the channel', 'webhook « Workflows » du canal')),
+          field('Webhook', hook, t('JSON POST, X-Portunia-Gate-Signature: HMAC-SHA256 of « date.body »', 'POST JSON, X-Portunia-Gate-Signature : HMAC-SHA256 de « date.corps »')),
+          newSecret.row,
+          h('div', { class: 'row2' }, h('div', {}, save), h('div', { style: 'display:flex;gap:6px' }, testTo, test)));
+      };
       const saveBtn = h('button', { class: 'btn primary', onclick: async () => {
         try {
           await call('PUT', '/admin/reglages', {
@@ -1344,7 +1401,8 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         copies ? h('h3', {}, t('Remote Desktop file copy', 'Copie de fichiers en Bureau à distance')) : null,
         copies ? field(t('Copies kept per session (MB)', 'Copies gardées par session (Mo)'), copies, t('0: none, only name, size and SHA-256 are logged; otherwise the files copied, up to this size, next to the recording', '0 : aucune, seuls nom, taille et SHA-256 sont tracés ; sinon les fichiers copiés, jusqu\'à cette taille, à côté de l\'enregistrement')) : null,
         copies ? h('p', { class: 'muted small' }, t('File copy itself is allowed per rule (Rules › Remote Desktop file copy).', 'La copie elle-même se permet règle par règle (Règles › copie de fichiers).')) : null,
-        h('div', {}, saveBtn));
+        h('div', {}, saveBtn),
+        n ? notificationsBlock(n) : null);
     },
   };
 

@@ -1,6 +1,6 @@
 [package]
 name = "portunia"
-version = "0.76.0"
+version = "0.77.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 

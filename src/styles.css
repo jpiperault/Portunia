@@ -713,6 +713,11 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .badge.mode-coffre { background: var(--warn-soft); color: var(--warn); }
 .badge.mode-enregistre { background: rgb(255 123 123 / .14); color: var(--danger); }
 .badge.mode-rebond { background: var(--chip-bg); color: var(--text-2); }
+/* Approbations : décision et demande sur une ligne */
+.appr-decide { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.appr-decide .input { min-width: 140px; flex: 1; }
+.appr-decide select.input { flex: 0 0 auto; min-width: 90px; }
+
 /* Audit › En direct : confirmation de coupure */
 .cut-confirm td { background: rgb(255 123 123 / .08); }
 .cut-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }

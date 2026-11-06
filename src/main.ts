@@ -233,6 +233,8 @@ const gatePanel = new GatePanel($('gates'), {
   },
   openAdmin: (b) => openGateAdmin(b),
   openAudit: (b) => openGateAudit(b),
+  openApprovals: (b) => openGateApprovals(b),
+  pendingApprovals: (b) => approvalWatch?.pending.get(b.id) ?? 0,
   protocolEnabled: (id) => extensionEnabled(id),
   allowsAdmin: () => allows('gateAdmin'),
   filter: () => state.filter,
@@ -380,6 +382,27 @@ function openGateAdmin(b: Gate) {
 }
 
 /** Audit de la Gate (sessions et journal), chargé à la demande. */
+/** Approbations des accès d'une Gate : demander, décider, retirer (page en onglet). */
+async function openGateApprovals(b: Gate) {
+  const title = tr(`Approvals · ${b.name}`, `Approbations · ${b.name}`);
+  const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
+  if (existing) return activate(existing.id);
+  const { renderApprovals } = await import('./approvals');
+  const view = h('div', { class: 'page-view' }, renderApprovals(b, { toast }));
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
+  state.tabs.push(tab);
+  activate(tab.id);
+}
+
+// Surveillance des approbations (notifications du système), lancée au chargement des Gates.
+let approvalWatch: import('./approvals').ApprovalWatch | null = null;
+void import('./approvals').then(({ ApprovalWatch }) => {
+  approvalWatch = new ApprovalWatch(() => gatePanel.list, () => gatePanel.render());
+  // Premier passage après le chargement des Gates.
+  setTimeout(() => approvalWatch?.start(), 8000);
+});
+
 async function openGateAudit(b: Gate) {
   if (!allows('gateAdmin')) return toast(tr('Gate audit is part of Portunia Teams (Settings › Licence)', 'L’audit des Gates fait partie de Portunia Équipes (Paramètres › Licence)'), 'error');
   const title = `Audit · ${b.name}`;
