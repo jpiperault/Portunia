@@ -40,6 +40,8 @@ export type ReplayMessage =
 
 export interface ReplayEngine {
   seek(t: number): void;
+  /** Session en direct : charge les images arrivées depuis ; renvoie combien. */
+  more?(): Promise<number>;
   close(): void;
 }
 
@@ -65,17 +67,23 @@ const fmt = (s: number) => {
 };
 
 export class RdpPlayer {
-  private readonly events: RdpEvent[];
-  private readonly duration: number;
-  private readonly idle: [number, number][] = [];
+  private events: RdpEvent[] = [];
+  private duration = 1;
+  private idle: [number, number][] = [];
   private lines: Line[] = [];
-  private readonly sensitive: string[];
+  private sensitive: string[] = [];
   private layout: LayoutChoice = 'auto';
-  private readonly clicks: RdpEvent[];
-  private readonly clips: Extract<RdpEvent, { k: 'presse-papiers' }>[];
-  private readonly files: Extract<RdpEvent, { k: 'fichier' }>[];
-  private readonly moves: Extract<RdpEvent, { k: 'souris' | 'clic' }>[];
-  private readonly withInput: boolean;
+  private clicks: RdpEvent[] = [];
+  private clips: Extract<RdpEvent, { k: 'presse-papiers' }>[] = [];
+  private files: Extract<RdpEvent, { k: 'fichier' }>[] = [];
+  private moves: Extract<RdpEvent, { k: 'souris' | 'clic' }>[] = [];
+  private withInput = false;
+  /** Session encore ouverte : la relecture suit la fin (voir `extend`). */
+  private live: boolean;
+  /** Relecture de l'enregistrement qui grandit, arrêtée à la fermeture du lecteur. */
+  liveTimer = 0;
+  private readonly liveBadge = h('span', { class: 'ap-live', hidden: true }, t('● LIVE', '● EN DIRECT'));
+  private readonly headInfo = h('span', { class: 'muted small' });
   private engine: ReplayEngine | null = null;
   private position = 0;
   private speed = 2;
@@ -109,23 +117,10 @@ export class RdpPlayer {
   private readonly playBtn = h('button', { class: 'ap-btn', 'aria-label': t('Play', 'Lire') });
   private readonly list = h('div', { class: 'ap-lines' });
 
-  constructor(readonly el: HTMLElement, private readonly rec: RdpRecording, private readonly opts: RdpPlayerOptions) {
-    this.events = [...rec.rdp.evenements].sort((a, b) => a.t - b.t);
-    this.duration = Math.max(1, rec.rdp.duree + 1);
-    // Pauses : rien de la part de l'utilisateur pendant plus de IDLE secondes.
-    const activity = this.events.filter((e) => e.k !== 'clavier' && e.k !== 'voyants').map((e) => e.t);
-    for (let i = 1; i < activity.length; i++) {
-      if (activity[i] - activity[i - 1] > IDLE) this.idle.push([activity[i - 1] + 1, activity[i] - 0.5]);
-    }
-    if (activity.length && this.duration - activity[activity.length - 1] > IDLE + 2) this.idle.push([activity[activity.length - 1] + 1, this.duration - 1]);
-    this.withInput = this.events.some((e) => e.k === 'touche' || e.k === 'unicode');
-    this.sensitive = rec.commandes_sensibles.map((c) => c.toLowerCase()).filter(Boolean);
+  constructor(readonly el: HTMLElement, private rec: RdpRecording, private readonly opts: RdpPlayerOptions) {
     try { this.layout = (localStorage.getItem(LAYOUT_KEY) as LayoutChoice | null) ?? 'auto'; } catch { /* valeur par défaut */ }
-    this.decodeKeys();
-    this.clicks = this.events.filter((e) => e.k === 'clic');
-    this.clips = this.events.filter((e): e is Extract<RdpEvent, { k: 'presse-papiers' }> => e.k === 'presse-papiers');
-    this.files = this.events.filter((e): e is Extract<RdpEvent, { k: 'fichier' }> => e.k === 'fichier');
-    this.moves = this.events.filter((e): e is Extract<RdpEvent, { k: 'souris' | 'clic' }> => e.k === 'souris' || e.k === 'clic');
+    this.analyze(rec);
+    this.live = !rec.session.fin;
     this.build();
     this.resizer = new ResizeObserver(() => this.fit());
     this.resizer.observe(this.screen);
@@ -133,8 +128,67 @@ export class RdpPlayer {
     this.opts.open((m) => this.onMessage(m)).then((engine) => {
       if (this.closed) { engine.close(); return; }
       this.engine = engine;
-      this.seek(Math.max(0, (opts.start ?? 0) - 0.5));
+      // En direct : on arrive à la fin, là où se passe la session.
+      this.seek(this.live && opts.start == null ? this.duration : Math.max(0, (opts.start ?? 0) - 0.5));
     }).catch((e) => { this.loading.textContent = String(e?.message ?? e); this.loading.classList.add('err'); });
+  }
+
+  /** Événements, durée, pauses et repères de l'enregistrement. */
+  private analyze(rec: RdpRecording) {
+    this.events = [...rec.rdp.evenements].sort((a, b) => a.t - b.t);
+    this.duration = Math.max(1, rec.rdp.duree + 1);
+    // Pauses : rien de la part de l'utilisateur pendant plus de IDLE secondes.
+    this.idle = [];
+    const activity = this.events.filter((e) => e.k !== 'clavier' && e.k !== 'voyants').map((e) => e.t);
+    for (let i = 1; i < activity.length; i++) {
+      if (activity[i] - activity[i - 1] > IDLE) this.idle.push([activity[i - 1] + 1, activity[i] - 0.5]);
+    }
+    if (activity.length && this.duration - activity[activity.length - 1] > IDLE + 2) this.idle.push([activity[activity.length - 1] + 1, this.duration - 1]);
+    this.withInput = this.events.some((e) => e.k === 'touche' || e.k === 'unicode');
+    this.sensitive = rec.commandes_sensibles.map((c) => c.toLowerCase()).filter(Boolean);
+    this.decodeKeys();
+    this.clicks = this.events.filter((e) => e.k === 'clic');
+    this.clips = this.events.filter((e): e is Extract<RdpEvent, { k: 'presse-papiers' }> => e.k === 'presse-papiers');
+    this.files = this.events.filter((e): e is Extract<RdpEvent, { k: 'fichier' }> => e.k === 'fichier');
+    this.moves = this.events.filter((e): e is Extract<RdpEvent, { k: 'souris' | 'clic' }> => e.k === 'souris' || e.k === 'clic');
+  }
+
+  /**
+   * Session en direct : événements relus, nouvelles images chargées dans le moteur ; si l'on
+   * regardait la fin, on y reste.
+   */
+  async extend(rec: RdpRecording) {
+    const following = this.live && this.position >= this.duration - 1.5;
+    this.rec = rec;
+    this.analyze(rec);
+    this.live = !rec.session.fin;
+    await this.engine?.more?.().catch(() => 0);
+    this.renderTrack();
+    this.renderList();
+    if (following) this.seek(this.duration);
+    else this.render();
+    this.renderLive();
+  }
+
+  private renderLive() {
+    const s = this.rec.session;
+    const date = new Date(s.debut).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' });
+    this.liveBadge.hidden = !this.live;
+    this.headInfo.textContent = `${s.compte} · ${date} · ${fmt(this.duration)}${s.fin ? '' : t(' · ongoing', ' · en cours')}`;
+  }
+
+  /** Barre de temps : pauses, frappe, clics, copier-coller, fichiers. */
+  private renderTrack() {
+    this.track.replaceChildren(h('div', { class: 'ap-rail' }));
+    const pct = (x: number) => (100 * x) / this.duration;
+    for (const [a, b] of this.idle) this.track.append(h('div', { class: 'ap-idle', style: `left:${pct(a)}%;width:${pct(b - a)}%`, title: t(`${fmt(b - a)} pause`, `Pause de ${fmt(b - a)}`) }));
+    this.track.append(this.done);
+    for (const l of this.lines) this.track.append(h('div', { class: `ap-mk ${l.level}`, style: `left:${pct(l.t)}%`, title: `${fmt(l.t)}  ${l.text || l.keys.map((k) => k.chip).join(' ')}` }));
+    for (const c of this.clicks) this.track.append(h('div', { class: 'ap-mk rp-clic', style: `left:${pct(c.t)}%`, title: `${fmt(c.t)}  ${t('click', 'clic')}` }));
+    for (const c of this.clips) this.track.append(h('div', { class: 'ap-mk rp-clip', style: `left:${pct(c.t)}%`, title: `${fmt(c.t)}  ${this.clipLabel(c)}` }));
+    for (const f of this.files) this.track.append(h('div', { class: 'ap-mk rp-clip', style: `left:${pct(f.t)}%`, title: `${fmt(f.t)}  ${this.fileLabel(f)}` }));
+    this.track.append(this.knob);
+    this.track.setAttribute('aria-valuemax', String(Math.round(this.duration)));
   }
 
   /** Relit la frappe avec la disposition choisie. */
@@ -192,7 +246,6 @@ export class RdpPlayer {
   private build() {
     const r = this.rec;
     const s = r.session;
-    const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : '');
     const seal = r.signature === 'verifiee'
       ? h('span', { class: 'ap-seal ok', title: `SHA-256 ${r.empreinte}` }, t('✓ Signature checked', '✓ Signature vérifiée'))
       : r.signature === 'alteree'
@@ -205,9 +258,10 @@ export class RdpPlayer {
         : null,
       h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')));
     const head = h('div', { class: 'ap-head' },
-      h('h2', {}, s.serveur, ' ', h('span', { class: 'badge proto-rdp' }, 'RDP'), ' ', h('span', { class: 'badge mode-enregistre' }, t('recorded', 'enregistré'))),
-      h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} · ${fmt(this.duration)}${s.fin ? '' : t(' · ongoing', ' · en cours')}`),
+      h('h2', {}, s.serveur, ' ', h('span', { class: 'badge proto-rdp' }, 'RDP'), ' ', h('span', { class: 'badge mode-enregistre' }, t('recorded', 'enregistré')), this.liveBadge),
+      this.headInfo,
       seal, actions);
+    this.renderLive();
     if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Copied-pasted text revealed: this replay is written to the gate\'s log.', 'Texte copié-collé révélé : cette relecture est inscrite au journal de la Gate.')));
 
     this.screen.append(this.stage, this.loading,
@@ -215,17 +269,7 @@ export class RdpPlayer {
       this.skipNote, this.subs);
     this.screen.addEventListener('click', () => this.toggle());
 
-    // Barre de temps : pauses, frappe, clics, copier-coller.
-    this.track.append(h('div', { class: 'ap-rail' }));
-    const pct = (x: number) => (100 * x) / this.duration;
-    for (const [a, b] of this.idle) this.track.append(h('div', { class: 'ap-idle', style: `left:${pct(a)}%;width:${pct(b - a)}%`, title: t(`${fmt(b - a)} pause`, `Pause de ${fmt(b - a)}`) }));
-    this.track.append(this.done);
-    for (const l of this.lines) this.track.append(h('div', { class: `ap-mk ${l.level}`, style: `left:${pct(l.t)}%`, title: `${fmt(l.t)}  ${l.text || l.keys.map((k) => k.chip).join(' ')}` }));
-    for (const c of this.clicks) this.track.append(h('div', { class: 'ap-mk rp-clic', style: `left:${pct(c.t)}%`, title: `${fmt(c.t)}  ${t('click', 'clic')}` }));
-    for (const c of this.clips) this.track.append(h('div', { class: 'ap-mk rp-clip', style: `left:${pct(c.t)}%`, title: `${fmt(c.t)}  ${this.clipLabel(c)}` }));
-    for (const f of this.files) this.track.append(h('div', { class: 'ap-mk rp-clip', style: `left:${pct(f.t)}%`, title: `${fmt(f.t)}  ${this.fileLabel(f)}` }));
-    this.track.append(this.knob);
-    this.track.setAttribute('aria-valuemax', String(Math.round(this.duration)));
+    this.renderTrack();
     const fromPointer = (e: PointerEvent) => {
       const box = this.track.getBoundingClientRect();
       this.seek(this.duration * Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)));
@@ -488,6 +532,7 @@ export class RdpPlayer {
   }
 
   dispose() {
+    clearInterval(this.liveTimer);
     this.closed = true;
     this.playing = false;
     cancelAnimationFrame(this.frame);

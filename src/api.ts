@@ -412,6 +412,7 @@ export const gates = {
     const replay = await invoke<string>('gate_rdp_replay', { id, session, onEvent: channel });
     return {
       seek: (t: number) => { invoke('gate_rdp_replay_seek', { replay, t }).catch(() => {}); },
+      more: () => invoke<number>('gate_rdp_replay_more', { replay }),
       close: () => { invoke('gate_rdp_replay_close', { replay }).catch(() => {}); },
     };
   },

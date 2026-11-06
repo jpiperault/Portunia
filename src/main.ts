@@ -459,6 +459,24 @@ async function openAuditReplay(b: Gate, s: AuditRow, start?: number, reveal = fa
     return toast(`Enregistrement illisible : ${errorText(e)}`, 'error');
   }
   views.append(view);
+  // Session encore ouverte (Audit › En direct) : l'enregistrement est relu toutes les 3 secondes
+  // et le lecteur s'allonge, jusqu'à la fin de la session.
+  if (!rec.session.fin) {
+    const live = player;
+    let busy = false;
+    live.liveTimer = window.setInterval(async () => {
+      if (busy) return;
+      busy = true;
+      try {
+        const next = await gates.admin<AuditRecording>(b.id, 'GET', `/audit/sessions/${s.id}/enregistrement?suite=true${reveal ? '&reveler=true' : ''}`);
+        await live.extend(next as never);
+        if (next.session.fin) clearInterval(live.liveTimer);
+      } catch {
+        // Gate injoignable un instant : nouvel essai au tour suivant.
+      }
+      busy = false;
+    }, 3000);
+  }
   if (replace) {
     replace.auditPlayer?.dispose();
     replace.view.remove();

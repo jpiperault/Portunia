@@ -26,8 +26,10 @@ export class WebPlayer {
   private filter: WebAction['k'] | 'tout' = 'tout';
   private query = '';
   private readonly list = h('div', { class: 'wp-list' });
+  /** Relecture du journal qui grandit (session en direct), arrêtée à la fermeture. */
+  liveTimer = 0;
 
-  constructor(readonly el: HTMLElement, private readonly rec: WebRecording, private readonly opts: { viewer: string; start?: number; exportText(): void }) {
+  constructor(readonly el: HTMLElement, private rec: WebRecording, private readonly opts: { viewer: string; start?: number; exportText(): void }) {
     this.build();
   }
 
@@ -47,7 +49,7 @@ export class WebPlayer {
         : h('span', { class: 'ap-seal', title: t('The signature is added when the session closes (15 minutes without activity)', 'La signature est posée à la fermeture de la session (15 minutes sans activité)') }, s.fin ? t('Interrupted, not signed', 'Interrompue, non signée') : t('Ongoing', 'En cours'));
     const count = (k: WebAction['k']) => r.web.actions.filter((a) => a.k === k).length;
     const head = h('div', { class: 'ap-head' },
-      h('h2', {}, s.serveur, ' ', h('span', { class: 'badge proto-web' }, 'WEB')),
+      h('h2', {}, s.serveur, ' ', h('span', { class: 'badge proto-web' }, 'WEB'), s.fin ? null : h('span', { class: 'ap-live' }, t('● LIVE', '● EN DIRECT'))),
       h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} → ${date(s.fin)} · ${s.adresse || '—'}`),
       seal,
       h('div', { class: 'ap-actions' }, h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription'))));
@@ -64,6 +66,7 @@ export class WebPlayer {
     kinds.append(tab('tout', t(`All (${r.web.actions.length})`, `Tout (${r.web.actions.length})`)),
       ...(['page', 'envoi', 'websocket', 'coffre'] as const).filter((k) => count(k)).map((k) => tab(k, `${KIND[k]()} (${count(k)})`)));
     const search = h('input', { type: 'search', class: 'wp-search', placeholder: t('Filter paths…', 'Filtrer les chemins…'), 'aria-label': t('Filter paths', 'Filtrer les chemins') }) as HTMLInputElement;
+    search.value = this.query;
     search.addEventListener('input', () => { this.query = search.value.trim().toLowerCase(); this.render(); });
     const note = h('p', { class: 'ap-note' }, t(
       'The Gate notes pages opened, data sent (forms, changes), WebSockets and vault use: method, path without parameters, status. Never what is typed, nor images and scripts.',
@@ -97,6 +100,17 @@ export class WebPlayer {
     }
   }
 
+  /** Session en direct : journal relu, liste redessinée (filtre et recherche gardés). */
+  extend(rec: WebRecording) {
+    const atEnd = this.el.scrollTop + this.el.clientHeight >= this.el.scrollHeight - 40;
+    this.rec = rec;
+    // L'action trouvée par la recherche n'est mise en avant qu'à l'ouverture.
+    this.opts.start = undefined;
+    this.el.replaceChildren();
+    this.build();
+    if (atEnd) this.el.scrollTop = this.el.scrollHeight;
+  }
+
   transcript(): string {
     const s = this.rec.session;
     return [
@@ -112,6 +126,7 @@ export class WebPlayer {
   }
 
   dispose() {
+    clearInterval(this.liveTimer);
     this.el.replaceChildren();
   }
 }

@@ -7,7 +7,9 @@
 //! répondre au serveur est ignoré.
 //!
 //! Commandes (une ligne JSON) : { "type": "seek", "t": secondes } décode jusqu'à ce temps et
-//! envoie les zones changées ; { "type": "close" }. Revenir en arrière redécode depuis le début.
+//! envoie les zones changées ; { "type": "more" } relit le fichier, qui a grandi (session suivie
+//! en direct : Portunia y ajoute les nouvelles images) ; { "type": "close" }. Revenir en arrière
+//! redécode depuis le début.
 
 use std::net::{Ipv4Addr, SocketAddr};
 
@@ -283,6 +285,7 @@ fn bulk_type(ct: CompressionType) -> ironrdp_bulk::CompressionType {
 #[serde(tag = "type", rename_all = "camelCase")]
 enum Command {
     Seek { t: f64 },
+    More,
     Close,
     #[serde(other)]
     Other,
@@ -290,7 +293,7 @@ enum Command {
 
 /// Lecteur : décode jusqu'au temps demandé et envoie ce qui a changé à l'écran.
 pub async fn run(path: &str, mut lines: tokio::io::Lines<BufReader<tokio::io::Stdin>>) -> Result<()> {
-    let frames = load(path)?;
+    let mut frames = load(path)?;
     let duration = frames.last().map(|f| f.0).unwrap_or(0.0);
     emit(&Output::Ready { duration, frames: frames.len() });
     let mut decoder = Decoder::new()?;
@@ -301,6 +304,17 @@ pub async fn run(path: &str, mut lines: tokio::io::Lines<BufReader<tokio::io::St
     while let Ok(Some(line)) = lines.next_line().await {
         let target = match serde_json::from_str::<Command>(&line) {
             Ok(Command::Seek { t }) => t.max(0.0),
+            Ok(Command::More) => {
+                // Les images déjà lues ne changent pas : seules les suivantes sont ajoutées.
+                if let Ok(all) = load(path) {
+                    if all.len() > frames.len() {
+                        let known = frames.len();
+                        frames.extend(all.into_iter().skip(known));
+                    }
+                }
+                emit(&Output::Ready { duration: frames.last().map(|f| f.0).unwrap_or(0.0), frames: frames.len() });
+                continue;
+            }
             Ok(Command::Close) => break,
             _ => continue,
         };

@@ -130,12 +130,18 @@ function screenLines(events: Ev[]): Line[] {
 
 export class AuditPlayer {
   private readonly term: Terminal;
-  private readonly events: Ev[];
-  private readonly duration: number;
-  private readonly idle: [number, number][] = [];
-  private readonly lines: Line[];
-  private readonly errors: number[] = [];
-  private readonly withInput: boolean;
+  private events: Ev[] = [];
+  private duration = 1;
+  private idle: [number, number][] = [];
+  private lines: Line[] = [];
+  private errors: number[] = [];
+  private withInput = false;
+  /** Session encore ouverte : la relecture suit la fin (voir `extend`). */
+  private live: boolean;
+  /** Relecture de l'enregistrement qui grandit, arrêtée à la fermeture du lecteur. */
+  liveTimer = 0;
+  private readonly liveBadge = h('span', { class: 'ap-live', hidden: true }, t('● LIVE', '● EN DIRECT'));
+  private readonly headInfo = h('span', { class: 'muted small' });
   private index = 0;
   private position = 0;
   private speed = 2;
@@ -160,10 +166,33 @@ export class AuditPlayer {
   private readonly list = h('div', { class: 'ap-lines' });
   private readonly search = h('input', { type: 'search', class: 'input', placeholder: t('Search keystrokes', 'Rechercher dans la frappe'), 'aria-label': t('Search keystrokes', 'Rechercher dans la frappe') }) as HTMLInputElement;
 
-  constructor(readonly el: HTMLElement, private readonly rec: AuditRecording, private readonly opts: AuditPlayerOptions) {
+  constructor(readonly el: HTMLElement, private rec: AuditRecording, private readonly opts: AuditPlayerOptions) {
+    const parsed = this.analyze(rec);
+    this.live = !rec.session.fin;
+
+    const s = settings();
+    this.baseFont = s.fontSize;
+    // Sans historique : comme une vidéo, on voit l'écran de la session, sans barre de défilement.
+    this.term = new Terminal({ fontFamily: fontStack(s), fontSize: s.fontSize, cols: parsed.cols, rows: parsed.rows, disableStdin: true, cursorBlink: false, theme: terminalTheme(), scrollback: 0 });
+    this.build();
+    this.term.open(this.screen.querySelector('.ap-term') as HTMLElement);
+    this.resizer = new ResizeObserver(() => this.fit());
+    this.resizer.observe(this.screen);
+    // En direct : on arrive à la fin, là où se passe la session.
+    if (this.live && opts.start == null) this.seek(this.duration);
+    else {
+      this.seek(Math.max(0, (opts.start ?? 0) - 0.5));
+      if (opts.start == null) this.toggle();
+    }
+    this.renderLive();
+  }
+
+  /** Événements, durée, pauses, lignes et erreurs de l'enregistrement. */
+  private analyze(rec: AuditRecording) {
     const parsed = parse(rec.cast);
     this.events = parsed.events;
     this.duration = (this.events[this.events.length - 1]?.t ?? 0) + 1;
+    this.idle = [];
     for (let i = 1; i < this.events.length; i++) {
       const a = this.events[i - 1].t, b = this.events[i].t;
       if (b - a > IDLE) this.idle.push([a + 1, b - 0.5]);
@@ -175,21 +204,50 @@ export class AuditPlayer {
       const text = l.text.toLowerCase();
       l.level = sensitive.some((c) => text.includes(c)) ? 'x' : /^sudo\b/.test(text) || l.secret || l.keys.some((k) => k.d === '\x03') ? 'w' : '';
     }
+    this.errors = [];
     let lastErr = -10;
     for (const e of this.events) {
       if (e.k === 'o' && e.t - lastErr > 2 && ERROR.test(stripAnsi(e.d))) { this.errors.push(e.t); lastErr = e.t; }
     }
+    return parsed;
+  }
 
-    const s = settings();
-    this.baseFont = s.fontSize;
-    // Sans historique : comme une vidéo, on voit l'écran de la session, sans barre de défilement.
-    this.term = new Terminal({ fontFamily: fontStack(s), fontSize: s.fontSize, cols: parsed.cols, rows: parsed.rows, disableStdin: true, cursorBlink: false, theme: terminalTheme(), scrollback: 0 });
-    this.build();
-    this.term.open(this.screen.querySelector('.ap-term') as HTMLElement);
-    this.resizer = new ResizeObserver(() => this.fit());
-    this.resizer.observe(this.screen);
-    this.seek(Math.max(0, (opts.start ?? 0) - 0.5));
-    if (opts.start == null) this.toggle();
+  /**
+   * Session en direct : l'enregistrement relu a grandi. Les nouveaux événements sont ajoutés ;
+   * si l'on regardait la fin, on y reste.
+   */
+  extend(rec: AuditRecording) {
+    const following = this.live && this.position >= this.duration - 1.5;
+    this.rec = rec;
+    this.analyze(rec);
+    this.live = !rec.session.fin;
+    this.renderTrack();
+    this.renderList();
+    if (following) this.seek(this.duration);
+    else this.render();
+    this.renderLive();
+  }
+
+  private renderLive() {
+    const s = this.rec.session;
+    const date = s.debut ? new Date(s.debut).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : '';
+    this.liveBadge.hidden = !this.live;
+    this.headInfo.textContent = `${s.compte} · ${date} · ${fmt(this.duration)}${s.fin ? '' : t(' · ongoing', ' · en cours')}`;
+  }
+
+  /** Barre de temps : pauses hachurées, repères. */
+  private renderTrack() {
+    this.track.replaceChildren(h('div', { class: 'ap-rail' }));
+    for (const [a, b] of this.idle) {
+      this.track.append(h('div', { class: 'ap-idle', style: `left:${(100 * a) / this.duration}%;width:${(100 * (b - a)) / this.duration}%`, title: `Pause de ${fmt(b - a)}` }));
+    }
+    this.track.append(this.done);
+    for (const l of this.lines) {
+      this.track.append(h('div', { class: `ap-mk ${l.level}`, style: `left:${(100 * l.t) / this.duration}%`, title: t(`${fmt(l.t)}  ${l.secret ? '(masked input)' : l.text}`, `${fmt(l.t)}  ${l.secret ? '(saisie masquée)' : l.text}`) }));
+    }
+    for (const at of this.errors) this.track.append(h('div', { class: 'ap-mk err', style: `left:${(100 * at) / this.duration}%`, title: t(`${fmt(at)}  error displayed`, `${fmt(at)}  erreur affichée`) }));
+    this.track.append(this.knob);
+    this.track.setAttribute('aria-valuemax', String(Math.round(this.duration)));
   }
 
   // ---------- Construction ----------
@@ -197,7 +255,6 @@ export class AuditPlayer {
   private build() {
     const r = this.rec;
     const s = r.session;
-    const date = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'medium' }) : '');
     const seal = r.signature === 'verifiee'
       ? h('span', { class: 'ap-seal ok', title: `SHA-256 ${r.empreinte}` }, t('✓ Signature checked', '✓ Signature vérifiée'))
       : r.signature === 'alteree'
@@ -210,8 +267,8 @@ export class AuditPlayer {
       h('button', { class: 'btn sm', title: r.revele ? t('Original file, signed by the Gate', 'Fichier d\'origine, signé par la Gate') : t('Masked copy (without input typed without echo), not signed', 'Copie masquée (sans les saisies sans écho), non signée'), onclick: () => this.opts.exportCast() }, icon('download', 14), t('.cast recording', 'Enregistrement .cast')),
       h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')));
     const head = h('div', { class: 'ap-head' },
-      h('h2', {}, s.serveur, ' ', s.mode ? h('span', { class: `badge mode-${s.mode}` }, s.mode === 'enregistre' ? t('recorded', 'enregistré') : s.mode) : null),
-      h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} · ${fmt(this.duration)}${s.fin ? '' : ' · en cours'}`),
+      h('h2', {}, s.serveur, ' ', s.mode ? h('span', { class: `badge mode-${s.mode}` }, s.mode === 'enregistre' ? t('recorded', 'enregistré') : s.mode) : null, this.liveBadge),
+      this.headInfo,
       seal, actions);
     if (r.revele) head.append(h('div', { class: 'ap-revealed' }, t('Masked input revealed: this replay is written to the gate\'s log.', 'Saisies masquées révélées : cette relecture est inscrite au journal de la Gate.')));
 
@@ -222,18 +279,7 @@ export class AuditPlayer {
       this.skipNote, this.subs);
     this.screen.addEventListener('click', () => this.toggle());
 
-    // Barre de temps : pauses hachurées, repères.
-    this.track.append(h('div', { class: 'ap-rail' }));
-    for (const [a, b] of this.idle) {
-      this.track.append(h('div', { class: 'ap-idle', style: `left:${(100 * a) / this.duration}%;width:${(100 * (b - a)) / this.duration}%`, title: `Pause de ${fmt(b - a)}` }));
-    }
-    this.track.append(this.done);
-    for (const l of this.lines) {
-      this.track.append(h('div', { class: `ap-mk ${l.level}`, style: `left:${(100 * l.t) / this.duration}%`, title: t(`${fmt(l.t)}  ${l.secret ? '(masked input)' : l.text}`, `${fmt(l.t)}  ${l.secret ? '(saisie masquée)' : l.text}`) }));
-    }
-    for (const at of this.errors) this.track.append(h('div', { class: 'ap-mk err', style: `left:${(100 * at) / this.duration}%`, title: t(`${fmt(at)}  error displayed`, `${fmt(at)}  erreur affichée`) }));
-    this.track.append(this.knob);
-    this.track.setAttribute('aria-valuemax', String(Math.round(this.duration)));
+    this.renderTrack();
     const fromPointer = (e: PointerEvent) => {
       const box = this.track.getBoundingClientRect();
       this.seek(this.duration * Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)));
@@ -508,6 +554,7 @@ export class AuditPlayer {
 
   dispose() {
     this.playing = false;
+    clearInterval(this.liveTimer);
     cancelAnimationFrame(this.frame);
     clearTimeout(this.skipTimer);
     this.resizer.disconnect();

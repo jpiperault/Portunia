@@ -1311,6 +1311,8 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const hours = input({ id: 's-hours', type: 'number', min: 1, max: 168, value: r.duree_session_h });
       const memo = checkbox('s-memo', t('Allow Portunia to remember the password (the code is still asked)', 'Autoriser Portunia à mémoriser le mot de passe (le code reste demandé)'), r.memo_mot_de_passe);
       const own = checkbox('s-own', t('Each account can replay its own sessions (gate\'s « My sessions » menu)', 'Chaque compte peut relire ses propres sessions (menu « Mes sessions » de la Gate)'), !!r.relecture_propres);
+      // Gate 0.36 et suivantes : prévenir l'utilisateur d'une session suivie en direct.
+      const notice = r.direct_prevenir === undefined ? null : checkbox('s-notice', t('Tell the user when their session is followed live (SSH terminal)', 'Prévenir l\'utilisateur quand sa session est suivie en direct (terminal SSH)'), !!r.direct_prevenir);
       const sensitive = h('textarea', { id: 's-sensitive', class: 'input', rows: 4, spellcheck: 'false' }, (r.commandes_sensibles ?? []).join('\n')) as HTMLTextAreaElement;
       // Langue de la Gate (Portunia Gate 0.9 et suivants) : menu SSH, bannière par défaut, journaux.
       const langue = r.langue === undefined ? null : select('s-langue', [['', t('System language', 'Langue du système')], ['en', 'English'], ['fr', 'Français']], r.langue);
@@ -1322,6 +1324,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
             nom: nom.value, banniere: banner.value, politique: policy.value, duree_session_h: Number(hours.value), memo_mot_de_passe: memo.box.checked,
             relecture_propres: own.box.checked, commandes_sensibles: sensitive.value.split('\n').map((x) => x.trim()).filter(Boolean),
             ...(langue ? { langue: langue.value } : {}),
+            ...(notice ? { direct_prevenir: notice.box.checked } : {}),
             ...(copies ? { copies_fichiers_mo: Number(copies.value) || 0 } : {}),
           });
           host.toast(t('Settings saved', 'Réglages enregistrés'));
@@ -1336,6 +1339,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         memo.row,
         h('h3', {}, t('Session replay', 'Relecture des sessions')),
         own.row,
+        notice ? notice.row : null,
         field(t('Sensitive commands', 'Commandes sensibles'), sensitive, t('one per line; marked in red on the player\'s timeline', 'une par ligne ; repérées en rouge sur la barre de temps du lecteur')),
         copies ? h('h3', {}, t('Remote Desktop file copy', 'Copie de fichiers en Bureau à distance')) : null,
         copies ? field(t('Copies kept per session (MB)', 'Copies gardées par session (Mo)'), copies, t('0: none, only name, size and SHA-256 are logged; otherwise the files copied, up to this size, next to the recording', '0 : aucune, seuls nom, taille et SHA-256 sont tracés ; sinon les fichiers copiés, jusqu\'à cette taille, à côté de l\'enregistrement')) : null,

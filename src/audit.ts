@@ -26,7 +26,7 @@ export interface AuditRow {
   trouve: { t: number; extrait: string } | null;
 }
 
-type Section = 'sessions' | 'journal';
+type Section = 'direct' | 'sessions' | 'journal';
 
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' }) : '');
 const clock = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
@@ -50,21 +50,88 @@ function dayBefore(days: number) {
 
 export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
   const full = b.role === 'admin' || b.role === 'auditor';
-  const sections: { id: Section; label: string }[] = full ? [{ id: 'sessions', label: 'Sessions' }, { id: 'journal', label: t('Log', 'Journal') }] : [{ id: 'sessions', label: t('My sessions', 'Mes sessions') }];
+  const sections: { id: Section; label: string }[] = full
+    ? [{ id: 'direct', label: t('Live', 'En direct') }, { id: 'sessions', label: 'Sessions' }, { id: 'journal', label: t('Log', 'Journal') }]
+    : [{ id: 'sessions', label: t('My sessions', 'Mes sessions') }];
+  // Rafraîchissement de l'onglet En direct (arrêté en changeant d'onglet ou en fermant l'Audit).
+  let liveTimer = 0;
   const nav = h('div', { class: 'seg admin-nav', role: 'tablist' });
   const content = h('div', { class: 'admin-content' });
   const call = <T = any>(path: string) => gates.admin<T>(b.id, 'GET', path);
   const fail = (e: unknown) => host.toast(errorText(e) === 'SESSION_EXPIREE' ? t('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
 
   const show = async (id: Section) => {
+    clearInterval(liveTimer);
     nav.replaceChildren(...sections.map((s) => h('button', { type: 'button', role: 'tab', class: `seg-opt${s.id === id ? ' on' : ''}`, 'aria-selected': String(s.id === id), onclick: () => show(s.id) }, s.label)));
     content.replaceChildren(h('p', { class: 'muted' }, t('Loading…', 'Chargement…')));
     try {
-      content.replaceChildren(await (id === 'sessions' ? sessions() : journal()));
+      content.replaceChildren(await (id === 'direct' ? live() : id === 'sessions' ? sessions() : journal()));
     } catch (e) {
       content.replaceChildren(h('p', { class: 'form-error' }, errorText(e)));
       fail(e);
     }
+  };
+
+  // --- En direct ---
+  const live = async () => {
+    const list = h('div');
+    const note = h('p', { class: 'muted small' });
+    const since = (iso: string) => {
+      const sec = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000));
+      return sec >= 3600 ? `${Math.floor(sec / 3600)} h ${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}` : sec >= 60 ? `${Math.floor(sec / 60)} min` : `${sec} s`;
+    };
+    // Ligne de confirmation de la coupure, sous la session (une à la fois).
+    let confirmFor = '';
+    const cut = async (s: AuditRow, disable: boolean) => {
+      try {
+        await gates.admin(b.id, 'POST', `/audit/sessions/${s.id}/couper`, { desactiver: disable });
+        host.toast(disable ? t(`Session cut, account ${s.compte} disabled.`, `Session coupée, compte ${s.compte} désactivé.`) : t('Session cut.', 'Session coupée.'));
+      } catch (e) { fail(e); }
+      confirmFor = '';
+      await load().catch(fail);
+    };
+    const load = async () => {
+      const { sessions, prevenir } = await call<{ sessions: AuditRow[]; prevenir: boolean }>('/audit/direct');
+      const rows: HTMLElement[] = [];
+      for (const s of sessions) {
+        const follow = s.enregistree && (s.relisible_rdp || s.relisible_web || s.relisible !== false);
+        rows.push(h('tr', { class: 'live' },
+          h('td', {}, fmtDate(s.debut)),
+          h('td', {}, since(s.debut)),
+          h('td', {}, s.compte),
+          h('td', {}, h('strong', {}, s.serveur), s.type !== 'shell' ? h('span', { class: 'muted small' }, ` · ${s.type}`) : null),
+          h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null),
+          h('td', { class: 'muted small' }, s.adresse),
+          h('td', { class: 'acts' },
+            follow ? h('button', { class: 'btn sm primary', title: prevenir && s.type !== 'rdp' && s.type !== 'web' ? t('The user is told that the session is followed', 'L\'utilisateur est prévenu que la session est suivie') : '', onclick: () => host.openRecording(b, s) }, t('◉ Follow', '◉ Suivre')) : h('span', { class: 'muted small' }, s.mode === 'rebond' ? t('jump, not recorded', 'rebond, non enregistrée') : t('not recorded', 'non enregistrée')),
+            ' ',
+            h('button', { class: 'btn sm danger', onclick: () => { confirmFor = confirmFor === s.id ? '' : s.id; render(); } }, t('Cut', 'Couper')))));
+        if (confirmFor === s.id) {
+          const disable = h('input', { type: 'checkbox' }) as HTMLInputElement;
+          rows.push(h('tr', { class: 'cut-confirm' }, h('td', { colspan: '7' },
+            h('div', { class: 'cut-row' },
+              h('span', {}, t(`Cut ${s.compte}'s session on ${s.serveur} now?`, `Couper maintenant la session de ${s.compte} sur ${s.serveur} ?`)),
+              b.role === 'admin' ? h('label', { class: 'check-row' }, disable, h('span', {}, t(`Also disable account ${s.compte}`, `Désactiver aussi le compte ${s.compte}`))) : null,
+              h('button', { class: 'btn sm danger', onclick: () => cut(s, disable.checked) }, t('Cut the session', 'Couper la session')),
+              h('button', { class: 'btn sm', onclick: () => { confirmFor = ''; render(); } }, t('Cancel', 'Annuler'))))));
+        }
+      }
+      list.replaceChildren(rows.length
+        ? table([t('Start', 'Début'), t('For', 'Depuis'), t('Account', 'Compte'), t('Server', 'Serveur'), 'Mode', t('From', 'Adresse'), ''], rows)
+        : h('p', { class: 'muted' }, t('No open session right now.', 'Aucune session ouverte en ce moment.')));
+      note.textContent = t(
+        `${sessions.length} open session(s), refreshed every 10 seconds. Following a session is written to the Gate's log${prevenir ? '; SSH users are told' : ''}. Cutting closes it at once.`,
+        `${sessions.length} session(s) ouverte(s), mises à jour toutes les 10 secondes. Suivre une session est inscrit au journal de la Gate${prevenir ? ' ; en SSH, l\'utilisateur en est prévenu' : ''}. Couper la ferme tout de suite.`);
+    };
+    // Ouverture ou fermeture de la confirmation : liste relue.
+    const render = () => { load().catch(fail); };
+    await load();
+    liveTimer = window.setInterval(() => {
+      if (!list.isConnected) { clearInterval(liveTimer); return; }
+      // Pas de rafraîchissement pendant une confirmation : la ligne ne doit pas disparaître.
+      if (!confirmFor) load().catch(fail);
+    }, 10000);
+    return h('div', { class: 'admin-section' }, list, note);
   };
 
   // --- Sessions ---
@@ -159,7 +226,7 @@ export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
     return h('div', { class: 'admin-section' }, h('div', { class: 'admin-bar' }, search, h('button', { class: 'btn', onclick: exportCsv }, t('Export to CSV', 'Exporter en CSV'))), seal, list);
   };
 
-  show('sessions');
+  show(full ? 'direct' : 'sessions');
   return h('div', { class: 'ext-page gate-admin' },
     h('header', {}, h('h2', {}, `Audit · ${b.name}`), h('p', { class: 'muted' }, full
       ? t(`${b.host} · ${b.login} (${b.role === 'admin' ? 'administrator' : 'auditor'}) · session replay and log`, `${b.host} · ${b.login} (${b.role === 'admin' ? 'administrateur' : 'auditeur'}) · relecture des sessions et journal`)

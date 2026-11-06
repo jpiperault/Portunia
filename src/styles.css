@@ -713,6 +713,10 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .badge.mode-coffre { background: var(--warn-soft); color: var(--warn); }
 .badge.mode-enregistre { background: rgb(255 123 123 / .14); color: var(--danger); }
 .badge.mode-rebond { background: var(--chip-bg); color: var(--text-2); }
+/* Audit › En direct : confirmation de coupure */
+.cut-confirm td { background: rgb(255 123 123 / .08); }
+.cut-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+
 /* Journal d'actions d'une session web */
 .badge.proto-web { background: rgb(76 195 138 / .15); color: var(--ok); }
 .web-player { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; overflow: auto; height: 100%; box-sizing: border-box; }
@@ -1031,3 +1035,6 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .pmon-barcell { width: 22%; min-width: 90px; }
 /* Proxmox VE : journal système et SMART des nœuds. */
 .pve-log { max-height: 50vh; overflow: auto; margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--chip-bg); color: var(--text-2); font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Relecture d'une session encore ouverte (Audit › En direct) */
+.ap-live { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--danger); padding: 2px 8px; border-radius: 999px; background: rgb(255 123 123 / .14); }

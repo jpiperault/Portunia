@@ -626,6 +626,45 @@ struct RdpReplay {
     stdin: std::process::ChildStdin,
     child: std::process::Child,
     file: PathBuf,
+    /// Gate et session relues ; images déjà reçues (session suivie en direct).
+    gate: String,
+    session: String,
+    frames: usize,
+}
+
+/// Nombre d'images complètes d'un flux (temps f64, longueur u32, message) et leurs octets.
+fn whole_frames(bytes: &[u8]) -> (usize, usize) {
+    let (mut count, mut at) = (0, 0);
+    while at + 12 <= bytes.len() {
+        let len = u32::from_be_bytes([bytes[at + 8], bytes[at + 9], bytes[at + 10], bytes[at + 11]]) as usize;
+        if at + 12 + len > bytes.len() {
+            break;
+        }
+        at += 12 + len;
+        count += 1;
+    }
+    (count, at)
+}
+
+/// Télécharge l'image d'une session depuis la Gate, à partir de l'image `from`.
+async fn rdp_stream(b: &Gate, session: &str, from: usize) -> CmdResult<Vec<u8>> {
+    let t = token(b).map_err(full)?;
+    let (http, _) = client(Some(&b.api_fingerprint)).map_err(full)?;
+    let resp = http
+        .get(format!("https://{}:{}/api/v1/audit/sessions/{session}/flux?depuis={from}", b.host, b.api_port))
+        .bearer_auth(t)
+        .timeout(std::time::Duration::from_secs(300))
+        .send()
+        .await
+        .map_err(|e| root_cause(&e))?;
+    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+        return Err("SESSION_EXPIREE".into());
+    }
+    if !resp.status().is_success() {
+        let value: Value = resp.json().await.unwrap_or(Value::Null);
+        return Err(value.get("erreur").and_then(Value::as_str).unwrap_or("?").to_string());
+    }
+    resp.bytes().await.map(|b| b.to_vec()).map_err(err)
 }
 
 impl Drop for RdpReplay {
@@ -653,23 +692,10 @@ pub async fn gate_rdp_replay(state: State<'_, AppState>, id: String, session: St
         return Err(t!("Session not found", "Session introuvable").into());
     }
     let b = find(&state.data_dir, &id).map_err(full)?;
-    let t = token(&b).map_err(full)?;
-    let (http, _) = client(Some(&b.api_fingerprint)).map_err(full)?;
-    let resp = http
-        .get(format!("https://{}:{}/api/v1/audit/sessions/{session}/flux", b.host, b.api_port))
-        .bearer_auth(t)
-        .timeout(std::time::Duration::from_secs(300))
-        .send()
-        .await
-        .map_err(|e| root_cause(&e))?;
-    if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-        return Err("SESSION_EXPIREE".into());
-    }
-    if !resp.status().is_success() {
-        let value: Value = resp.json().await.unwrap_or(Value::Null);
-        return Err(value.get("erreur").and_then(Value::as_str).unwrap_or("?").to_string());
-    }
-    let bytes = resp.bytes().await.map_err(err)?;
+    let bytes = rdp_stream(&b, &session, 0).await?;
+    // Session en cours : la dernière image peut être incomplète ; elle viendra avec les suivantes.
+    let (frames, whole) = whole_frames(&bytes);
+    let bytes = &bytes[..whole];
     let replay_id = uuid::Uuid::new_v4().to_string();
     let file = std::env::temp_dir().join(format!("portunia-relecture-{replay_id}.flux"));
     std::fs::write(&file, &bytes).map_err(err)?;
@@ -709,8 +735,38 @@ pub async fn gate_rdp_replay(state: State<'_, AppState>, id: String, session: St
             let _ = on_event.send(InvokeResponseBody::Json(closed.to_string()));
         })
         .map_err(err)?;
-    replays().lock().unwrap().insert(replay_id.clone(), RdpReplay { stdin, child, file });
+    replays().lock().unwrap().insert(replay_id.clone(), RdpReplay { stdin, child, file, gate: id, session, frames });
     Ok(replay_id)
+}
+
+/// Session suivie en direct : ajoute les nouvelles images au fichier de la relecture et les
+/// confie au moteur. Renvoie le nombre d'images ajoutées.
+#[tauri::command]
+pub async fn gate_rdp_replay_more(state: State<'_, AppState>, replay: String) -> CmdResult<usize> {
+    use std::io::Write;
+    state.unlocked()?;
+    let (gate, session, from) = {
+        let all = replays().lock().unwrap();
+        let r = all.get(&replay).ok_or_else(|| t!("Session closed", "Session fermée").to_string())?;
+        (r.gate.clone(), r.session.clone(), r.frames)
+    };
+    let b = find(&state.data_dir, &gate).map_err(full)?;
+    let bytes = rdp_stream(&b, &session, from).await?;
+    let (added, whole) = whole_frames(&bytes);
+    if added == 0 {
+        return Ok(0);
+    }
+    let mut all = replays().lock().unwrap();
+    let r = all.get_mut(&replay).ok_or_else(|| t!("Session closed", "Session fermée").to_string())?;
+    // Une autre demande a pu passer entre-temps : on n'ajoute que si rien n'a bougé.
+    if r.frames != from {
+        return Ok(0);
+    }
+    std::fs::OpenOptions::new().append(true).open(&r.file).and_then(|mut f| f.write_all(&bytes[..whole])).map_err(err)?;
+    r.frames += added;
+    writeln!(r.stdin, "{}", json!({ "type": "more" })).map_err(err)?;
+    r.stdin.flush().map_err(err)?;
+    Ok(added)
 }
 
 /// Amène la relecture à ce temps (secondes) : le moteur envoie les zones changées.
