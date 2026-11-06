@@ -1,6 +1,8 @@
 #[macro_use]
 mod lang;
 mod platform;
+#[cfg(target_os = "macos")]
+mod biometric_mac;
 // Compilé partout (testable), installé seulement sous macOS.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod appmenu;
@@ -182,6 +184,8 @@ pub fn run() {
             commands::lock_now,
             commands::unlock,
             commands::unlock_hello,
+            commands::unlock_biometric,
+            commands::biometric_kind,
             commands::recording_default_dir,
             commands::recording_start,
             commands::recording_stop,
