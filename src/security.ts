@@ -24,6 +24,15 @@ export function biometricOption(kind: BiometricKind | null, enabled: boolean, ma
   return enabled ? { kind: mac ? 'touchid' : 'hello', disabled: true } : null;
 }
 
+/**
+ * Action de la case « déverrouiller avec la biométrie ». Sur Mac, l'activer passe par l'invite
+ * Touch ID (aucun mot de passe : le coffre est déjà déverrouillé) ; le reste (désactiver, Windows
+ * Hello) garde la commande d'options d'origine.
+ */
+export function biometricToggleAction(mac: boolean, checked: boolean): 'enable-touch-id' | 'set-options' {
+  return mac && checked ? 'enable-touch-id' : 'set-options';
+}
+
 /** Textes de l'interface pour un capteur (ceux de Windows Hello sont inchangés). */
 export function biometricTexts(kind: BiometricKind) {
   const label = biometricLabel(kind);
@@ -49,6 +58,8 @@ export async function refreshAfterFailure<T>(load: () => Promise<T>, render: (st
 const biometric = {
   kind: () => invoke<BiometricKind | null>('biometric_kind').catch(() => null),
   unlock: () => (IS_MAC ? invoke<boolean>('unlock_biometric') : security.unlockHello()),
+  /** macOS : invite Touch ID puis clé rangée dans le Trousseau, sans mot de passe (coffre déverrouillé). */
+  enable: (timeoutMinutes: number) => invoke<LockStatus>('enable_touch_id', { timeoutMinutes }),
 };
 
 /** Icône empreinte (Touch ID) ou silhouette (Windows Hello). */
@@ -211,7 +222,7 @@ export function securitySection(toast: Toast, refresh: () => void): HTMLElement 
           h('select', { onchange: async (e: Event) => { try { render(await security.lockSetOptions(s.hello, Number((e.target as HTMLSelectElement).value))); } catch (err) { toast(errorText(err), 'error'); await refreshAfterFailure(security.lockStatus, render); } } },
             ...[[0, t('Never', 'Jamais')], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 heure']].map(([v, l]) => h('option', { value: String(v), selected: v === s.timeoutMinutes }, String(l))))),
         bio && h('label', { class: `check setting${bio.disabled ? ' disabled' : ''}`, title: bio.disabled ? bioTexts?.unavailable : '' },
-          h('input', { type: 'checkbox', checked: s.hello, disabled: bio.disabled && !s.hello, onchange: async (e: Event) => { try { render(await security.lockSetOptions((e.target as HTMLInputElement).checked, s.timeoutMinutes)); } catch (err) { toast(errorText(err), 'error'); await refreshAfterFailure(security.lockStatus, render); } } }),
+          h('input', { type: 'checkbox', checked: s.hello, disabled: bio.disabled && !s.hello, onchange: async (e: Event) => { try { const checked = (e.target as HTMLInputElement).checked; render(biometricToggleAction(IS_MAC, checked) === 'enable-touch-id' ? await biometric.enable(s.timeoutMinutes) : await security.lockSetOptions(checked, s.timeoutMinutes)); } catch (err) { toast(errorText(err), 'error'); await refreshAfterFailure(security.lockStatus, render); } } }),
           h('span', {}, bioTexts?.toggle, h('span', { class: 'muted small block' }, bioTexts?.hint)))),
       s.enabled && h('button', {
         type: 'button', class: 'btn', style: 'align-self: flex-start',

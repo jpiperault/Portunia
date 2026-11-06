@@ -15,7 +15,7 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { biometricLabel, biometricOption, biometricTexts, refreshAfterFailure } = await import('../../src/security.ts');
+const { biometricLabel, biometricOption, biometricTexts, biometricToggleAction, refreshAfterFailure } = await import('../../src/security.ts');
 
 test('libellé : Touch ID, Windows Hello, rien', () => {
   assert.equal(biometricLabel('touchid'), 'Touch ID');
@@ -64,4 +64,14 @@ test('après une erreur, un cœur injoignable n\'écrase rien et ne lève pas', 
   const shown: string[] = [];
   await refreshAfterFailure(async () => { throw new Error('indisponible'); }, (s: string) => { shown.push(s); });
   assert.deepEqual(shown, []);
+});
+
+test('Mac : activer Touch ID passe par l\'invite, sans mot de passe ; le reste par les options', () => {
+  assert.equal(biometricToggleAction(true, true), 'enable-touch-id');
+  assert.equal(biometricToggleAction(true, false), 'set-options', 'désactiver ne demande rien');
+});
+
+test('Windows : l\'activation de Windows Hello est inchangée', () => {
+  assert.equal(biometricToggleAction(false, true), 'set-options');
+  assert.equal(biometricToggleAction(false, false), 'set-options');
 });

@@ -6,3 +6,4 @@ rdp-helper/target/
 src-tauri/binaries/
 tools/license-tool/target/
 *.pk8
+.claude/worktrees/

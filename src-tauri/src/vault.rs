@@ -29,12 +29,18 @@ use ring::{
     aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM, NONCE_LEN},
     rand::{SecureRandom, SystemRandom},
 };
+use zeroize::Zeroizing;
 
 /// En-tête d'un fichier chiffré (ancien nom du logiciel, gardé : c'est le format des fichiers).
 const MAGIC: &[u8] = b"TERMORIA-CHIFFRE-1\n";
 
-/// Clé de données en mémoire (présente une fois déverrouillé).
-static KEY: RwLock<Option<[u8; 32]>> = RwLock::new(None);
+/// Clé de données en mémoire (présente une fois déverrouillé). `Zeroizing` en efface les octets
+/// quand elle est remplacée (nouveau mot de passe, déverrouillage Hello / Touch ID), retirée
+/// (fin du chiffrement) ou à la fermeture de l'application (`lib.rs`, `RunEvent::Exit`) : une
+/// `static` n'est pas détruite à la sortie du processus. Le verrouillage de l'interface ne
+/// l'efface PAS (les sessions ouvertes en ont besoin). Limite connue : les copies de pile
+/// temporaires (valeurs `[u8; 32]` passées par valeur) ne sont pas toutes traçables ; on passe des références et des `Zeroizing` partout où c'est possible.
+static KEY: RwLock<Option<Zeroizing<[u8; 32]>>> = RwLock::new(None);
 /// Chiffrement actif : toute écriture doit être chiffrée.
 static ENABLED: AtomicBool = AtomicBool::new(false);
 
@@ -46,12 +52,48 @@ pub fn enabled() -> bool {
     ENABLED.load(Ordering::SeqCst)
 }
 
-pub fn set_key(key: Option<[u8; 32]>) {
-    *KEY.write().unwrap() = key;
+/// Installe la clé ; l'ancienne, remplacée, est effacée.
+pub fn install_key(key: Zeroizing<[u8; 32]>) {
+    *KEY.write().unwrap_or_else(|e| e.into_inner()) = Some(key);
 }
 
-pub fn key() -> Option<[u8; 32]> {
-    *KEY.read().unwrap()
+/// Retire la clé (fin du chiffrement, fermeture de l'application) : ses octets sont effacés.
+pub fn clear_key() {
+    *KEY.write().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// `Some` installe, `None` efface (voir `install_key` / `clear_key`). Pratique pour les tests.
+#[cfg(test)]
+pub fn set_key(key: Option<[u8; 32]>) {
+    match key {
+        Some(key) => install_key(Zeroizing::new(key)),
+        None => clear_key(),
+    }
+}
+
+pub fn has_key() -> bool {
+    KEY.read().unwrap_or_else(|e| e.into_inner()).is_some()
+}
+
+/// Copie de la clé, effacée à sa libération. Préférer `with_key` quand une référence suffit.
+pub fn key() -> Option<Zeroizing<[u8; 32]>> {
+    KEY.read()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|k| {
+            // Copie directement dans un `Zeroizing` (pas de temporaire `[u8; 32]` sur la pile).
+            let mut copy = Zeroizing::new([0u8; 32]);
+            copy.copy_from_slice(&k[..]);
+            copy
+        })
+}
+
+/// Exécute `f` avec une référence à la clé, sans en faire de copie.
+fn with_key<R>(f: impl FnOnce(&[u8; 32]) -> R) -> Option<R> {
+    KEY.read()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|k| f(k))
 }
 
 pub fn random_bytes<const N: usize>() -> Result<[u8; N]> {
@@ -72,12 +114,15 @@ pub fn seal(key: &[u8; 32], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
             .map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?,
     );
     let nonce_bytes = random_bytes::<NONCE_LEN>()?;
-    let mut buf = plain.to_vec();
+    // Copie du clair effacée à la libération ; capacité réservée pour que l'étiquette ne force
+    // pas de réallocation (l'ancien bloc ne serait pas effacé).
+    let mut buf = Zeroizing::new(Vec::with_capacity(plain.len() + AES_256_GCM.tag_len()));
+    buf.extend_from_slice(plain);
     sealing
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(nonce_bytes),
             Aad::from(aad),
-            &mut buf,
+            &mut *buf,
         )
         .map_err(|_| anyhow!(t!("Encryption failed", "Chiffrement impossible")))?;
     let mut out = nonce_bytes.to_vec();
@@ -97,7 +142,8 @@ pub fn open(key: &[u8; 32], sealed: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
             .map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?,
     );
     let (nonce, rest) = sealed.split_at(NONCE_LEN);
-    let mut buf = rest.to_vec();
+    // Le clair déchiffré en place est effacé à la libération de `buf`.
+    let mut buf = Zeroizing::new(rest.to_vec());
     let nonce = Nonce::try_assume_unique_for_key(nonce)
         .map_err(|_| anyhow!(t!("Invalid nonce", "Nonce invalide")))?;
     let plain = opening
@@ -112,14 +158,14 @@ pub fn open(key: &[u8; 32], sealed: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
 }
 
 /// Clé de 256 bits dérivée d'une phrase de passe (PBKDF2-HMAC-SHA256).
-pub fn derive_key(passphrase: &str, salt: &[u8], iterations: u32) -> [u8; 32] {
-    let mut out = [0u8; 32];
+pub fn derive_key(passphrase: &str, salt: &[u8], iterations: u32) -> Zeroizing<[u8; 32]> {
+    let mut out = Zeroizing::new([0u8; 32]);
     ring::pbkdf2::derive(
         ring::pbkdf2::PBKDF2_HMAC_SHA256,
         std::num::NonZeroU32::new(iterations.max(1)).unwrap(),
         salt,
         passphrase.as_bytes(),
-        &mut out,
+        &mut out[..],
     );
     out
 }
@@ -201,13 +247,17 @@ pub fn read(path: &Path) -> Result<Content> {
             "Fichier illisible (encodage)"
         ))?));
     };
-    let Some(key) = key() else {
+    if !has_key() {
         return Ok(Content::Locked);
-    };
+    }
     let sealed = B64
         .decode(sealed.trim_ascii())
         .context(t!("Unreadable encrypted file", "Fichier chiffré illisible"))?;
-    let plain = open(&key, &sealed, &aad(path)).with_context(|| format!("{}", path.display()))?;
+    // Verrouillé entre-temps : clé absente = fichier illisible, comme ci-dessus.
+    let Some(plain) = with_key(|key| open(key, &sealed, &aad(path))) else {
+        return Ok(Content::Locked);
+    };
+    let plain = plain.with_context(|| format!("{}", path.display()))?;
     Ok(Content::Text(String::from_utf8(plain).context(t!(
         "Unreadable file (encoding)",
         "Fichier illisible (encodage)"
@@ -217,17 +267,15 @@ pub fn read(path: &Path) -> Result<Content> {
 /// Écrit un fichier (atomiquement), chiffré si le chiffrement est actif.
 pub fn write(path: &Path, text: &str) -> Result<()> {
     let bytes = if enabled() {
-        let key = key().ok_or_else(|| {
-            anyhow!(t!(
-                "Portunia is locked: write refused",
-                "Portunia est verrouillé : écriture refusée"
-            ))
-        })?;
+        let sealed = with_key(|key| seal(key, text.as_bytes(), &aad(path)))
+            .ok_or_else(|| {
+                anyhow!(t!(
+                    "Portunia is locked: write refused",
+                    "Portunia est verrouillé : écriture refusée"
+                ))
+            })??;
         let mut out = MAGIC.to_vec();
-        out.extend_from_slice(
-            B64.encode(seal(&key, text.as_bytes(), &aad(path))?)
-                .as_bytes(),
-        );
+        out.extend_from_slice(B64.encode(sealed).as_bytes());
         out.push(b'\n');
         out
     } else {
@@ -370,6 +418,32 @@ mod tests {
         set_key(Some(random_bytes::<32>().unwrap()));
         assert!(read(&path).is_err());
         set_key(None);
+        set_enabled(false);
+    }
+
+    /// Effacer la clé la retire ; la remplacer remplace l'ancienne (l'ancienne est effacée de la
+    /// mémoire par `Zeroizing` à sa libération : cet effacement-là ne se teste pas directement,
+    /// lire de la mémoire libérée serait un comportement indéfini).
+    #[test]
+    fn cle_effacee_ou_remplacee() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let first = random_bytes::<32>().unwrap();
+        let second = random_bytes::<32>().unwrap();
+        set_key(Some(first));
+        assert!(has_key());
+        assert_eq!(key().as_deref(), Some(&first));
+        set_key(Some(second));
+        assert_eq!(key().as_deref(), Some(&second), "ancienne clé remplacée");
+        clear_key();
+        assert!(!has_key() && key().is_none());
+        // Plus de clé : fichier chiffré illisible et écriture refusée.
+        let path = temp("sessions.json");
+        set_key(Some(first));
+        set_enabled(true);
+        write(&path, "{}").unwrap();
+        clear_key();
+        assert_eq!(read(&path).unwrap(), Content::Locked);
+        assert!(write(&path, "{}").is_err());
         set_enabled(false);
     }
 

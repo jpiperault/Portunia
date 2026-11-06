@@ -189,6 +189,7 @@ pub fn run() {
             commands::unlock,
             commands::unlock_hello,
             commands::unlock_biometric,
+            commands::enable_touch_id,
             commands::biometric_kind,
             commands::recording_default_dir,
             commands::recording_start,
@@ -231,6 +232,32 @@ pub fn run() {
             commands::connect_with,
             commands::confirm_answer,
         ])
-        .run(tauri::generate_context!())
-        .expect("erreur au démarrage de Portunia");
+        .build(tauri::generate_context!())
+        .expect("erreur au démarrage de Portunia")
+        .run(|_app, event| handle_run_event(&event));
+}
+
+/// Événements du cycle de vie : à la sortie, la clé du coffre est effacée de la mémoire (la
+/// fermeture elle-même n'est pas modifiée).
+fn handle_run_event(event: &tauri::RunEvent) {
+    if matches!(event, tauri::RunEvent::Exit) {
+        vault::clear_key();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// À la fermeture, la clé du coffre est effacée de la mémoire (une `static` n'est pas détruite
+    /// à la sortie du processus) ; les autres événements n'y touchent pas.
+    #[test]
+    fn la_cle_du_coffre_est_effacee_a_la_fermeture() {
+        let _g = vault::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        vault::set_key(Some([5u8; 32]));
+        handle_run_event(&tauri::RunEvent::Ready);
+        assert!(vault::has_key(), "un autre événement ne l'efface pas");
+        handle_run_event(&tauri::RunEvent::Exit);
+        assert!(!vault::has_key());
+    }
 }

@@ -882,6 +882,12 @@ pub fn lock_disable(state: State<'_, AppState>, password: String) -> CmdResult<l
 pub fn lock_set_options(state: State<'_, AppState>, hello: bool, timeout_minutes: u32) -> CmdResult<lock::LockStatus> {
     let mut lock = state.lock.lock().unwrap();
     lock.ensure_unlocked().map_err(err)?;
+    // macOS : activer Touch ID exige l'invite biométrique, donc `enable_touch_id` ; ici seuls le
+    // délai et la désactivation sont permis (une interface détournée ne contourne pas l'invite).
+    #[cfg(target_os = "macos")]
+    if hello && !lock.touch_id_enabled() {
+        return Err(t!("Use the Touch ID activation to enable it", "Utilisez l'activation Touch ID pour l'activer").into());
+    }
     lock.set_options(hello, timeout_minutes).map_err(full)?;
     Ok(lock.status())
 }
@@ -913,7 +919,7 @@ fn apply_data_change(state: &AppState, change: lock::DataChange) -> CmdResult<()
         }
     }
     if change == lock::DataChange::Decrypt {
-        crate::vault::set_key(None);
+        crate::vault::clear_key();
     }
     Ok(())
 }
@@ -945,6 +951,40 @@ impl Drop for PromptGuard {
     }
 }
 
+/// Une seule invite Touch ID à la fois, activation et déverrouillage confondus.
+#[cfg(target_os = "macos")]
+static PROMPT_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Active Touch ID : coffre déverrouillé requis, invite Touch ID qui doit réussir, puis la clé déjà
+/// en mémoire est rangée dans le Trousseau (aucun mot de passe demandé). Annulation ou échec :
+/// rien n'est stocké, l'option reste désactivée. Renvoie l'état à jour.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn enable_touch_id(app: AppHandle, state: State<'_, AppState>, timeout_minutes: u32) -> CmdResult<lock::LockStatus> {
+    use crate::biometric_mac::{self, TouchId};
+    state.unlocked()?;
+    let Some(_prompt) = PromptGuard::acquire(&PROMPT_ACTIVE) else {
+        return Err(t!("A Touch ID prompt is already open", "Une invite Touch ID est déjà ouverte").into());
+    };
+    // L'invite peut durer : le verrou de l'application n'est tenu que avant et après.
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        lock::enable_touch_id(&state.lock, &TouchId, biometric_mac::enable_reason(), timeout_minutes)
+    })
+    .await
+    .map_err(err)?;
+    outcome.map_err(full)?;
+    // `false` = annulé : l'état renvoyé montre l'option toujours désactivée.
+    Ok(state.lock.lock().unwrap().status())
+}
+
+/// Touch ID n'existe que sous macOS.
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub async fn enable_touch_id(_timeout_minutes: u32) -> CmdResult<lock::LockStatus> {
+    Err(t!("Touch ID is only available on macOS", "Touch ID n'existe que sous macOS").into())
+}
+
 /// Touch ID : vérifie l'utilisateur puis relit la clé du coffre dans le Trousseau. `Ok(false)` si
 /// l'utilisateur annule ; toute autre cause d'échec est une erreur. Aucune clé n'est appliquée
 /// sans une authentification réussie.
@@ -956,7 +996,6 @@ pub async fn unlock_biometric(state: State<'_, AppState>) -> CmdResult<bool> {
         return Err(t!("Touch ID is not enabled for Portunia", "Touch ID n'est pas activé pour Portunia").into());
     }
     // Une invite à la fois : un second appel pendant l'invite en cours ne relance rien.
-    static PROMPT_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     let Some(_prompt) = PromptGuard::acquire(&PROMPT_ACTIVE) else {
         return Ok(false);
     };
