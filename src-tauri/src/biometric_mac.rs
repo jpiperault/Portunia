@@ -280,9 +280,49 @@ pub fn unlock_reason() -> &'static str {
     )
 }
 
-/// Touch ID est-il utilisable sur ce Mac ?
+/// Texte de la boîte Touch ID quand l'utilisateur active le déverrouillage biométrique.
+pub fn enable_reason() -> &'static str {
+    t!(
+        "Enable Portunia unlocking with Touch ID",
+        "Activer le déverrouillage de Portunia par Touch ID"
+    )
+}
+
+/// Mémorise qu'une disponibilité a été constatée. Seul un résultat POSITIF est conservé : le
+/// matériel ne disparaît pas pendant la vie du processus, alors qu'une empreinte peut être
+/// enregistrée pendant qu'il tourne (un « non » doit donc être reposé). Si toutes les empreintes
+/// sont ensuite retirées, l'invite elle-même (`authenticate`) revérifie et refuse.
+pub struct AvailabilityCache(std::sync::atomic::AtomicBool);
+
+impl Default for AvailabilityCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AvailabilityCache {
+    pub const fn new() -> Self {
+        Self(std::sync::atomic::AtomicBool::new(false))
+    }
+
+    pub fn get(&self, probe: impl FnOnce() -> bool) -> bool {
+        use std::sync::atomic::Ordering;
+        if self.0.load(Ordering::Relaxed) {
+            return true;
+        }
+        let available = probe();
+        if available {
+            self.0.store(true, Ordering::Relaxed);
+        }
+        available
+    }
+}
+
+static TOUCH_ID_SEEN: AvailabilityCache = AvailabilityCache::new();
+
+/// Touch ID est-il utilisable sur ce Mac ? Un seul `LAContext` créé une fois le succès constaté.
 pub fn available() -> bool {
-    TouchId.available()
+    TOUCH_ID_SEEN.get(|| TouchId.available())
 }
 
 #[cfg(test)]
@@ -462,6 +502,45 @@ mod tests {
         store.delete().unwrap();
         assert!(store.load().unwrap().is_none());
         store.delete().unwrap();
+    }
+
+    #[test]
+    fn disponibilite_positive_calculee_une_seule_fois() {
+        let cache = AvailabilityCache::new();
+        let probes = Cell::new(0);
+        let probe = || {
+            probes.set(probes.get() + 1);
+            true
+        };
+        assert!(cache.get(probe));
+        assert!(cache.get(probe));
+        assert!(cache.get(probe));
+        assert_eq!(
+            probes.get(),
+            1,
+            "un seul LAContext pour toute la vie du processus"
+        );
+    }
+
+    /// Une empreinte peut être enregistrée pendant que l'application tourne : un résultat
+    /// négatif ne doit jamais être mémorisé.
+    #[test]
+    fn disponibilite_negative_jamais_memorisee() {
+        let cache = AvailabilityCache::new();
+        let answers = RefCell::new(vec![true, false, false]);
+        let probe = || answers.borrow_mut().pop().unwrap();
+        assert!(!cache.get(probe), "pas d'empreinte au départ");
+        assert!(!cache.get(probe));
+        assert!(cache.get(probe), "empreinte enregistrée ensuite : détectée");
+        assert!(
+            cache.get(probe),
+            "puis mémorisée (le sondage vide ne serait plus appelé)"
+        );
+    }
+
+    #[test]
+    fn raison_d_activation_en_francais_non_vide() {
+        assert!(enable_reason().contains("Touch ID"));
     }
 
     /// Procédure manuelle : `cargo test -- --ignored touch_id_reel`, puis poser le doigt.

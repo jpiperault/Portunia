@@ -20,6 +20,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(target_os = "macos")]
 use crate::biometric_mac::{self, KeyStore, KeychainStore};
 use crate::vault;
+use zeroize::Zeroizing;
 
 /// PBKDF2-HMAC-SHA256 : 600 000 itérations (recommandation OWASP 2023).
 const ITERATIONS: u32 = if cfg!(test) { 1_000 } else { 600_000 };
@@ -63,20 +64,36 @@ pub enum DataChange {
 const WRAP_AAD: &[u8] = b"termoria-cle-de-donnees";
 
 fn wrap(password: &str, salt: &[u8], iterations: u32, key: &[u8; 32]) -> Result<String> {
-    let kek: [u8; 32] = derive(password, salt, iterations)
-        .try_into()
-        .map_err(|_| anyhow!("Dérivation"))?;
+    let kek = derive_kek(password, salt, iterations)?;
     Ok(B64.encode(vault::seal(&kek, key, WRAP_AAD)?))
 }
 
-fn unwrap_key(password: &str, salt: &[u8], iterations: u32, wrapped: &str) -> Result<[u8; 32]> {
-    let kek: [u8; 32] = derive(password, salt, iterations)
-        .try_into()
-        .map_err(|_| anyhow!("Dérivation"))?;
-    let plain = vault::open(&kek, &B64.decode(wrapped)?, WRAP_AAD)?;
-    plain
-        .try_into()
-        .map_err(|_| anyhow!(t!("Invalid data key", "Clé de données invalide")))
+/// Clé d'enveloppe dérivée du mot de passe, effacée à la libération.
+fn derive_kek(password: &str, salt: &[u8], iterations: u32) -> Result<Zeroizing<[u8; 32]>> {
+    let derived = Zeroizing::new(derive(password, salt, iterations));
+    let mut kek = Zeroizing::new([0u8; 32]);
+    if derived.len() != kek.len() {
+        bail!("Dérivation");
+    }
+    kek.copy_from_slice(&derived);
+    Ok(kek)
+}
+
+fn unwrap_key(
+    password: &str,
+    salt: &[u8],
+    iterations: u32,
+    wrapped: &str,
+) -> Result<Zeroizing<[u8; 32]>> {
+    let kek = derive_kek(password, salt, iterations)?;
+    // Le texte clair est effacé à la libération, même en cas d'erreur de taille.
+    let plain = Zeroizing::new(vault::open(&kek, &B64.decode(wrapped)?, WRAP_AAD)?);
+    let mut key = Zeroizing::new([0u8; 32]);
+    if plain.len() != key.len() {
+        bail!(t!("Invalid data key", "Clé de données invalide"));
+    }
+    key.copy_from_slice(&plain);
+    Ok(key)
 }
 
 pub struct Lock {
@@ -205,7 +222,7 @@ impl Lock {
             previous.as_ref().and_then(|c| c.data_key.as_ref()),
         ) {
             (Some(key), Some(_)) => (key, DataChange::None),
-            _ => (vault::random_bytes::<32>()?, DataChange::Encrypt),
+            _ => (Zeroizing::new(vault::random_bytes::<32>()?), DataChange::Encrypt),
         };
         let key_salt = vault::random_bytes::<16>()?;
         let hello = previous.as_ref().map(|c| c.hello).unwrap_or(false);
@@ -218,14 +235,18 @@ impl Lock {
             key_salt: B64.encode(key_salt),
             data_key: Some(wrap(new, &key_salt, ITERATIONS, &key)?),
             hello_key: if hello {
-                vault::dpapi::protect(&key).ok().map(|b| B64.encode(b))
+                vault::dpapi::protect(&key[..]).ok().map(|b| B64.encode(b))
             } else {
                 None
             },
             biometric: previous.as_ref().and_then(|c| c.biometric.clone()),
         });
         self.save()?;
-        vault::set_key(Some(key));
+        // Copie directe dans un `Zeroizing` (sans temporaire de pile) ; `install_key` remplace, et
+        // donc efface, l'ancienne clé. `key` reste utilisée ci-dessous par le Trousseau.
+        let mut installed = Zeroizing::new([0u8; 32]);
+        installed.copy_from_slice(&*key);
+        vault::install_key(installed);
         vault::set_enabled(true);
         #[cfg(target_os = "macos")]
         self.refresh_touch_id(&key)?;
@@ -276,9 +297,8 @@ impl Lock {
         })?;
         let enabling = hello && !active;
         if enabling {
-            let key = match (config.data_key.is_some(), vault::key()) {
-                // Copie issue de `vault::key()` (`[u8; 32]`), aussitôt placée sous Zeroizing.
-                (true, Some(key)) => biometric_mac::VaultKey::new(key),
+            let key: biometric_mac::VaultKey = match (config.data_key.is_some(), vault::key()) {
+                (true, Some(key)) => key,
                 _ => bail!(t!(
                     "Unlock Portunia with the master password before enabling Touch ID",
                     "Déverrouillez Portunia avec le mot de passe maître avant d'activer Touch ID"
@@ -336,7 +356,7 @@ impl Lock {
         // Windows Hello doit pouvoir rendre la clé de données : copie protégée par le compte Windows.
         config.hello_key = match (hello, vault::key()) {
             (true, Some(key)) if config.data_key.is_some() => {
-                Some(B64.encode(vault::dpapi::protect(&key)?))
+                Some(B64.encode(vault::dpapi::protect(&key[..])?))
             }
             (true, _) => config.hello_key.clone(),
             (false, _) => None,
@@ -351,6 +371,8 @@ impl Lock {
                 "Définissez d'abord un mot de passe maître (Paramètres › Sécurité)"
             ));
         }
+        // Verrou d'interface seulement : la clé reste en mémoire (voir `vault::KEY`), les sessions
+        // ouvertes continuent de lire et d'écrire. Elle est effacée à la fermeture de l'application.
         self.locked.store(true, Ordering::SeqCst);
         Ok(())
     }
@@ -417,17 +439,19 @@ impl Lock {
                     key = unwrap_key(password, &salt, config.iterations, wrapped).ok();
                     key.is_some()
                 })?;
-                vault::set_key(key);
+                if let Some(key) = key {
+                    vault::install_key(key);
+                }
                 DataChange::None
             }
             None => {
                 self.check_throttled(password)?;
-                let key = vault::random_bytes::<32>()?;
+                let key = Zeroizing::new(vault::random_bytes::<32>()?);
                 let key_salt = vault::random_bytes::<16>()?;
                 let c = self.config.as_mut().unwrap();
                 c.key_salt = B64.encode(key_salt);
                 c.data_key = Some(wrap(password, &key_salt, c.iterations, &key)?);
-                vault::set_key(Some(key));
+                vault::install_key(key);
                 vault::set_enabled(true);
                 DataChange::Encrypt
             }
@@ -436,7 +460,7 @@ impl Lock {
         let c = self.config.as_mut().unwrap();
         if c.hello && c.hello_key.is_none() {
             if let Some(key) = vault::key() {
-                c.hello_key = vault::dpapi::protect(&key).ok().map(|b| B64.encode(b));
+                c.hello_key = vault::dpapi::protect(&key[..]).ok().map(|b| B64.encode(b));
             }
         }
         self.save()?;
@@ -459,8 +483,13 @@ impl Lock {
         let config = self.config.as_ref().unwrap();
         match (&config.hello_key, &config.data_key) {
             (Some(protected), _) => {
-                let key = vault::dpapi::unprotect(&B64.decode(protected)?)?;
-                vault::set_key(Some(key.try_into().map_err(|_| anyhow!(t!("Invalid Windows Hello key", "Clé Windows Hello invalide")))?));
+                let key = Zeroizing::new(vault::dpapi::unprotect(&B64.decode(protected)?)?);
+                let mut array = Zeroizing::new([0u8; 32]);
+                if key.len() != array.len() {
+                    bail!(t!("Invalid Windows Hello key", "Clé Windows Hello invalide"));
+                }
+                array.copy_from_slice(&key);
+                vault::install_key(array);
             }
             (None, Some(_)) => bail!(t!("Unlock once with the master password: Windows Hello will then be ready for encrypted data.", "Déverrouillez une fois avec le mot de passe maître : Windows Hello sera ensuite prêt pour les données chiffrées.")),
             (None, None) => {}
@@ -534,8 +563,8 @@ impl Lock {
                 bail!(mismatch);
             }
         }
-        // `vault` garde la clé en `[u8; 32]` (Windows inchangé) : seule cette copie sort du Zeroizing.
-        vault::set_key(Some(*key));
+        // La clé passe telle quelle sous la garde de `vault` (plus de copie hors Zeroizing).
+        vault::install_key(key);
         self.locked.store(false, Ordering::SeqCst);
         Ok(())
     }
@@ -594,6 +623,39 @@ impl Lock {
                 .unwrap_or(15),
         }
     }
+}
+
+/// Active Touch ID sans redemander le mot de passe : coffre déverrouillé (clé en mémoire), puis
+/// une invite Touch ID qui doit réussir, puis la clé déjà en mémoire est rangée dans le
+/// Trousseau. `Ok(false)` si l'utilisateur annule ; toute autre cause d'échec est une erreur.
+/// Dans tous les cas d'échec rien n'est stocké et Touch ID reste désactivé.
+///
+/// Le verrou de l'application n'est PAS tenu pendant l'invite (elle peut durer) : l'état est donc
+/// revérifié juste après (le coffre a pu être verrouillé entre-temps).
+#[cfg(target_os = "macos")]
+pub fn enable_touch_id(
+    lock: &std::sync::Mutex<Lock>,
+    auth: &dyn biometric_mac::Authenticator,
+    reason: &str,
+    timeout_minutes: u32,
+) -> Result<bool> {
+    {
+        let guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+        guard.ensure_unlocked()?;
+        if guard.touch_id_enabled() {
+            return Ok(true);
+        }
+    }
+    match auth.authenticate(reason) {
+        Ok(()) => {}
+        Err(biometric_mac::BiometricError::Cancelled) => return Ok(false),
+        Err(e) => bail!("{e}"),
+    }
+    let mut guard = lock.lock().unwrap_or_else(|e| e.into_inner());
+    guard.ensure_unlocked()?;
+    // Utilise la clé de données déjà en mémoire (refus s'il n'y en a pas) : rien n'est dérivé.
+    guard.set_options(true, timeout_minutes)?;
+    Ok(true)
 }
 
 /// Erreur du Trousseau avec son contexte (le détail vient de macOS, jamais de la clé).
@@ -729,6 +791,41 @@ mod tests {
         assert!(!lock.is_locked() && !vault::enabled());
     }
 
+    /// Le verrouillage reste un verrou d'interface (comme avant) : la clé de données reste en
+    /// mémoire, pour que les sessions ouvertes continuent de lire et d'écrire les fichiers chiffrés
+    /// (known_hosts.json lors d'un renouvellement de clés, enregistrements en cours).
+    #[test]
+    fn verrouillage_garde_la_cle_en_memoire() {
+        let _g = crate::vault::TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        vault::set_key(None);
+        vault::set_enabled(false);
+        let dir = std::env::temp_dir().join(format!("portunia-lock-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let data = dir.join("sessions.json");
+        let mut lock = Lock::load(&dir);
+        lock.set_password("", "un bon mot de passe").unwrap();
+        vault::write(&data, "srv-prod-01").unwrap();
+        let key = *vault::key().unwrap();
+        lock.lock().unwrap();
+        assert!(lock.is_locked());
+        assert_eq!(vault::key().as_deref(), Some(&key), "clé conservée");
+        assert_eq!(
+            vault::read(&data).unwrap(),
+            vault::Content::Text("srv-prod-01".into())
+        );
+        vault::write(&data, "srv-prod-02").unwrap();
+        assert_eq!(
+            vault::read(&data).unwrap(),
+            vault::Content::Text("srv-prod-02".into())
+        );
+        lock.unlock_with_password("un bon mot de passe").unwrap();
+        assert!(!lock.is_locked());
+        vault::set_key(None);
+        vault::set_enabled(false);
+    }
+
     #[test]
     fn ancienne_configuration_migree() {
         let _g = crate::vault::TEST_LOCK
@@ -782,13 +879,13 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let mut lock = Lock::load(&dir);
         lock.set_password("", "un bon mot de passe").unwrap();
-        let key = vault::key().unwrap();
+        let key = *vault::key().unwrap();
         lock.set_options(true, 15).unwrap();
         let lock = restart(&dir);
         assert!(vault::key().is_none());
         // (La vérification du visage / de l'empreinte a lieu avant, dans la commande.)
         lock.unlock_with_hello().unwrap();
-        assert_eq!(vault::key(), Some(key));
+        assert_eq!(vault::key().as_deref(), Some(&key));
         vault::set_key(None);
         vault::set_enabled(false);
     }
@@ -949,7 +1046,7 @@ mod tests {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
             let (mut lock, store) = lock_with_store();
-            let key = vault::key().unwrap();
+            let key = *vault::key().unwrap();
             lock.set_options(true, 15).unwrap();
             assert_eq!(*store.item.lock().unwrap(), Some(key));
             assert!(lock.hello_enabled());
@@ -987,6 +1084,110 @@ mod tests {
             vault::set_key(None);
             assert!(lock.set_options(true, 15).is_err());
             assert_eq!(*store.item.lock().unwrap(), None);
+            reset();
+        }
+
+        /// Authentificateur factice : réponse programmée, nombre d'invites et raison reçue.
+        struct FakeAuth {
+            result: Result<(), biometric_mac::BiometricError>,
+            calls: std::cell::Cell<u32>,
+            reason: std::cell::RefCell<String>,
+        }
+
+        impl FakeAuth {
+            fn new(result: Result<(), biometric_mac::BiometricError>) -> Self {
+                Self {
+                    result,
+                    calls: std::cell::Cell::new(0),
+                    reason: std::cell::RefCell::new(String::new()),
+                }
+            }
+        }
+
+        impl biometric_mac::Authenticator for FakeAuth {
+            fn available(&self) -> bool {
+                true
+            }
+            fn authenticate(&self, reason: &str) -> Result<(), biometric_mac::BiometricError> {
+                self.calls.set(self.calls.get() + 1);
+                *self.reason.borrow_mut() = reason.to_string();
+                self.result
+            }
+        }
+
+        #[test]
+        fn activation_par_touchid_reussie_range_la_cle_en_memoire() {
+            let _g = crate::vault::TEST_LOCK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let (lock, store) = lock_with_store();
+            let key = *vault::key().unwrap();
+            let lock = Mutex::new(lock);
+            let auth = FakeAuth::new(Ok(()));
+            let enabled =
+                enable_touch_id(&lock, &auth, biometric_mac::enable_reason(), 30).unwrap();
+            assert!(enabled);
+            assert_eq!(auth.calls.get(), 1);
+            assert!(auth.reason.borrow().contains("Touch ID"));
+            assert_eq!(*store.item.lock().unwrap(), Some(key));
+            let lock = lock.lock().unwrap();
+            assert!(lock.touch_id_enabled());
+            assert_eq!(lock.config.as_ref().unwrap().timeout_minutes, 30);
+            reset();
+        }
+
+        #[test]
+        fn activation_annulee_ne_stocke_rien_et_laisse_l_option_desactivee() {
+            let _g = crate::vault::TEST_LOCK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let (lock, store) = lock_with_store();
+            let lock = Mutex::new(lock);
+            let auth = FakeAuth::new(Err(biometric_mac::BiometricError::Cancelled));
+            assert!(!enable_touch_id(&lock, &auth, "raison", 15).unwrap());
+            assert_eq!(auth.calls.get(), 1);
+            assert_eq!(*store.item.lock().unwrap(), None);
+            let lock = lock.lock().unwrap();
+            assert!(!lock.touch_id_enabled());
+            assert!(!fs::read_to_string(&lock.path)
+                .unwrap()
+                .contains("biometric"));
+            reset();
+        }
+
+        #[test]
+        fn activation_echouee_ne_stocke_rien() {
+            use biometric_mac::BiometricError::*;
+            let _g = crate::vault::TEST_LOCK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            for error in [Failed, LockedOut, NotAvailable, Unknown] {
+                let (lock, store) = lock_with_store();
+                let lock = Mutex::new(lock);
+                let auth = FakeAuth::new(Err(error));
+                assert!(
+                    enable_touch_id(&lock, &auth, "raison", 15).is_err(),
+                    "{error:?}"
+                );
+                assert_eq!(*store.item.lock().unwrap(), None, "{error:?}");
+                assert!(!lock.lock().unwrap().touch_id_enabled(), "{error:?}");
+                reset();
+            }
+        }
+
+        #[test]
+        fn activation_refusee_coffre_verrouille_sans_invite() {
+            let _g = crate::vault::TEST_LOCK
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let (lock, store) = lock_with_store();
+            lock.lock().unwrap();
+            let lock = Mutex::new(lock);
+            let auth = FakeAuth::new(Ok(()));
+            assert!(enable_touch_id(&lock, &auth, "raison", 15).is_err());
+            assert_eq!(auth.calls.get(), 0, "aucune invite sur un coffre verrouillé");
+            assert_eq!(*store.item.lock().unwrap(), None);
+            assert!(!lock.lock().unwrap().touch_id_enabled());
             reset();
         }
 
@@ -1043,7 +1244,7 @@ mod tests {
                 .unwrap_or_else(|e| e.into_inner());
             let (mut lock, store) = lock_with_store();
             lock.set_options(true, 15).unwrap();
-            let key = vault::key().unwrap();
+            let key = *vault::key().unwrap();
             *store.item.lock().unwrap() = Some([0; 32]); // valeur périmée
             lock.set_password("un bon mot de passe", "nouveau mot de passe")
                 .unwrap();
@@ -1120,7 +1321,7 @@ mod tests {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
             let (mut lock, _store) = lock_with_store();
-            let key = vault::key().unwrap();
+            let key = *vault::key().unwrap();
             write_vault_file(&lock);
             lock.set_options(true, 15).unwrap();
             lock.lock().unwrap();
@@ -1128,7 +1329,7 @@ mod tests {
             lock.finish_biometric_unlock(zeroize::Zeroizing::new(key))
                 .unwrap();
             assert!(!lock.is_locked());
-            assert_eq!(vault::key(), Some(key));
+            assert_eq!(vault::key().as_deref(), Some(&key));
             reset();
         }
 
@@ -1166,7 +1367,7 @@ mod tests {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner());
             let (mut lock, store) = lock_with_store();
-            let key = vault::key().unwrap();
+            let key = *vault::key().unwrap();
             lock.set_options(true, 15).unwrap();
             lock.lock().unwrap();
             vault::set_key(None);

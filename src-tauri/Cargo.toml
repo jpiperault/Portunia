@@ -45,6 +45,8 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
 assist-proto = { path = "../assist-proto" }
+# Effacement de la clé du coffre en mémoire (vault.rs, toutes plateformes ; Touch ID sur macOS).
+zeroize = "1.9.1"
 
 # Windows Hello (verrouillage de l'application).
 [target.'cfg(windows)'.dependencies]
@@ -67,7 +69,6 @@ objc2-local-authentication = "0.3.2"
 objc2 = "0.6.5"
 block2 = "0.6.2"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSError"] }
-zeroize = "1.9.1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3", features = ["sync-secret-service"] }
