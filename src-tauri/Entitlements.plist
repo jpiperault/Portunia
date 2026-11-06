@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Hardened runtime, sans sandbox : Portunia lance des shells locaux, ouvre des ports série
+       et lit/écrit des fichiers choisis par la personne. -->
+  <!-- Connexions sortantes (SSH, RDP, VNC, S3, etc.). -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+  <!-- Port série (sans effet hors sandbox, gardé pour une éventuelle sandbox future). -->
+  <key>com.apple.security.device.serial</key>
+  <true/>
+  <!-- allow-jit volontairement absent : WKWebView s'exécute dans le processus WebContent d'Apple,
+       l'application elle-même ne génère pas de code machine. À ajouter seulement si la recette
+       montre un crash au démarrage sous le hardened runtime. -->
+</dict>
+</plist>

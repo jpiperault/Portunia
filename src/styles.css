@@ -273,10 +273,13 @@ button { cursor: pointer; }
 .ext-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .ext-grid > * { grid-column: span 4; }
 .ext-grid > .fld-small { grid-column: span 1; }
-.ext-grid > .fld-small:first-child, .ext-grid > :not(.fld-small):has(+ .fld-small) { grid-column: span 3; }
+.ext-grid > .fld-small:first-child { grid-column: span 3; }
+/* :has() seul : un navigateur qui l'ignore (Safari < 15.4) n'invalide pas la règle ci-dessus. */
+.ext-grid > :not(.fld-small):has(+ .fld-small) { grid-column: span 3; }
 .seg { display: flex; flex-wrap: wrap; gap: 8px; }
 .seg-opt { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; background: var(--field); border: 1px solid var(--line-strong); border-radius: 6px; cursor: pointer; color: var(--text); }
-.seg-opt.on, .seg-opt:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); }
+.seg-opt.on { background: var(--accent-soft); border-color: var(--accent); }
+.seg-opt:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); }
 .seg-opt input, .check input { accent-color: var(--accent); margin: 0; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .form-error { margin: 0; min-height: 18px; color: var(--danger); font-size: 13px; }
@@ -327,7 +330,7 @@ button { cursor: pointer; }
 .folder-row .group-head { color: var(--text-2); font-weight: 600; }
 .tree-row.drop-target { background: var(--accent-soft); outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
 .tree.drop-target { outline: 1.5px dashed var(--accent); outline-offset: -2px; border-radius: 6px; }
-body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
+body.dragging, body.dragging * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
 .drag-ghost {
   position: fixed; z-index: 30; pointer-events: none; display: flex; align-items: center; gap: 6px;
   padding: 4px 10px; background: var(--pop); border: 1px solid var(--accent); border-radius: 6px; font-size: 12px;
@@ -446,7 +449,7 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 }
 
 /* Verrouillage */
-.lock-screen { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgb(12 13 16 / .97); backdrop-filter: blur(8px); }
+.lock-screen { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgb(12 13 16 / .97); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .lock-card { width: min(360px, calc(100vw - 32px)); display: flex; flex-direction: column; align-items: stretch; gap: 12px; text-align: center; }
 .lock-card h2 { margin: 0; font-size: 18px; }
 .lock-card p { margin: 0; }
@@ -1006,7 +1009,7 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .pmon-key i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
 .pmon-k1 { background: var(--accent); } .pmon-k2 { background: #d29922; } .pmon-k3 { background: var(--ok); }
 .pmon .tbl td.num, .pmon .tbl th.num { text-align: right; white-space: nowrap; }
-.pmon .tbl th.sortable { cursor: pointer; user-select: none; }
+.pmon .tbl th.sortable { cursor: pointer; -webkit-user-select: none; user-select: none; }
 .pmon .tbl th.sorted { color: var(--text); }
 .pmon .tbl tr.pmon-off td { opacity: .55; }
 .pmon .tbl tr.pmon-detail td { background: var(--bg); padding: 12px; }

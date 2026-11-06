@@ -10,6 +10,25 @@ Portunia s'appelait **Termoria** jusqu'à la version 0.39. La mise à jour vers 
 
 Téléchargez `Portunia_x.y.z_x64-setup.exe` dans les [Releases](https://github.com/jpiperault/Portunia-releases/releases) et lancez-le. L'installateur demande s'il faut installer pour vous seul (sans droits administrateur) ou pour tous les utilisateurs du PC (une demande administrateur) ; une mise à jour garde le mode choisi la première fois. Portunia se met ensuite à jour tout seul : une bannière propose chaque nouvelle version.
 
+## Portunia sur macOS
+
+Nécessite macOS 11 ou plus récent, sur Apple Silicon ou Intel (une seule application universelle).
+
+1. Téléchargez `Portunia_x.y.z_universal.dmg` dans les [Releases](https://github.com/jpiperault/Portunia-releases/releases), ouvrez-le et glissez Portunia dans `Applications`.
+2. Portunia est signée « ad hoc », sans notarisation Apple (pas de compte Apple Developer). La première fois, macOS refuse de l'ouvrir : ouvrez `Réglages Système > Confidentialité et sécurité`, descendez jusqu'au message concernant Portunia et cliquez sur **Ouvrir quand même** (sur un macOS plus ancien : clic droit sur l'application, puis **Ouvrir**). Cette demande n'a lieu qu'une fois.
+3. Les mises à jour sont proposées par la bannière de l'application et s'installent sans cette demande. Après une mise à jour, macOS peut redemander l'accès au Trousseau (la clé du coffre y est conservée, protégée par Touch ID si vous l'avez activé) : choisissez **Toujours autoriser**.
+4. Pour reprendre vos données de Windows, faites une sauvegarde dans Portunia sous Windows et importez-la sur le Mac.
+
+Développer sur un Mac : installez les outils en ligne de commande de Xcode (`xcode-select --install`), Rust depuis https://rustup.rs et Node.js LTS, puis ajoutez les deux cibles de la compilation universelle :
+
+```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+npm install
+npm run tauri dev
+```
+
+La grille de recette à passer avant une version Mac est dans [docs/recette-macos.md](docs/recette-macos.md).
+
 ## Installer les outils de développement (une seule fois)
 
 1. **Outils de compilation C++ de Visual Studio** : installez « Build Tools for Visual Studio » et cochez « Développement Desktop en C++ ».
@@ -190,5 +209,5 @@ Le cœur ne connaît aucun protocole. Une extension :
 ## Pistes pour la suite
 
 - Extensions externes téléchargées depuis le catalogue et chargées sans recompiler (modules WASM signés et isolés).
-- Versions Linux, puis macOS.
+- Version Linux.
 

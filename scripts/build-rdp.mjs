@@ -10,6 +10,29 @@ const release = process.argv.includes('--release');
 const profile = release ? 'release' : 'debug';
 const triple = execSync('rustc -vV').toString().match(/host: (\S+)/)[1];
 const ext = process.platform === 'win32' ? '.exe' : '';
+// Mac universel (Intel + Apple Silicon) : « --target universal-apple-darwin » ou PORTUNIA_RDP_UNIVERSAL=1.
+const targetArg = process.argv.indexOf('--target');
+const universal = process.env.PORTUNIA_RDP_UNIVERSAL === '1'
+  || (targetArg !== -1 && process.argv[targetArg + 1] === 'universal-apple-darwin');
+
+if (universal) {
+  if (process.platform !== 'darwin') throw new Error('Le moteur RDP universel ne se compile que sur macOS');
+  const manifest = join(root, 'rdp-helper', 'Cargo.toml');
+  const binaries = join(root, 'src-tauri', 'binaries');
+  mkdirSync(binaries, { recursive: true });
+  const slices = ['aarch64-apple-darwin', 'x86_64-apple-darwin'].map((t) => {
+    execSync(`cargo build ${release ? '--release ' : ''}--target ${t} --manifest-path "${manifest}"`, { stdio: 'inherit' });
+    const slice = join(root, 'rdp-helper', 'target', t, profile, 'portunia-rdp');
+    // « tauri build --target universal-apple-darwin » compile Portunia une fois par architecture :
+    // chacune exige aussi son propre moteur (portunia-rdp-<triplet>), en plus de l'universel.
+    copyFileSync(slice, join(binaries, `portunia-rdp-${t}`));
+    return slice;
+  });
+  const out = join(binaries, 'portunia-rdp-universal-apple-darwin');
+  execSync(`lipo -create ${slices.map((s) => `"${s}"`).join(' ')} -output "${out}"`, { stdio: 'inherit' });
+  console.log(`Moteur RDP universel : ${execSync(`lipo -archs "${out}"`).toString().trim()} -> ${out}`);
+  process.exit(0);
+}
 
 execSync(`cargo build ${release ? '--release ' : ''}--manifest-path "${join(root, 'rdp-helper', 'Cargo.toml')}"`, { stdio: 'inherit' });
 
