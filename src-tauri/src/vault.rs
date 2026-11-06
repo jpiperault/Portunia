@@ -8,6 +8,7 @@
 //! - cette clé est **enveloppée** (AES-256-GCM) par une clé dérivée du mot de passe maître
 //!   (PBKDF2-HMAC-SHA256, 600 000 itérations, sel propre) et rangée dans lock.json ;
 //! - pour Windows Hello, une seconde copie est protégée par **DPAPI** (liée au compte Windows) ;
+//!   sous macOS, la clé est rangée dans le Trousseau (voir `biometric_mac.rs`) ;
 //! - les mots de passe des sessions restent dans le Gestionnaire d'identifiants Windows.
 //!
 //! Sans mot de passe maître, les fichiers restent en clair (comportement d'origine).
@@ -55,17 +56,29 @@ pub fn key() -> Option<[u8; 32]> {
 
 pub fn random_bytes<const N: usize>() -> Result<[u8; N]> {
     let mut out = [0u8; N];
-    SystemRandom::new().fill(&mut out).map_err(|_| anyhow!(t!("Random generator unavailable", "Générateur aléatoire indisponible")))?;
+    SystemRandom::new().fill(&mut out).map_err(|_| {
+        anyhow!(t!(
+            "Random generator unavailable",
+            "Générateur aléatoire indisponible"
+        ))
+    })?;
     Ok(out)
 }
 
 /// nonce ‖ texte chiffré ‖ étiquette.
 pub fn seal(key: &[u8; 32], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
-    let sealing = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?);
+    let sealing = LessSafeKey::new(
+        UnboundKey::new(&AES_256_GCM, key)
+            .map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?,
+    );
     let nonce_bytes = random_bytes::<NONCE_LEN>()?;
     let mut buf = plain.to_vec();
     sealing
-        .seal_in_place_append_tag(Nonce::assume_unique_for_key(nonce_bytes), Aad::from(aad), &mut buf)
+        .seal_in_place_append_tag(
+            Nonce::assume_unique_for_key(nonce_bytes),
+            Aad::from(aad),
+            &mut buf,
+        )
         .map_err(|_| anyhow!(t!("Encryption failed", "Chiffrement impossible")))?;
     let mut out = nonce_bytes.to_vec();
     out.extend_from_slice(&buf);
@@ -74,15 +87,27 @@ pub fn seal(key: &[u8; 32], plain: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
 
 pub fn open(key: &[u8; 32], sealed: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
     if sealed.len() < NONCE_LEN + 16 {
-        bail!(t!("Truncated encrypted data", "Données chiffrées tronquées"));
+        bail!(t!(
+            "Truncated encrypted data",
+            "Données chiffrées tronquées"
+        ));
     }
-    let opening = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, key).map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?);
+    let opening = LessSafeKey::new(
+        UnboundKey::new(&AES_256_GCM, key)
+            .map_err(|_| anyhow!(t!("Invalid key", "Clé invalide")))?,
+    );
     let (nonce, rest) = sealed.split_at(NONCE_LEN);
     let mut buf = rest.to_vec();
-    let nonce = Nonce::try_assume_unique_for_key(nonce).map_err(|_| anyhow!(t!("Invalid nonce", "Nonce invalide")))?;
+    let nonce = Nonce::try_assume_unique_for_key(nonce)
+        .map_err(|_| anyhow!(t!("Invalid nonce", "Nonce invalide")))?;
     let plain = opening
         .open_in_place(nonce, Aad::from(aad), &mut buf)
-        .map_err(|_| anyhow!(t!("Decryption failed: wrong key or modified file", "Déchiffrement impossible : clé incorrecte ou fichier modifié")))?;
+        .map_err(|_| {
+            anyhow!(t!(
+                "Decryption failed: wrong key or modified file",
+                "Déchiffrement impossible : clé incorrecte ou fichier modifié"
+            ))
+        })?;
     Ok(plain.to_vec())
 }
 
@@ -109,7 +134,56 @@ pub enum Content {
 }
 
 fn aad(path: &Path) -> Vec<u8> {
-    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default().into_bytes()
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
+        .into_bytes()
+}
+
+/// Résultat de la vérification d'une clé contre les fichiers chiffrés du coffre.
+#[cfg(target_os = "macos")]
+#[derive(Debug, PartialEq, Eq)]
+pub enum KeyCheck {
+    /// Au moins un fichier chiffré s'ouvre avec cette clé.
+    Valid,
+    /// Un fichier chiffré ne s'ouvre pas avec cette clé (ou est illisible).
+    Invalid,
+    /// Aucun fichier chiffré : rien ne permet de vérifier.
+    NoData,
+}
+
+/// Fichiers chiffrés du coffre (voir l'en-tête du module).
+#[cfg(target_os = "macos")]
+const VAULT_FILES: [&str; 4] = [
+    "sessions.json",
+    "notes.json",
+    "credentials.json",
+    "known_hosts.json",
+];
+
+/// Vérifie une clé en déchiffrant le premier fichier chiffré de `dir` (AES-GCM authentifié :
+/// une mauvaise clé échoue toujours). S'il s'ouvre, la clé est valide ; sinon (clé fausse ou
+/// fichier illisible) elle est rejetée. Ne modifie rien.
+#[cfg(target_os = "macos")]
+pub fn verify_key(dir: &Path, key: &[u8; 32]) -> KeyCheck {
+    // Le premier fichier chiffré trouvé décide : un seul suffit, tous sont chiffrés par la même clé.
+    for name in VAULT_FILES {
+        let path = dir.join(name);
+        let Ok(bytes) = fs::read(&path) else { continue };
+        let Some(sealed) = bytes.strip_prefix(MAGIC) else {
+            continue;
+        };
+        let opened = B64
+            .decode(sealed.trim_ascii())
+            .ok()
+            .and_then(|sealed| open(key, &sealed, &aad(&path)).ok());
+        return if opened.is_some() {
+            KeyCheck::Valid
+        } else {
+            KeyCheck::Invalid
+        };
+    }
+    KeyCheck::NoData
 }
 
 /// Lit un fichier, chiffré ou non.
@@ -117,23 +191,43 @@ pub fn read(path: &Path) -> Result<Content> {
     let bytes = match fs::read(path) {
         Ok(b) => b,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Content::Missing),
-        Err(e) => return Err(e).with_context(|| format!("Lecture impossible : {}", path.display())),
+        Err(e) => {
+            return Err(e).with_context(|| format!("Lecture impossible : {}", path.display()))
+        }
     };
     let Some(sealed) = bytes.strip_prefix(MAGIC) else {
-        return Ok(Content::Text(String::from_utf8(bytes).context(t!("Unreadable file (encoding)", "Fichier illisible (encodage)"))?));
+        return Ok(Content::Text(String::from_utf8(bytes).context(t!(
+            "Unreadable file (encoding)",
+            "Fichier illisible (encodage)"
+        ))?));
     };
-    let Some(key) = key() else { return Ok(Content::Locked) };
-    let sealed = B64.decode(sealed.trim_ascii()).context(t!("Unreadable encrypted file", "Fichier chiffré illisible"))?;
+    let Some(key) = key() else {
+        return Ok(Content::Locked);
+    };
+    let sealed = B64
+        .decode(sealed.trim_ascii())
+        .context(t!("Unreadable encrypted file", "Fichier chiffré illisible"))?;
     let plain = open(&key, &sealed, &aad(path)).with_context(|| format!("{}", path.display()))?;
-    Ok(Content::Text(String::from_utf8(plain).context(t!("Unreadable file (encoding)", "Fichier illisible (encodage)"))?))
+    Ok(Content::Text(String::from_utf8(plain).context(t!(
+        "Unreadable file (encoding)",
+        "Fichier illisible (encodage)"
+    ))?))
 }
 
 /// Écrit un fichier (atomiquement), chiffré si le chiffrement est actif.
 pub fn write(path: &Path, text: &str) -> Result<()> {
     let bytes = if enabled() {
-        let key = key().ok_or_else(|| anyhow!(t!("Portunia is locked: write refused", "Portunia est verrouillé : écriture refusée")))?;
+        let key = key().ok_or_else(|| {
+            anyhow!(t!(
+                "Portunia is locked: write refused",
+                "Portunia est verrouillé : écriture refusée"
+            ))
+        })?;
         let mut out = MAGIC.to_vec();
-        out.extend_from_slice(B64.encode(seal(&key, text.as_bytes(), &aad(path))?).as_bytes());
+        out.extend_from_slice(
+            B64.encode(seal(&key, text.as_bytes(), &aad(path))?)
+                .as_bytes(),
+        );
         out.push(b'\n');
         out
     } else {
@@ -162,17 +256,38 @@ pub mod dpapi {
     use super::*;
     use windows::Win32::{
         Foundation::{LocalFree, HLOCAL},
-        Security::Cryptography::{CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB},
+        Security::Cryptography::{
+            CryptProtectData, CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+        },
     };
 
     fn run(data: &[u8], protect: bool) -> Result<Vec<u8>> {
-        let input = CRYPT_INTEGER_BLOB { cbData: data.len() as u32, pbData: data.as_ptr() as *mut u8 };
+        let input = CRYPT_INTEGER_BLOB {
+            cbData: data.len() as u32,
+            pbData: data.as_ptr() as *mut u8,
+        };
         let mut output = CRYPT_INTEGER_BLOB::default();
         unsafe {
             if protect {
-                CryptProtectData(&input, windows::core::w!("Portunia"), None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut output)?;
+                CryptProtectData(
+                    &input,
+                    windows::core::w!("Portunia"),
+                    None,
+                    None,
+                    None,
+                    CRYPTPROTECT_UI_FORBIDDEN,
+                    &mut output,
+                )?;
             } else {
-                CryptUnprotectData(&input, None, None, None, None, CRYPTPROTECT_UI_FORBIDDEN, &mut output)?;
+                CryptUnprotectData(
+                    &input,
+                    None,
+                    None,
+                    None,
+                    None,
+                    CRYPTPROTECT_UI_FORBIDDEN,
+                    &mut output,
+                )?;
             }
             let out = std::slice::from_raw_parts(output.pbData, output.cbData as usize).to_vec();
             let _ = LocalFree(Some(HLOCAL(output.pbData as _)));
@@ -181,11 +296,27 @@ pub mod dpapi {
     }
 
     pub fn protect(data: &[u8]) -> Result<Vec<u8>> {
-        run(data, true).map_err(|e| anyhow!("{}", t!(format!("Windows protection failed: {e}"), format!("Protection Windows impossible : {e}"))))
+        run(data, true).map_err(|e| {
+            anyhow!(
+                "{}",
+                t!(
+                    format!("Windows protection failed: {e}"),
+                    format!("Protection Windows impossible : {e}")
+                )
+            )
+        })
     }
 
     pub fn unprotect(data: &[u8]) -> Result<Vec<u8>> {
-        run(data, false).map_err(|e| anyhow!("{}", t!(format!("Unreadable Windows Hello key (another account or another PC?): {e}"), format!("Clé Windows Hello illisible (autre compte ou autre PC ?) : {e}"))))
+        run(data, false).map_err(|e| {
+            anyhow!(
+                "{}",
+                t!(
+                    format!("Unreadable Windows Hello key (another account or another PC?): {e}"),
+                    format!("Clé Windows Hello illisible (autre compte ou autre PC ?) : {e}")
+                )
+            )
+        })
     }
 }
 
@@ -223,8 +354,14 @@ mod tests {
         write(&path, "{\"secret\": \"srv-prod\"}").unwrap();
         let raw = fs::read(&path).unwrap();
         assert!(raw.starts_with(MAGIC));
-        assert!(!String::from_utf8_lossy(&raw).contains("srv-prod"), "rien en clair sur le disque");
-        assert_eq!(read(&path).unwrap(), Content::Text("{\"secret\": \"srv-prod\"}".into()));
+        assert!(
+            !String::from_utf8_lossy(&raw).contains("srv-prod"),
+            "rien en clair sur le disque"
+        );
+        assert_eq!(
+            read(&path).unwrap(),
+            Content::Text("{\"secret\": \"srv-prod\"}".into())
+        );
         // Verrouillé : lecture « Locked », écriture refusée (jamais de clair par accident).
         set_key(None);
         assert_eq!(read(&path).unwrap(), Content::Locked);
@@ -259,6 +396,42 @@ mod tests {
         set_enabled(false);
     }
 
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn verification_de_la_cle_sur_un_fichier_chiffre() {
+        let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let path = temp("sessions.json");
+        let dir = path.parent().unwrap().to_path_buf();
+        let key = random_bytes::<32>().unwrap();
+        // Rien de chiffré : impossible de vérifier.
+        assert_eq!(verify_key(&dir, &key), KeyCheck::NoData);
+        fs::write(dir.join("notes.json"), "{}").unwrap();
+        assert_eq!(
+            verify_key(&dir, &key),
+            KeyCheck::NoData,
+            "un fichier en clair ne prouve rien"
+        );
+        set_key(Some(key));
+        set_enabled(true);
+        write(&path, "[]").unwrap();
+        set_key(None);
+        set_enabled(false);
+        assert_eq!(verify_key(&dir, &key), KeyCheck::Valid);
+        assert_eq!(
+            verify_key(&dir, &random_bytes::<32>().unwrap()),
+            KeyCheck::Invalid
+        );
+        // Fichier chiffré illisible : refus, jamais « valide ».
+        fs::write(
+            dir.join("credentials.json"),
+            format!("{}garbage", String::from_utf8_lossy(MAGIC)),
+        )
+        .unwrap();
+        // Seul fichier chiffré, illisible : refus même avec la bonne clé, jamais « valide ».
+        fs::remove_file(&path).unwrap();
+        assert_eq!(verify_key(&dir, &key), KeyCheck::Invalid);
+    }
+
     #[test]
     fn sans_mot_de_passe_maitre_le_fichier_reste_lisible() {
         let _g = TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -268,7 +441,10 @@ mod tests {
         write(&path, "[]").unwrap();
         assert_eq!(fs::read_to_string(&path).unwrap(), "[]");
         assert_eq!(read(&path).unwrap(), Content::Text("[]".into()));
-        assert_eq!(read(&path.with_file_name("absent.json")).unwrap(), Content::Missing);
+        assert_eq!(
+            read(&path.with_file_name("absent.json")).unwrap(),
+            Content::Missing
+        );
     }
 
     #[cfg(windows)]

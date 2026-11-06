@@ -1,9 +1,64 @@
 // Verrouillage (écran de déverrouillage, inactivité) et licence.
+import { invoke } from '@tauri-apps/api/core';
 import { errorText, Edition, LicenseStatus, LockStatus, security } from './api';
 import { h, icon } from './dom';
 import { t } from './i18n';
+import { IS_MAC } from './platform';
 
 type Toast = (message: string, kind?: 'info' | 'error') => void;
+
+// ---------- Biométrie : Windows Hello ou Touch ID ----------
+
+export type BiometricKind = 'hello' | 'touchid';
+
+/** Nom du capteur (vide si aucun). */
+export const biometricLabel = (kind: BiometricKind | null): string =>
+  kind === 'touchid' ? 'Touch ID' : kind === 'hello' ? 'Windows Hello' : '';
+
+/**
+ * Option « déverrouiller avec la biométrie » des Paramètres : masquée sans capteur. Si elle est
+ * encore active alors que le capteur a disparu, elle reste visible (grisée) pour pouvoir la retirer.
+ */
+export function biometricOption(kind: BiometricKind | null, enabled: boolean, mac: boolean = IS_MAC): { kind: BiometricKind; disabled: boolean } | null {
+  if (kind) return { kind, disabled: false };
+  return enabled ? { kind: mac ? 'touchid' : 'hello', disabled: true } : null;
+}
+
+/** Textes de l'interface pour un capteur (ceux de Windows Hello sont inchangés). */
+export function biometricTexts(kind: BiometricKind) {
+  const label = biometricLabel(kind);
+  const mac = kind === 'touchid';
+  return {
+    label,
+    toggle: t(`Unlock with ${label}`, `Déverrouiller avec ${label}`),
+    cancelled: t(`${label} check cancelled.`, `Vérification ${label} annulée.`),
+    hint: mac ? t('Fingerprint.', 'Empreinte digitale.') : t('Face, fingerprint or Windows PIN.', 'Visage, empreinte ou code PIN Windows.'),
+    unavailable: mac ? t('Touch ID is not set up on this Mac', 'Touch ID n\'est pas configuré sur ce Mac') : t('Windows Hello is not set up on this PC', 'Windows Hello n\'est pas configuré sur ce PC'),
+  };
+}
+
+/**
+ * Après une action qui a échoué, le cœur a pu changer d'état quand même (ex. mot de passe changé
+ * mais Touch ID désactivé) : on relit l'état réel et on l'affiche. Un cœur injoignable n'écrase rien.
+ */
+export async function refreshAfterFailure<T>(load: () => Promise<T>, render: (state: T) => void): Promise<void> {
+  try { render(await load()); } catch { /* état inchangé à l'écran */ }
+}
+
+/** Capteur disponible et déverrouillage (commandes du cœur ; `unlock_hello` reste l'alias Windows). */
+const biometric = {
+  kind: () => invoke<BiometricKind | null>('biometric_kind').catch(() => null),
+  unlock: () => (IS_MAC ? invoke<boolean>('unlock_biometric') : security.unlockHello()),
+};
+
+/** Icône empreinte (Touch ID) ou silhouette (Windows Hello). */
+function biometricIcon(kind: BiometricKind, size = 14): SVGSVGElement {
+  if (kind !== 'touchid') return icon('user', size);
+  // Même cadre que les autres icônes (classe .ic), tracé d'empreinte.
+  const svg = icon('user', size);
+  svg.querySelector('path')?.setAttribute('d', 'M12 4a7 7 0 0 0-7 7v2M12 8a3 3 0 0 0-3 3v3a8 8 0 0 0 1 4M12 12v3a11 11 0 0 0 1.5 5M16 10a4 4 0 0 0-1-2M19 13v-2a7 7 0 0 0-2-5M16 14v1a14 14 0 0 1-1 4');
+  return svg;
+}
 
 export const EDITION_LABEL: Record<Edition, string> = { free: t('Free', 'Gratuit'), pro: 'Pro', team: t('Teams', 'Équipes') };
 
@@ -62,6 +117,7 @@ export async function lockNow(toast: Toast, onUnlocked: () => void) {
 async function showLockScreen(onUnlocked: () => void, known?: LockStatus) {
   if (overlay) return;
   const status = known ?? await security.lockStatus();
+  const kind = status.hello && status.helloAvailable ? await biometric.kind() : null;
   const input = h('input', { type: 'password', placeholder: t('Master password', 'Mot de passe maître'), 'aria-label': t('Master password', 'Mot de passe maître'), autocomplete: 'current-password' });
   const error = h('p', { class: 'form-error', role: 'alert' });
   // Tout le reste devient inerte : ni focus, ni clic, ni frappe sous l'écran de verrouillage
@@ -97,8 +153,8 @@ async function showLockScreen(onUnlocked: () => void, known?: LockStatus) {
   const tryHello = async () => {
     error.textContent = '';
     try {
-      if (await security.unlockHello()) done();
-      else error.textContent = t('Windows Hello check cancelled.', 'Vérification Windows Hello annulée.');
+      if (await biometric.unlock()) done();
+      else error.textContent = biometricTexts(kind ?? (IS_MAC ? 'touchid' : 'hello')).cancelled;
     } catch (e) {
       error.textContent = errorText(e);
     }
@@ -113,52 +169,56 @@ async function showLockScreen(onUnlocked: () => void, known?: LockStatus) {
       input,
       error,
       unlockButton,
-      status.hello && status.helloAvailable && h('button', { type: 'button', class: 'btn', onclick: tryHello }, icon('user', 14), 'Windows Hello')));
+      kind && h('button', { type: 'button', class: 'btn', onclick: tryHello }, biometricIcon(kind), biometricLabel(kind))));
   document.body.append(overlay);
   input.focus();
-  if (status.hello && status.helloAvailable) tryHello();
+  if (kind) tryHello();
 }
 
 // ---------- Paramètres : Sécurité et Licence ----------
 
 export function securitySection(toast: Toast, refresh: () => void): HTMLElement {
   const box = h('div', { class: 'settings-block' });
-  security.lockStatus().then((s) => render(s)).catch((e) => box.replaceChildren(h('p', { class: 'form-error' }, errorText(e))));
+  let sensor: BiometricKind | null = null;
+  Promise.all([security.lockStatus(), biometric.kind()]).then(([s, k]) => { sensor = k; render(s); }).catch((e) => box.replaceChildren(h('p', { class: 'form-error' }, errorText(e))));
 
   function render(s: LockStatus) {
     timeoutMinutes = s.enabled ? s.timeoutMinutes : 0;
-    const current = h('input', { type: 'password', placeholder: t('Current password', 'Mot de passe actuel'), autocomplete: 'current-password' });
+    const bio = biometricOption(sensor, s.hello);
+    const bioTexts = bio && biometricTexts(bio.kind);
+    const current =h('input', { type: 'password', placeholder: t('Current password', 'Mot de passe actuel'), autocomplete: 'current-password' });
     const next = h('input', { type: 'password', placeholder: t('New password (8 characters min.)', 'Nouveau mot de passe (8 caractères min.)'), autocomplete: 'new-password' });
     const confirm2 = h('input', { type: 'password', placeholder: t('Confirm', 'Confirmer'), autocomplete: 'new-password' });
     const save = async () => {
       if (next.value !== confirm2.value) return toast(t('The two passwords do not match', 'Les deux mots de passe ne correspondent pas'), 'error');
       // Première activation : les données vont être chiffrées, l'oubli du mot de passe serait sans recours.
-      if (!s.enabled && !confirm(t('Your sessions, notes and shared credentials will be encrypted on this PC.\n\nIf you forget this password (and without Windows Hello), they will be lost: nobody will be able to recover them. Remember to export a protected backup.\n\nEnable the master password?', 'Vos sessions, notes et identifiants partagés vont être chiffrés sur ce PC.\n\nSi vous oubliez ce mot de passe (et sans Windows Hello), ils seront perdus : personne ne pourra les récupérer. Pensez à exporter une sauvegarde protégée.\n\nActiver le mot de passe maître ?'))) return;
+      const bioName = IS_MAC ? 'Touch ID' : 'Windows Hello';
+      if (!s.enabled && !confirm(t(`Your sessions, notes and shared credentials will be encrypted on this ${IS_MAC ? 'Mac' : 'PC'}.\n\nIf you forget this password (and without ${bioName}), they will be lost: nobody will be able to recover them. Remember to export a protected backup.\n\nEnable the master password?`, `Vos sessions, notes et identifiants partagés vont être chiffrés sur ce ${IS_MAC ? 'Mac' : 'PC'}.\n\nSi vous oubliez ce mot de passe (et sans ${bioName}), ils seront perdus : personne ne pourra les récupérer. Pensez à exporter une sauvegarde protégée.\n\nActiver le mot de passe maître ?`))) return;
       try { render(await security.lockSetPassword(current.value, next.value)); toast(t('Master password saved', 'Mot de passe maître enregistré')); refresh(); }
-      catch (e) { toast(errorText(e), 'error'); }
+      catch (e) { toast(errorText(e), 'error'); await refreshAfterFailure(security.lockStatus, render); }
     };
     box.replaceChildren(...[
       h('p', { class: 'muted small', style: 'margin: 0' }, s.enabled
         ? t('Portunia asks for the master password at startup and after a period of inactivity. Locked, it opens no session and reads no saved password.', 'Portunia demande le mot de passe maître au démarrage et après une période d\'inactivité. Verrouillé, il n\'ouvre aucune session et ne lit aucun mot de passe enregistré.')
         : t('Protect Portunia with a master password: it will be asked at startup and after a period of inactivity, and your data will be encrypted on this PC.', 'Protégez Portunia par un mot de passe maître : il sera demandé au démarrage et après une période d\'inactivité, et vos données seront chiffrées sur ce PC.')),
       s.enabled && h('p', { class: `small ${s.encrypted ? 'muted' : 'form-error'}`, style: 'margin: 0' }, s.encrypted
-        ? t('Sessions, notes, shared credentials and server fingerprints are encrypted on this PC (AES-256). Forgotten password and no Windows Hello: they would be lost. Export a protected backup now and then (Import / export).', 'Sessions, notes, identifiants partagés et empreintes des serveurs sont chiffrés sur ce PC (AES-256). Mot de passe oublié et sans Windows Hello : ils seraient perdus. Exportez de temps en temps une sauvegarde protégée (Importer / exporter).')
+        ? t(`Sessions, notes, shared credentials and server fingerprints are encrypted on this ${IS_MAC ? 'Mac' : 'PC'} (AES-256). Forgotten password and no ${IS_MAC ? 'Touch ID' : 'Windows Hello'}: they would be lost. Export a protected backup now and then (Import / export).`, `Sessions, notes, identifiants partagés et empreintes des serveurs sont chiffrés sur ce ${IS_MAC ? 'Mac' : 'PC'} (AES-256). Mot de passe oublié et sans ${IS_MAC ? 'Touch ID' : 'Windows Hello'} : ils seraient perdus. Exportez de temps en temps une sauvegarde protégée (Importer / exporter).`)
         : t('Your data will be encrypted at the next unlock with the password.', 'Vos données seront chiffrées au prochain déverrouillage par mot de passe.')),
       h('div', { class: 'pw-grid' }, s.enabled && current, next, confirm2,
         h('button', { type: 'button', class: 'btn', onclick: save }, s.enabled ? t('Change the password', 'Changer le mot de passe') : t('Enable locking', 'Activer le verrouillage'))),
       s.enabled && h('div', { class: 'row2' },
         h('label', { class: 'fld' }, t('Lock after', 'Verrouiller après'),
-          h('select', { onchange: async (e: Event) => { try { render(await security.lockSetOptions(s.hello, Number((e.target as HTMLSelectElement).value))); } catch (err) { toast(errorText(err), 'error'); } } },
+          h('select', { onchange: async (e: Event) => { try { render(await security.lockSetOptions(s.hello, Number((e.target as HTMLSelectElement).value))); } catch (err) { toast(errorText(err), 'error'); await refreshAfterFailure(security.lockStatus, render); } } },
             ...[[0, t('Never', 'Jamais')], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 heure']].map(([v, l]) => h('option', { value: String(v), selected: v === s.timeoutMinutes }, String(l))))),
-        h('label', { class: `check setting${s.helloAvailable ? '' : ' disabled'}`, title: s.helloAvailable ? '' : t('Windows Hello is not set up on this PC', 'Windows Hello n\'est pas configuré sur ce PC') },
-          h('input', { type: 'checkbox', checked: s.hello, disabled: !s.helloAvailable, onchange: async (e: Event) => { try { render(await security.lockSetOptions((e.target as HTMLInputElement).checked, s.timeoutMinutes)); } catch (err) { toast(errorText(err), 'error'); } } }),
-          h('span', {}, t('Unlock with Windows Hello', 'Déverrouiller avec Windows Hello'), h('span', { class: 'muted small block' }, t('Face, fingerprint or Windows PIN.', 'Visage, empreinte ou code PIN Windows.'))))),
+        bio && h('label', { class: `check setting${bio.disabled ? ' disabled' : ''}`, title: bio.disabled ? bioTexts?.unavailable : '' },
+          h('input', { type: 'checkbox', checked: s.hello, disabled: bio.disabled && !s.hello, onchange: async (e: Event) => { try { render(await security.lockSetOptions((e.target as HTMLInputElement).checked, s.timeoutMinutes)); } catch (err) { toast(errorText(err), 'error'); await refreshAfterFailure(security.lockStatus, render); } } }),
+          h('span', {}, bioTexts?.toggle, h('span', { class: 'muted small block' }, bioTexts?.hint)))),
       s.enabled && h('button', {
         type: 'button', class: 'btn', style: 'align-self: flex-start',
         onclick: async () => {
           const pw = prompt(t('Current master password, to disable locking:', 'Mot de passe maître actuel, pour désactiver le verrouillage :'));
           if (pw === null) return;
-          try { render(await security.lockDisable(pw)); toast(t('Locking disabled', 'Verrouillage désactivé')); refresh(); } catch (e) { toast(errorText(e), 'error'); }
+          try { render(await security.lockDisable(pw)); toast(t('Locking disabled', 'Verrouillage désactivé')); refresh(); } catch (e) { toast(errorText(e), 'error'); await refreshAfterFailure(security.lockStatus, render); }
         },
       }, t('Disable locking', 'Désactiver le verrouillage'))].filter((n): n is Exclude<typeof n, false> => n !== false));
   }

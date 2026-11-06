@@ -918,6 +918,72 @@ fn apply_data_change(state: &AppState, change: lock::DataChange) -> CmdResult<()
     Ok(())
 }
 
+/// Capteur biométrique utilisable : « hello », « touchid » ou rien.
+#[tauri::command]
+pub fn biometric_kind() -> Option<&'static str> {
+    lock::biometric_kind()
+}
+
+/// Garde RAII de l'invite Touch ID : libérée à la destruction (retour, erreur, panique, annulation).
+#[cfg(target_os = "macos")]
+struct PromptGuard(&'static std::sync::atomic::AtomicBool);
+
+#[cfg(target_os = "macos")]
+impl PromptGuard {
+    /// `None` si une invite est déjà en cours.
+    fn acquire(flag: &'static std::sync::atomic::AtomicBool) -> Option<Self> {
+        flag.compare_exchange(false, true, std::sync::atomic::Ordering::SeqCst, std::sync::atomic::Ordering::SeqCst)
+            .ok()
+            .map(|_| Self(flag))
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl Drop for PromptGuard {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Touch ID : vérifie l'utilisateur puis relit la clé du coffre dans le Trousseau. `Ok(false)` si
+/// l'utilisateur annule ; toute autre cause d'échec est une erreur. Aucune clé n'est appliquée
+/// sans une authentification réussie.
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn unlock_biometric(state: State<'_, AppState>) -> CmdResult<bool> {
+    use crate::biometric_mac::{self, BiometricError, KeychainStore, TouchId, UnlockError};
+    if !state.lock.lock().unwrap().touch_id_enabled() {
+        return Err(t!("Touch ID is not enabled for Portunia", "Touch ID n'est pas activé pour Portunia").into());
+    }
+    // Une invite à la fois : un second appel pendant l'invite en cours ne relance rien.
+    static PROMPT_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let Some(_prompt) = PromptGuard::acquire(&PROMPT_ACTIVE) else {
+        return Ok(false);
+    };
+    // L'invite Touch ID peut durer : le verrou de l'application n'est pas tenu pendant ce temps.
+    let outcome = tauri::async_runtime::spawn_blocking(|| {
+        biometric_mac::unlock_key(&TouchId, &KeychainStore::vault(), biometric_mac::unlock_reason())
+    })
+    .await
+    .map_err(err)?;
+    match outcome {
+        Ok(key) => {
+            state.lock.lock().unwrap().finish_biometric_unlock(key).map_err(full)?;
+            apply_data_change(&state, lock::DataChange::None)?;
+            Ok(true)
+        }
+        Err(UnlockError::Auth(BiometricError::Cancelled)) => Ok(false),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Touch ID n'existe que sous macOS : ailleurs, refus (Windows passe par `unlock_hello`).
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub async fn unlock_biometric() -> CmdResult<bool> {
+    Err(t!("Touch ID is only available on macOS", "Touch ID n'existe que sous macOS").into())
+}
+
 /// Déverrouillage par Windows Hello (visage, empreinte, PIN).
 #[tauri::command]
 pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResult<bool> {
@@ -1763,4 +1829,36 @@ pub async fn connect_with(
     let mut values = session_values(&state, &session)?;
     values.extend(extra);
     start_connection(&app, &state, &protocol, label, values, cols, rows, on_event).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Une seule invite Touch ID à la fois : la garde est libérée à la sortie, y compris sur panique.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn garde_d_invite_unique_et_liberee_dans_tous_les_cas() {
+        use std::sync::atomic::AtomicBool;
+        static FLAG: AtomicBool = AtomicBool::new(false);
+        let first = PromptGuard::acquire(&FLAG).expect("première invite");
+        assert!(PromptGuard::acquire(&FLAG).is_none(), "second appel refusé");
+        drop(first);
+        assert!(PromptGuard::acquire(&FLAG).is_some(), "libérée après usage");
+        let result = std::panic::catch_unwind(|| {
+            let _guard = PromptGuard::acquire(&FLAG).unwrap();
+            panic!("échec pendant l'invite");
+        });
+        assert!(result.is_err());
+        assert!(PromptGuard::acquire(&FLAG).is_some(), "libérée après panique");
+    }
+
+    /// `biometric_kind` ne renvoie que le capteur de la plateforme courante (ou rien).
+    #[test]
+    fn biometric_kind_correspond_a_la_plateforme() {
+        let expected = if cfg!(windows) { "hello" } else if cfg!(target_os = "macos") { "touchid" } else { "aucun" };
+        if let Some(kind) = biometric_kind() {
+            assert_eq!(kind, expected);
+        }
+    }
 }

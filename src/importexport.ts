@@ -3,6 +3,14 @@ import { open, save } from '@tauri-apps/plugin-dialog';
 import { api, errorText, ImportCandidate, ImportSource } from './api';
 import { badge, h, icon } from './dom';
 import { t } from './i18n';
+import { IS_MAC } from './platform';
+
+/** Où restent les mots de passe, jamais importés ni exportés. */
+export function passwordStoreNote(mac: boolean = IS_MAC): string {
+  return mac
+    ? t('Passwords are never imported or exported: they stay in the macOS Keychain.', 'Les mots de passe ne sont jamais importés ni exportés : ils restent dans le Trousseau macOS.')
+    : t('Passwords are never imported or exported: they stay in the Windows Credential Manager.', 'Les mots de passe ne sont jamais importés ni exportés : ils restent dans le Gestionnaire d\'identifiants Windows.');
+}
 
 interface SourceInfo {
   id: ImportSource;
@@ -60,7 +68,7 @@ export function openImportExport(done: (message: string) => void, toast: (m: str
 
     const exportPass = h('input', { type: 'password', autocomplete: 'new-password', placeholder: t('Empty = unencrypted file', 'Vide = fichier en clair') });
     body.replaceChildren(
-      h('p', { class: 'muted small', style: 'margin: 0' }, t('Passwords are never imported or exported: they stay in the Windows Credential Manager.', 'Les mots de passe ne sont jamais importés ni exportés : ils restent dans le Gestionnaire d\'identifiants Windows.')),
+      h('p', { class: 'muted small', style: 'margin: 0' }, passwordStoreNote()),
       ...cards,
       h('section', { class: 'ext-fields' },
         h('div', { class: 'ext-head' }, h('h3', {}, t('Portunia backup', 'Sauvegarde Portunia'))),
