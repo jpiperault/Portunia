@@ -100,6 +100,12 @@ enum Stage {
 struct Decoder {
     stage: Option<Stage>,
     buf: WriteBuf,
+    /// Messages acceptés depuis le début de la séquence de connexion (ou d'activation) en cours.
+    /// Un message que la séquence ne connaît pas la rend inutilisable (IronRDP la consomme) : elle
+    /// est alors refaite avec ces messages-là, sans celui qui a échoué. Windows envoie ainsi la
+    /// disposition des écrans (Monitor Layout) et des messages de canaux virtuels pendant la
+    /// connexion, qu'IronRDP 0.10 refuse.
+    since: Vec<Vec<u8>>,
 }
 
 impl Decoder {
@@ -113,9 +119,36 @@ impl Decoder {
         buf.clear();
         connector.step(&confirm, &mut buf)?;
         connector.mark_security_upgrade_as_done();
-        let mut d = Self { stage: Some(Stage::Connecting(Box::new(connector))), buf };
+        let mut d = Self { stage: Some(Stage::Connecting(Box::new(connector))), buf, since: Vec::new() };
         d.advance()?;
         Ok(d)
+    }
+
+    /// Refait la séquence en cours avec les messages déjà acceptés, après un message refusé.
+    fn redo(&mut self) -> Result<()> {
+        let since = std::mem::take(&mut self.since);
+        match self.stage.take() {
+            Some(Stage::Connecting(_)) => {
+                let mut fresh = Self::new()?;
+                for frame in &since {
+                    fresh.try_feed(frame)?;
+                }
+                *self = fresh;
+            }
+            Some(Stage::Reactivating { stage, image, result, .. }) => {
+                let seq = result.activation_factory.create();
+                self.stage = Some(Stage::Reactivating { stage, image, result, seq: Box::new(seq) });
+                self.advance()?;
+                for frame in &since {
+                    self.try_feed(frame)?;
+                }
+            }
+            other => {
+                self.stage = other;
+                self.since = since;
+            }
+        }
+        Ok(())
     }
 
     /// Fait les étapes qui n'attendent rien du serveur.
@@ -175,7 +208,15 @@ impl Decoder {
 
     /// Un message du serveur. Une erreur n'arrête pas la relecture : le message est sauté.
     fn feed(&mut self, frame: &[u8]) {
+        let sequence = matches!(self.stage, Some(Stage::Connecting(_)) | Some(Stage::Reactivating { .. }));
         if let Err(e) = self.try_feed(frame) {
+            if sequence {
+                if let Err(e) = self.redo() {
+                    if std::env::var_os("PORTUNIA_RDP_DEBUG").is_some() {
+                        eprintln!("séquence de connexion non refaite : {e:#}");
+                    }
+                }
+            }
             // Diagnostic : PORTUNIA_RDP_DEBUG=1 affiche les messages sautés.
             if std::env::var_os("PORTUNIA_RDP_DEBUG").is_some() {
                 let head: String = frame.iter().take(16).map(|b| format!("{b:02x}")).collect();
@@ -185,6 +226,18 @@ impl Decoder {
     }
 
     fn try_feed(&mut self, frame: &[u8]) -> Result<()> {
+        let before = matches!(self.stage, Some(Stage::Active { .. }));
+        self.step(frame)?;
+        match self.stage {
+            Some(Stage::Active { .. }) => self.since.clear(),
+            // Début d'une nouvelle activation : le message qui l'a annoncée n'en fait pas partie.
+            _ if before => self.since.clear(),
+            _ => self.since.push(frame.to_vec()),
+        }
+        Ok(())
+    }
+
+    fn step(&mut self, frame: &[u8]) -> Result<()> {
         self.buf.clear();
         match self.stage.as_mut() {
             Some(Stage::Connecting(c)) => {
@@ -354,5 +407,25 @@ mod tests {
             d.feed(f);
         }
         assert_eq!(pixel(&d, 10, 710), [0, 255, 0], "bande verte à 2 s");
+    }
+
+    /// Début d'une vraie session Windows Server 2022 (banc d'essai, client du navigateur) :
+    /// Windows envoie la disposition des écrans (Monitor Layout) pendant la connexion, qu'IronRDP
+    /// 0.10 refuse. La connexion doit continuer sans ce message et l'écran d'accueil s'afficher
+    /// (avant la 0.73.1 : écran noir, tous les messages suivants rejetés).
+    #[test]
+    fn relecture_windows() {
+        let file = std::env::temp_dir().join("portunia-essai-windows.flux");
+        std::fs::write(&file, include_bytes!("essai-windows.flux")).unwrap();
+        let frames = load(file.to_str().unwrap()).unwrap();
+        std::fs::remove_file(&file).ok();
+        let mut d = Decoder::new().unwrap();
+        for (_, f) in &frames {
+            d.feed(f);
+        }
+        assert!(matches!(d.stage, Some(Stage::Active { .. })), "connexion rejouée");
+        assert_eq!((d.image().unwrap().width(), d.image().unwrap().height()), (1280, 605));
+        // Fond bleu de l'écran de verrouillage de Windows.
+        assert_eq!(pixel(&d, 640, 300), [0, 53, 90]);
     }
 }
