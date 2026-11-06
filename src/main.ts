@@ -35,6 +35,7 @@ import { openRecordings, setPlayerHandler, stamp } from './recordings';
 import type { Player } from './player';
 import type { AuditPlayer, AuditRecording } from './auditplayer';
 import type { RdpPlayer, RdpRecording } from './rdpplayer';
+import type { WebPlayer, WebRecording } from './webplayer';
 import type { AuditRow } from './audit';
 import { folderColors, recordings, shells, ShellSpec } from './api';
 import { defaultShell, hideShell, loadShells, setDefaultShell, shellIcon, shellsLoaded, visibleShells } from './localshells';
@@ -83,7 +84,7 @@ interface Tab {
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
   /** Relecture d'une session de Gate (onglet « replay »). */
-  auditPlayer?: AuditPlayer | RdpPlayer;
+  auditPlayer?: AuditPlayer | RdpPlayer | WebPlayer;
   /** Outils réseau (onglet « tools »). */
   netTools?: NetToolsView;
   /** Commande sur plusieurs serveurs (onglet « multi »). */
@@ -413,11 +414,20 @@ async function openAuditReplay(b: Gate, s: AuditRow, start?: number, reveal = fa
     if (!dest) return;
     try { await gates.exportFile(dest, content); toast(`${done} : ${dest}`); } catch (e) { toast(errorText(e), 'error'); }
   };
-  let player: AuditPlayer | RdpPlayer;
+  let player: AuditPlayer | RdpPlayer | WebPlayer;
   // Onglet qui affiche ce lecteur (remplacé par la version révélée).
   let owner: Tab | undefined = replace;
+  // Interface web : journal d'actions (pages, envois, WebSocket, coffre).
+  if (s.type === 'web') {
+    const { WebPlayer } = await import('./webplayer');
+    const web: WebPlayer = new WebPlayer(view, rec as unknown as WebRecording, {
+      viewer: b.login,
+      start,
+      exportText: () => exportFile('-actions', 'txt', web.transcript(), tr('Transcript exported', 'Transcription exportée')),
+    });
+    player = web;
   // Bureau à distance : l'image est décodée par le moteur RDP à partir du flux enregistré.
-  if (s.type === 'rdp') {
+  } else if (s.type === 'rdp') {
     const { RdpPlayer } = await import('./rdpplayer');
     const rdp = new RdpPlayer(view, rec as unknown as RdpRecording, {
       viewer: b.login,

@@ -21,6 +21,8 @@ export interface AuditRow {
   relisible?: boolean;
   /** Session Bureau à distance relisible (Portunia Gate 0.10 et suivants). */
   relisible_rdp?: boolean;
+  /** Journal d'actions d'une interface web (Portunia Gate 0.35 et suivants). */
+  relisible_web?: boolean;
   trouve: { t: number; extrait: string } | null;
 }
 
@@ -107,8 +109,8 @@ export function renderGateAudit(b: Gate, host: AuditHost): HTMLElement {
           h('td', {}, s.mode ? h('span', { class: `badge mode-${s.mode}` }, MODE_LABEL[s.mode] ?? s.mode) : null, s.frappe ? h('span', { class: 'chip keys', title: t('Keystrokes recorded', 'Frappe enregistrée') }, t('keystrokes', 'frappe')) : null,
             s.fichiers ? h('span', { class: 'chip keys', title: t('Files copied through the clipboard (name, size and SHA-256 in the log)', 'Fichiers copiés par le presse-papiers (nom, taille et SHA-256 au journal)') }, t(`${s.fichiers} file(s)`, `${s.fichiers} fichier(s)`)) : null),
           searching ? h('td', { class: 'hit' }, s.trouve ? h('button', { class: 'hit-btn', title: t('Replay from this moment', 'Relire à ce moment'), onclick: () => replay(s.trouve!.t) }, h('span', { class: 'num' }, clock(s.trouve.t)), ' ', h('code', {}, s.trouve.extrait)) : h('span', { class: 'muted' }, '—')) : null,
-          h('td', { class: 'acts' }, s.enregistree && (s.relisible_rdp || s.relisible !== false)
-            ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, t('▶ Replay', '▶ Relire'))
+          h('td', { class: 'acts' }, s.enregistree && (s.relisible_rdp || s.relisible_web || s.relisible !== false)
+            ? h('button', { class: 'btn sm primary', onclick: () => replay(s.trouve?.t) }, s.type === 'web' ? t('Actions', 'Actions') : t('▶ Replay', '▶ Relire'))
             : s.enregistree
               ? h('span', { class: 'muted small', title: t('Recorded and signed by the Gate', 'Enregistrée et signée par la Gate') }, t('Remote Desktop: replay coming soon', 'Bureau à distance : relecture bientôt'))
               : h('span', { class: 'muted small' }, s.mode === 'rebond' ? t('jump, not recorded', 'rebond, non enregistrée') : t('not recorded', 'non enregistrée'))));
