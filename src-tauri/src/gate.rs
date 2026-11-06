@@ -51,6 +51,88 @@ pub struct Gate {
     /// Dernière liste connue des serveurs, affichée grisée hors connexion.
     #[serde(default)]
     pub servers: Vec<Value>,
+    /// Noms d'hôte publiés par Cloudflare en TCP (Gate 0.41) : accès de l'extérieur par cloudflared.
+    #[serde(default)]
+    pub cloudflare: Option<CfHosts>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct CfHosts {
+    #[serde(default)]
+    pub api: String,
+    #[serde(default)]
+    pub ssh: String,
+    #[serde(default)]
+    pub rdp: String,
+}
+
+// ---------- Accès direct ou par Cloudflare ----------
+
+#[derive(Clone, Copy, PartialEq)]
+enum Svc {
+    Api,
+    Ssh,
+    Rdp,
+}
+
+/// Décision retenue par Gate (passage par Cloudflare, moment) : revérifiée après 2 minutes.
+static ROUTES: Mutex<Option<HashMap<String, (bool, std::time::Instant)>>> = Mutex::new(None);
+const ROUTE_TTL: std::time::Duration = std::time::Duration::from_secs(120);
+
+fn remember_route(id: &str, cloudflare: bool) {
+    ROUTES.lock().unwrap().get_or_insert_with(HashMap::new).insert(id.to_string(), (cloudflare, std::time::Instant::now()));
+}
+
+/// Faut-il passer par Cloudflare ? Seulement si la Gate publie son API en TCP et que son adresse
+/// directe ne répond pas (essai de 3 s).
+async fn via_cloudflare(b: &Gate) -> bool {
+    if b.cloudflare.as_ref().is_none_or(|c| c.api.is_empty()) {
+        return false;
+    }
+    let known = ROUTES.lock().unwrap().as_ref().and_then(|m| m.get(&b.id).copied());
+    if let Some((cf, at)) = known {
+        if at.elapsed() < ROUTE_TTL {
+            return cf;
+        }
+    }
+    let direct = tokio::time::timeout(std::time::Duration::from_secs(3), tokio::net::TcpStream::connect((b.host.as_str(), b.api_port))).await.is_ok_and(|r| r.is_ok());
+    remember_route(&b.id, !direct);
+    !direct
+}
+
+/// Où joindre un service de la Gate : son adresse, ou le port local de cloudflared (port 0 pour
+/// le RDP natif en direct : l'adresse vient alors de la Gate).
+async fn reach(data_dir: &Path, b: &Gate, svc: Svc) -> Result<(String, u16)> {
+    let direct = match svc {
+        Svc::Api => (b.host.clone(), b.api_port),
+        Svc::Ssh => (b.host.clone(), b.ssh_port),
+        Svc::Rdp => (b.host.clone(), 0),
+    };
+    if !via_cloudflare(b).await {
+        return Ok(direct);
+    }
+    let cf = b.cloudflare.clone().unwrap_or_default();
+    let (host, what) = match svc {
+        Svc::Api => (cf.api, "API"),
+        Svc::Ssh => (cf.ssh, "SSH"),
+        Svc::Rdp => (cf.rdp, "RDP"),
+    };
+    if host.is_empty() {
+        bail!(
+            "{}",
+            t!(
+                format!("Gate unreachable directly, and its {what} is not published through Cloudflare"),
+                format!("Gate injoignable directement, et son {what} n'est pas publié par Cloudflare")
+            )
+        );
+    }
+    let port = crate::cloudflared::forward(data_dir, &host).await?;
+    Ok(("127.0.0.1".to_string(), port))
+}
+
+/// Adresse de l'API (directe ou par cloudflared), en erreur lisible.
+async fn api_at(data_dir: &Path, b: &Gate) -> CmdResult<(String, u16)> {
+    reach(data_dir, b, Svc::Api).await.map_err(full)
 }
 
 impl Gate {
@@ -265,7 +347,8 @@ fn token(b: &Gate) -> Result<String> {
 /// Appel authentifié ; sur session expirée, la Gate est marqué déconnecté.
 async fn authed(data_dir: &Path, b: &mut Gate, method: reqwest::Method, path: &str, body: Option<Value>) -> Result<Value> {
     let t = token(b)?;
-    match call(&b.host, b.api_port, &b.api_fingerprint, Some(&t), method, path, body).await {
+    let (host, port) = reach(data_dir, b, Svc::Api).await?;
+    match call(&host, port, &b.api_fingerprint, Some(&t), method, path, body).await {
         Err(e) if e.to_string() == "SESSION_EXPIREE" => {
             b.expires.clear();
             let _ = crate::secrets::delete(&b.secret_id(), "jeton");
@@ -300,20 +383,27 @@ pub fn gate_list(state: State<'_, AppState>) -> CmdResult<Vec<GateView>> {
 
 /// Premier contact : empreinte du certificat et informations publiques de la Gate.
 #[tauri::command]
-pub async fn gate_probe(address: String) -> CmdResult<Value> {
+pub async fn gate_probe(state: State<'_, AppState>, address: String) -> CmdResult<Value> {
     let (host, port) = split_address(&address).map_err(full)?;
     let (http, seen) = client(None).map_err(full)?;
-    let resp = http
-        .get(format!("https://{host}:{port}/api/v1/gate"))
-        .send()
-        .await
-        .map_err(|e| format!("Gate injoignable ({host}:{port}) : {}", root_cause(&e)))?;
+    let direct = http.get(format!("https://{host}:{port}/api/v1/gate")).send().await;
+    // Adresse injoignable : peut-être l'API publiée par Cloudflare en TCP (de l'extérieur).
+    let mut cloudflare = false;
+    let resp = match direct {
+        Ok(r) => r,
+        Err(e) if host.contains('.') && host.parse::<std::net::IpAddr>().is_err() && !e.is_status() => {
+            let local = crate::cloudflared::forward(&state.data_dir, &host).await.map_err(|c| format!("Gate injoignable ({host}:{port}) : {} ; Cloudflare : {c}", root_cause(&e)))?;
+            cloudflare = true;
+            http.get(format!("https://127.0.0.1:{local}/api/v1/gate")).send().await.map_err(|e| format!("Gate injoignable ({host}, Cloudflare) : {}", root_cause(&e)))?
+        }
+        Err(e) => return Err(format!("Gate injoignable ({host}:{port}) : {}", root_cause(&e))),
+    };
     let info: Value = resp.json().await.map_err(|_| t!("This server does not answer like a Gate", "Ce serveur ne répond pas comme une Gate").to_string())?;
     if info.get("empreinte_ssh").is_none() {
         return Err(t!("This server does not answer like a Gate", "Ce serveur ne répond pas comme une Gate").into());
     }
     let fp = seen.lock().unwrap().clone().unwrap_or_default();
-    Ok(json!({ "host": host, "apiPort": port, "fingerprint": fp, "info": info }))
+    Ok(json!({ "host": host, "apiPort": port, "fingerprint": fp, "info": info, "cloudflare": cloudflare }))
 }
 
 #[derive(Deserialize)]
@@ -329,6 +419,9 @@ pub struct LoginRequest {
     code: Option<String>,
     new_password: Option<String>,
     remember: bool,
+    /// Premier contact passé par Cloudflare : `host` est le nom d'hôte de l'API publié en TCP.
+    #[serde(default)]
+    cloudflare: bool,
 }
 
 /// Connexion (ou reconnexion) : renvoie l'état donné par la Gate (« code_requis »,
@@ -353,7 +446,13 @@ pub async fn gate_login(state: State<'_, AppState>, request: LoginRequest) -> Cm
         "nouveau_mot_de_passe": request.new_password,
         "client": format!("Portunia {} · {}", env!("CARGO_PKG_VERSION"), std::env::var("COMPUTERNAME").unwrap_or_default()),
     });
-    let answer = call(&request.host, request.api_port, &request.fingerprint, None, reqwest::Method::POST, "/connexion", Some(body)).await.map_err(full)?;
+    // Reconnexion : même passage que les autres appels ; premier contact par Cloudflare : son relais.
+    let (host, port) = match &existing {
+        Some(b) if b.host == request.host && b.api_port == request.api_port => api_at(&data_dir, b).await?,
+        _ if request.cloudflare => ("127.0.0.1".to_string(), crate::cloudflared::forward(&data_dir, &request.host).await.map_err(full)?),
+        _ => (request.host.clone(), request.api_port),
+    };
+    let answer = call(&host, port, &request.fingerprint, None, reqwest::Method::POST, "/connexion", Some(body)).await.map_err(full)?;
     if answer.get("etat").and_then(Value::as_str) != Some("ok") {
         return Ok(answer);
     }
@@ -370,6 +469,13 @@ pub async fn gate_login(state: State<'_, AppState>, request: LoginRequest) -> Cm
     b.expires = answer["expire"].as_str().unwrap_or_default().to_string();
     b.remember_allowed = info["memo_mot_de_passe"].as_bool().unwrap_or(false);
     b.own_replay = info["relecture_propres"].as_bool().unwrap_or(false);
+    b.cloudflare = serde_json::from_value::<CfHosts>(info["cloudflare"].clone()).ok();
+    if request.cloudflare && b.cloudflare.as_ref().is_none_or(|c| c.api.is_empty()) {
+        b.cloudflare = Some(CfHosts { api: request.host.clone(), ..b.cloudflare.clone().unwrap_or_default() });
+    }
+    if request.cloudflare {
+        remember_route(&b.id, true);
+    }
     crate::secrets::set(&b.secret_id(), "jeton", answer["jeton"].as_str().unwrap_or_default()).map_err(full)?;
     // Mot de passe gardé seulement si l'utilisateur le demande et que la Gate l'autorise.
     let final_password = request.new_password.filter(|p| !p.is_empty()).unwrap_or(password);
@@ -382,7 +488,7 @@ pub async fn gate_login(state: State<'_, AppState>, request: LoginRequest) -> Cm
     if !b.ssh_fingerprint.is_empty() {
         crate::connectors::ssh::remember_host(&data_dir, &format!("{}:{}", b.host, b.ssh_port), &b.ssh_fingerprint);
     }
-    if let Ok(list) = call(&b.host, b.api_port, &b.api_fingerprint, answer["jeton"].as_str(), reqwest::Method::GET, "/serveurs", None).await {
+    if let Ok(list) = call(&host, port, &b.api_fingerprint, answer["jeton"].as_str(), reqwest::Method::GET, "/serveurs", None).await {
         b.servers = list["serveurs"].as_array().cloned().unwrap_or_default();
     }
     update(&data_dir, &b).map_err(full)?;
@@ -393,8 +499,8 @@ pub async fn gate_login(state: State<'_, AppState>, request: LoginRequest) -> Cm
 pub async fn gate_logout(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     state.unlocked()?;
     let mut b = find(&state.data_dir, &id).map_err(full)?;
-    if let Ok(t) = token(&b) {
-        let _ = call(&b.host, b.api_port, &b.api_fingerprint, Some(&t), reqwest::Method::DELETE, "/connexion", None).await;
+    if let (Ok(t), Ok((host, port))) = (token(&b), reach(&state.data_dir, &b, Svc::Api).await) {
+        let _ = call(&host, port, &b.api_fingerprint, Some(&t), reqwest::Method::DELETE, "/connexion", None).await;
     }
     let _ = crate::secrets::delete(&b.secret_id(), "jeton");
     b.expires.clear();
@@ -479,8 +585,9 @@ pub async fn gate_journal_csv(state: State<'_, AppState>, id: String, query: Str
     let b = find(&state.data_dir, &id).map_err(full)?;
     let t = token(&b).map_err(full)?;
     let (http, _) = client(Some(&b.api_fingerprint)).map_err(full)?;
+    let (host, port) = api_at(&state.data_dir, &b).await?;
     let resp = http
-        .get(format!("https://{}:{}/api/v1/admin/journal.csv?limite=5000&q={}", b.host, b.api_port, urlencode(&query)))
+        .get(format!("https://{host}:{port}/api/v1/admin/journal.csv?limite=5000&q={}", urlencode(&query)))
         .bearer_auth(t)
         .send()
         .await
@@ -522,9 +629,15 @@ pub async fn gate_connect(
     let t = authed(&data_dir, &mut b, reqwest::Method::POST, &path, None).await.map_err(full)?;
     let ticket = t["ticket"].as_str().ok_or(t!("The Gate gave no token", "La Gate n'a pas donné de jeton"))?.to_string();
     let ssh_user = t["utilisateur_ssh"].as_str().unwrap_or_default().to_string();
+    // Interface web et Bureau à distance enregistré passent par l'API ; le reste par le SSH.
+    let by_api = matches!(t["protocole"].as_str(), Some("http" | "https")) || (t["protocole"].as_str() == Some("rdp") && t["mode"].as_str() != Some("rebond"));
+    let (ssh_host, ssh_port) = if by_api { (b.host.clone(), b.ssh_port) } else { reach(&data_dir, &b, Svc::Ssh).await.map_err(full)? };
+    let (api_host, api_port) = if by_api { api_at(&data_dir, &b).await? } else { (b.host.clone(), b.api_port) };
     let gate_values: serde_json::Map<String, Value> = [
-        ("host".to_string(), json!(b.host)),
-        ("port".to_string(), json!(b.ssh_port)),
+        ("host".to_string(), json!(ssh_host)),
+        ("port".to_string(), json!(ssh_port)),
+        // Relais local : la clé SSH reste vérifiée sous le nom réel de la Gate.
+        ("hostKeyAlias".to_string(), json!(format!("{}:{}", b.host, b.ssh_port))),
         ("username".to_string(), json!(ssh_user)),
         ("auth".to_string(), json!("password")),
         ("password".to_string(), json!(ticket)),
@@ -536,7 +649,7 @@ pub async fn gate_connect(
     // Interface web : fenêtre web sur un relais local vers la Gate, qui relaie vers le serveur
     // et note les pages ouvertes. Le jeton ouvre une session web de 8 heures.
     if matches!(t["protocole"].as_str(), Some("http" | "https")) {
-        let local = pinned_listener(b.host.clone(), b.api_port, b.api_fingerprint.clone(), std::time::Duration::from_secs(8 * 3600)).await.map_err(full)?;
+        let local = pinned_listener(api_host.clone(), api_port, b.api_fingerprint.clone(), std::time::Duration::from_secs(8 * 3600)).await.map_err(full)?;
         values.insert("url".into(), json!(format!("http://127.0.0.1:{local}/web/entree?jeton={}", urlencode(&ticket))));
         return start_connection(&app, &state, "web", name, values, cols, rows, on_event).await;
     }
@@ -545,7 +658,7 @@ pub async fn gate_connect(
         // Bureau à distance enregistré : passage RDCleanPath de la Gate (qui relaie et enregistre) ;
         // l'authentification Windows (NLA) reste entre le moteur RDP et le serveur. Coffre : la
         // Gate ouvre la session Windows elle-même, le moteur s'authentifie auprès d'elle avec le jeton.
-        let local = pinned_forwarder(&b.host, b.api_port, &b.api_fingerprint).await.map_err(full)?;
+        let local = pinned_forwarder(&api_host, api_port, &b.api_fingerprint).await.map_err(full)?;
         values.insert("host".into(), t["hote"].clone());
         values.insert("port".into(), t["port"].clone());
         values.insert("client".into(), json!("tab"));
@@ -603,7 +716,10 @@ pub async fn gate_native_rdp(state: State<'_, AppState>, id: String, server: Str
     let token = t["jeton"].as_str().ok_or(t!("The Gate gave no token", "La Gate n'a pas donné de jeton"))?;
     let port = t["port"].as_u64().unwrap_or(3390);
     // Adresse réglée sur la Gate (« hôte » ou « hôte:port »), sinon celle que Portunia connaît.
+    let relayed = reach(&data_dir, &b, Svc::Rdp).await.map_err(full)?;
     let address = match t["adresse"].as_str().map(str::trim).filter(|a| !a.is_empty()) {
+        // De l'extérieur, par Cloudflare : le relais local de cloudflared.
+        _ if relayed.1 != 0 => format!("127.0.0.1:{}", relayed.1),
         Some(a) if a.rsplit_once(':').is_some_and(|(h, p)| !h.ends_with(':') && p.parse::<u16>().is_ok() && (!h.contains(':') || h.ends_with(']'))) => a.to_string(),
         Some(a) => format!("{a}:{port}"),
         None if b.host.contains(':') => format!("[{}]:{port}", b.host),
@@ -674,11 +790,12 @@ fn whole_frames(bytes: &[u8]) -> (usize, usize) {
 }
 
 /// Télécharge l'image d'une session depuis la Gate, à partir de l'image `from`.
-async fn rdp_stream(b: &Gate, session: &str, from: usize) -> CmdResult<Vec<u8>> {
+async fn rdp_stream(data_dir: &Path, b: &Gate, session: &str, from: usize) -> CmdResult<Vec<u8>> {
     let t = token(b).map_err(full)?;
     let (http, _) = client(Some(&b.api_fingerprint)).map_err(full)?;
+    let (host, port) = api_at(data_dir, b).await?;
     let resp = http
-        .get(format!("https://{}:{}/api/v1/audit/sessions/{session}/flux?depuis={from}", b.host, b.api_port))
+        .get(format!("https://{host}:{port}/api/v1/audit/sessions/{session}/flux?depuis={from}"))
         .bearer_auth(t)
         .timeout(std::time::Duration::from_secs(300))
         .send()
@@ -719,7 +836,7 @@ pub async fn gate_rdp_replay(state: State<'_, AppState>, id: String, session: St
         return Err(t!("Session not found", "Session introuvable").into());
     }
     let b = find(&state.data_dir, &id).map_err(full)?;
-    let bytes = rdp_stream(&b, &session, 0).await?;
+    let bytes = rdp_stream(&state.data_dir, &b, &session, 0).await?;
     // Session en cours : la dernière image peut être incomplète ; elle viendra avec les suivantes.
     let (frames, whole) = whole_frames(&bytes);
     let bytes = &bytes[..whole];
@@ -778,7 +895,7 @@ pub async fn gate_rdp_replay_more(state: State<'_, AppState>, replay: String) ->
         (r.gate.clone(), r.session.clone(), r.frames)
     };
     let b = find(&state.data_dir, &gate).map_err(full)?;
-    let bytes = rdp_stream(&b, &session, from).await?;
+    let bytes = rdp_stream(&state.data_dir, &b, &session, from).await?;
     let (added, whole) = whole_frames(&bytes);
     if added == 0 {
         return Ok(0);
@@ -866,8 +983,9 @@ pub async fn gate_assist(
     let code = Code::parse(&code).map_err(|_| t!("Invalid code: 9 digits expected", "Code invalide : 9 chiffres attendus").to_string())?;
     let b = find(&state.data_dir, &id).map_err(full)?;
     let jeton = token(&b).map_err(full)?;
-    let tls = pinned_tls(&b.host, b.api_port, &b.api_fingerprint).await.map_err(full)?;
-    let mut request = format!("wss://{}:{}/api/v1/assistance/{}", b.host, b.api_port, code.nameplate).into_client_request().map_err(err)?;
+    let (host, port) = api_at(&state.data_dir, &b).await?;
+    let tls = pinned_tls(&host, port, &b.api_fingerprint).await.map_err(full)?;
+    let mut request = format!("wss://{host}:{port}/api/v1/assistance/{}", code.nameplate).into_client_request().map_err(err)?;
     let h = request.headers_mut();
     h.insert("authorization", format!("Bearer {jeton}").parse().map_err(err)?);
     h.insert("accept-language", crate::lang::code().parse().map_err(err)?);

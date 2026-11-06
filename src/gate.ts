@@ -347,7 +347,7 @@ function input(attrs: Record<string, unknown>) {
  */
 export function openGateLogin(_host: GateHost, existing?: Gate): Promise<Gate | null> {
   return new Promise((resolve) => {
-    let target = existing ? { host: existing.host, apiPort: existing.apiPort, fingerprint: existing.apiFingerprint } : null;
+    let target: { host: string; apiPort: number; fingerprint: string; cloudflare?: boolean } | null = existing ? { host: existing.host, apiPort: existing.apiPort, fingerprint: existing.apiFingerprint } : null;
     let rememberAllowed = existing?.rememberAllowed ?? false;
     let result: Gate | null = null;
 
@@ -394,12 +394,12 @@ export function openGateLogin(_host: GateHost, existing?: Gate): Promise<Gate | 
         // Étape 1 : adresse → empreinte du certificat à vérifier.
         if (!target) {
           const probe = await gates.probe(address.value);
-          target = { host: probe.host, apiPort: probe.apiPort, fingerprint: probe.fingerprint };
+          target = { host: probe.host, apiPort: probe.apiPort, fingerprint: probe.fingerprint, cloudflare: probe.cloudflare };
           rememberAllowed = probe.info.memo_mot_de_passe;
           fingerprintBox.textContent = probe.fingerprint;
           fingerprintBox.hidden = false;
           fingerprintField.hidden = false;
-          intro.textContent = t(`${probe.info.nom} · Portunia Gate ${probe.info.version}. Check the fingerprint before sending your password.`, `${probe.info.nom} · Portunia Gate ${probe.info.version}. Vérifiez l'empreinte avant d'envoyer votre mot de passe.`);
+          intro.textContent = t(`${probe.info.nom} · Portunia Gate ${probe.info.version}${probe.cloudflare ? ' (through Cloudflare)' : ''}. Check the fingerprint before sending your password.`, `${probe.info.nom} · Portunia Gate ${probe.info.version}${probe.cloudflare ? ' (par Cloudflare)' : ''}. Vérifiez l'empreinte avant d'envoyer votre mot de passe.`);
           address.disabled = true;
           credFields.hidden = false;
           codeField.hidden = false;
@@ -413,6 +413,7 @@ export function openGateLogin(_host: GateHost, existing?: Gate): Promise<Gate | 
           id: existing?.id, host: target.host, apiPort: target.apiPort, fingerprint: target.fingerprint,
           login: login.value.trim(), password: password.value || undefined, code: code.value.replace(/\s/g, '') || undefined,
           newPassword: newFields.hidden ? undefined : newPassword.value, remember: remember.checked,
+          cloudflare: target.cloudflare,
         });
         if (answer.etat === 'ok') {
           result = answer.gate;
@@ -914,6 +915,47 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       };
       // Tunnel lancé par la Gate (0.19 et suivantes) : jeton collé ici, cloudflared géré par elle.
       const managed = p.tunnel_gere;
+      // Gate 0.41 et plus : API, SSH et RDP natif publiés par Cloudflare en TCP (cloudflared sur le poste).
+      let cfa: any = null;
+      try { cfa = await call<any>('GET', '/admin/acces-cloudflare'); } catch { /* Gate antérieure */ }
+      const cfApi = input({ id: 'p-cf-api', value: cfa?.hotes?.api ?? '', placeholder: 'gate-api.votre-domaine.fr' });
+      const cfSsh = input({ id: 'p-cf-ssh', value: cfa?.hotes?.ssh ?? '', placeholder: 'gate-ssh.votre-domaine.fr' });
+      const cfRdp = input({ id: 'p-cf-rdp', value: cfa?.hotes?.rdp ?? '', placeholder: 'gate-rdp.votre-domaine.fr' });
+      const cfToken = input({ id: 'p-cf-token', type: 'password', placeholder: t('Cloudflare API token (not kept)', 'Jeton d\'API Cloudflare (pas gardé)') });
+      const cfResult = h('div', { class: 'muted small' });
+      const saveCf = async (publish: boolean) => {
+        if (publish && !cfToken.value.trim()) { cfToken.focus(); return; }
+        cfResult.className = 'muted small';
+        cfResult.textContent = publish ? t('Publishing in Cloudflare…', 'Publication dans Cloudflare…') : '';
+        try {
+          const r = await call<any>('PUT', '/admin/acces-cloudflare', { api: cfApi.value, ssh: cfSsh.value, rdp: cfRdp.value, jeton_api: publish ? cfToken.value.trim() : undefined });
+          cfToken.value = '';
+          cfResult.className = 'ok-text small';
+          cfResult.replaceChildren(...(r.fait?.length ? r.fait : [t('Host names saved.', 'Noms d\'hôte enregistrés.')]).map((l: string) => h('div', {}, '✓ ', l)));
+          host.toast(t('Access from outside saved', 'Accès de l\'extérieur enregistré'));
+        } catch (e) { cfResult.textContent = ''; fail(e); }
+      };
+      const cfAccessBody = () => h('div', { class: 'admin-section' },
+        h('h3', {}, t('Access from outside with Portunia and RDP clients', 'Accès de l\'extérieur avec Portunia et les clients RDP')),
+        h('p', { class: 'muted small' }, t(
+          'Cloudflare carries only HTTPS: Portunia (API, SSH) and mstsc or Windows App go through cloudflared on the workstation, which carries the TCP connection to the Gate. Encryption stays end to end: Cloudflare only sees encrypted bytes, and Portunia still checks the Gate\'s fingerprints. Portunia downloads and starts cloudflared by itself when the Gate does not answer directly.',
+          'Cloudflare ne transporte que du HTTPS : Portunia (API, SSH) et mstsc ou Windows App passent par cloudflared sur le poste, qui transporte la connexion TCP jusqu\'à la Gate. Le chiffrement reste de bout en bout : Cloudflare ne voit que des octets chiffrés, et Portunia vérifie toujours les empreintes de la Gate. Portunia télécharge et lance cloudflared lui-même quand la Gate ne répond pas directement.')),
+        h('div', { class: 'row2' },
+          field(t('API host name', 'Nom d\'hôte de l\'API'), cfApi, t('Portunia: sign-in, servers, administration, Remote Desktop tab', 'Portunia : connexion, serveurs, administration, onglet Bureau à distance')),
+          field(t('SSH host name', 'Nom d\'hôte du SSH'), cfSsh, t('SSH terminals and jump servers', 'terminaux SSH et rebonds'))),
+        h('div', { class: 'row2' },
+          field(t('Native RDP host name', 'Nom d\'hôte du RDP natif'), cfRdp, cfa && !cfa.rdp_natif_actif ? t('native RDP is off on this Gate (RDP settings)', 'RDP natif coupé sur cette Gate (réglages RDP)') : t('mstsc, Windows App', 'mstsc, Windows App')),
+          field(t('Cloudflare API token', 'Jeton d\'API Cloudflare'), cfToken, t('rights: Account › Cloudflare Tunnel › Edit and Zone › DNS › Edit; used once, never kept', 'droits : Account › Cloudflare Tunnel › Edit et Zone › DNS › Edit ; utilisé une fois, jamais gardé'))),
+        h('div', { class: 'cert-actions' },
+          h('button', { class: 'btn primary', onclick: () => saveCf(true) }, t('Publish in Cloudflare', 'Publier dans Cloudflare')),
+          small(t('Save the names only', 'Enregistrer les noms seulement'), () => saveCf(false))),
+        h('p', { class: 'muted small' }, t(
+          'Publish: the Gate adds a TCP route per name to its tunnel (to its own API, SSH and native RDP ports, never to your servers) and creates the DNS records; an existing record is never overwritten. By hand: Routes › Add route › Published application, type TCP, URL localhost:8443, localhost:2222 and localhost:3390, then save the names here. Optional: a Cloudflare Access application on these names adds a sign-in to Cloudflare before the Gate.',
+          'Publier : la Gate ajoute à son tunnel une route TCP par nom (vers ses propres ports de l\'API, du SSH et du RDP natif, jamais vers vos serveurs) et crée les enregistrements DNS ; un enregistrement existant n\'est jamais écrasé. À la main : Routes › Add route › Published application, type TCP, URL localhost:8443, localhost:2222 et localhost:3390, puis enregistrez les noms ici. En option : une application Cloudflare Access sur ces noms ajoute une connexion à Cloudflare avant la Gate.')),
+        h('p', { class: 'muted small' }, t(
+          'Without Portunia (mstsc): cloudflared access rdp --hostname <RDP name> --url localhost:13389, then mstsc to localhost:13389.',
+          'Sans Portunia (mstsc) : cloudflared access rdp --hostname <nom RDP> --url localhost:13389, puis mstsc vers localhost:13389.')),
+        cfResult);
       const tunnelToken = input({ id: 'p-tunnel', type: 'password', placeholder: t('eyJh… or the whole install command', 'eyJh… ou toute la commande d\'installation') });
       const tunnelState = h('div', { class: 'tunnel-state' });
       const checkResult = h('p', { class: 'muted small' });
@@ -956,7 +998,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
                 small(t('Remove', 'Effacer'), () => { if (confirm(t('Remove the token? The Gate stops the tunnel and the portal is no longer reachable through Cloudflare.', 'Effacer le jeton ? La Gate arrête le tunnel et le portail n\'est plus joignable par Cloudflare.'))) saveToken(''); }, true))
               : h('span', {}, t('Paste it here and save: the Gate starts the tunnel, which turns Healthy in Cloudflare.', 'Collez-la ici et enregistrez : la Gate démarre le tunnel, qui passe à Healthy dans Cloudflare.')),
               tokenRow),
-            h('li', {}, t('In the tunnel: Routes tab › Add route › Published application. Subdomain and Domain (the Full hostname is your public address), Path empty, Service URL below, then Add route. Never add ssh:// or rdp:// routes: they would bypass the Gate.', 'Dans le tunnel : onglet Routes › Add route › Published application. Subdomain et Domain (le Full hostname est votre adresse publique), Path vide, Service URL ci-dessous, puis Add route. Jamais de route ssh:// ou rdp:// : elle contournerait la Gate.'), copyBox(g.service)),
+            h('li', {}, t('In the tunnel: Routes tab › Add route › Published application. Subdomain and Domain (the Full hostname is your public address), Path empty, Service URL below, then Add route. Never add routes to your servers: they would bypass the Gate.', 'Dans le tunnel : onglet Routes › Add route › Published application. Subdomain et Domain (le Full hostname est votre adresse publique), Path vide, Service URL ci-dessous, puis Add route. Jamais de route vers vos serveurs : elle contournerait la Gate.'), copyBox(g.service)),
             h('li', {}, t('Public address below: https:// followed by the Full hostname. Save, then test:', 'Adresse publique ci-dessous : https:// suivi du Full hostname. Enregistrez, puis testez :'), ' ',
               small(t('Test the public address', 'Tester l\'adresse publique'), async () => {
                 checkResult.className = 'muted small';
@@ -967,6 +1009,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
                   checkResult.textContent = r.message;
                 } catch (e) { checkResult.textContent = ''; fail(e); }
               }), checkResult)),
+          g.jeton_defini && cfa && cfAccessBody(),
           h('p', { class: 'muted small' }, t(
             `cloudflared ${g.version} is downloaded by the Gate from Cloudflare's GitHub, its fingerprint checked, and run under the Gate's account: nothing to install, no root, no inbound port. The token is kept encrypted by the vault.`,
             `cloudflared ${g.version} est téléchargé par la Gate depuis le GitHub de Cloudflare, son empreinte vérifiée, et lancé sous le compte de la Gate : rien à installer, pas de root, aucun port entrant. Le jeton est gardé chiffré par le coffre.`)),

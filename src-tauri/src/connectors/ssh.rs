@@ -441,7 +441,8 @@ fn session<'a>(ctx: &'a ConnectContext, depth: usize, extras: Option<&'a Extras>
         let rejection = Arc::new(Mutex::new(None));
         let handler = Handler {
             known_hosts: ctx.data_dir.join("known_hosts.json"),
-            host_id: format!("{host}:{port}"),
+            // Relais local (cloudflared) : la clé reste vérifiée sous le nom réel de la Gate.
+            host_id: ctx.str("hostKeyAlias").filter(|a| !a.is_empty()).unwrap_or_else(|| format!("{host}:{port}")),
             sink: ctx.sink.clone(),
             rejection: rejection.clone(),
             remote: extras.map(|e| e.remote.clone()),

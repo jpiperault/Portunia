@@ -369,6 +369,8 @@ export interface Gate {
   servers: GateServer[];
   connected: boolean;
   passwordSaved: boolean;
+  /** Noms d'hôte publiés par Cloudflare en TCP (Gate 0.41) : accès de l'extérieur. */
+  cloudflare?: { api: string; ssh: string; rdp: string } | null;
 }
 
 export interface GateLogin {
@@ -380,6 +382,8 @@ export interface GateLogin {
   password?: string;
   code?: string;
   newPassword?: string;
+  /** Premier contact passé par Cloudflare (cloudflared sur le poste). */
+  cloudflare?: boolean;
   remember: boolean;
 }
 
@@ -394,7 +398,7 @@ export const gates = {
   list: () => invoke<Gate[]>('gate_list'),
   /** Relais d'assistance de la Gate : actif, autorisé pour moi, adresse à donner. */
   assistStatus: (id: string) => invoke<import('./assist').AssistStatus>('gate_assist_status', { id }),
-  probe: (address: string) => invoke<{ host: string; apiPort: number; fingerprint: string; info: { nom: string; version: string; memo_mot_de_passe: boolean } }>('gate_probe', { address }),
+  probe: (address: string) => invoke<{ host: string; apiPort: number; fingerprint: string; cloudflare?: boolean; info: { nom: string; version: string; memo_mot_de_passe: boolean } }>('gate_probe', { address }),
   login: (request: GateLogin) => invoke<GateLoginAnswer>('gate_login', { request }),
   logout: (id: string) => invoke<void>('gate_logout', { id }),
   remove: (id: string) => invoke<void>('gate_remove', { id }),

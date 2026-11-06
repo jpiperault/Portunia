@@ -6,6 +6,7 @@ mod biometric_mac;
 // Compilé partout (testable), installé seulement sous macOS.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod appmenu;
+mod cloudflared;
 mod gate;
 mod proxmox;
 mod commands;
@@ -242,6 +243,7 @@ pub fn run() {
 fn handle_run_event(event: &tauri::RunEvent) {
     if matches!(event, tauri::RunEvent::Exit) {
         vault::clear_key();
+        cloudflared::stop_all();
     }
 }
 
