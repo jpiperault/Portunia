@@ -76,7 +76,7 @@ Produire un `.app` et un `.dmg` universels signés ad-hoc, les publier dans la m
 ## Acceptance Criteria
 
 - [x] `node scripts/check-latest-json.mjs --self-test` réussit
-- [ ] `macos-build.yml` produit un `.dmg` universel. `lipo -archs` sur `Portunia.app/Contents/MacOS/*` affiche `x86_64 arm64`. `codesign -v` réussit sur l'application et sur `portunia-rdp` (BLOCKED si la CI est indisponible)
+- [x] `macos-build.yml` produit un `.dmg` universel. `lipo -archs` sur `Portunia.app/Contents/MacOS/*` affiche `x86_64 arm64`. `codesign -v` réussit sur l'application et sur `portunia-rdp` (BLOCKED si la CI est indisponible) — vérifié en CI, run 42215110263
 - [x] `git diff main -- .github/workflows/release.yml` ne montre **que des ajouts** (aucune ligne de la tâche `windows` modifiée ou supprimée)
 - [x] Invariants « Config Windows intacte » et « Plateformes de `latest.json` » verts
 - [x] `npm run build` et `cargo test` (src-tauri, rdp-helper) passent
