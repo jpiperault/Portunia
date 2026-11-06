@@ -430,7 +430,19 @@ pub async fn gate_admin(state: State<'_, AppState>, id: String, method: String, 
     if !(path.starts_with("/admin/") || path.starts_with("/audit/")) || path.contains("..") {
         return Err(t!("Invalid administration path", "Chemin d'administration invalide").into());
     }
-    state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
+    // État de la Gate : pour tout administrateur de la Gate (offre gratuite) ; mise à jour
+    // lancée ou annulée depuis Portunia : Pro ; le reste de l'administration : Équipes.
+    let route = path.split('?').next().unwrap_or_default();
+    let feature = if route == "/admin/etat" || (route == "/admin/mise-a-jour" && method == "GET") {
+        None
+    } else if route == "/admin/mise-a-jour" {
+        Some(crate::license::Feature::GateUpdate)
+    } else {
+        Some(crate::license::Feature::GateAdmin)
+    };
+    if let Some(f) = feature {
+        state.license.lock().unwrap().require(f).map_err(full)?;
+    }
     let method = reqwest::Method::from_bytes(method.as_bytes()).map_err(err)?;
     let mut b = find(&state.data_dir, &id).map_err(full)?;
     authed(&state.data_dir, &mut b, method, &path, body).await.map_err(full)

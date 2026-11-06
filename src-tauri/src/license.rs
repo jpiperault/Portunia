@@ -54,10 +54,12 @@ pub enum Feature {
     GateAdmin,
     /// Serveurs Proxmox VE : inventaire, actions, consoles, instantanés, sauvegardes.
     Proxmox,
+    /// Mise à jour d'une Gate depuis Portunia (en un clic, programmée, avec retour en arrière).
+    GateUpdate,
 }
 
 impl Feature {
-    pub const ALL: [Feature; 12] = [
+    pub const ALL: [Feature; 13] = [
         Feature::SessionRecording,
         Feature::MonitoringAlerts,
         Feature::Sync,
@@ -70,6 +72,7 @@ impl Feature {
         Feature::FileSync,
         Feature::GateAdmin,
         Feature::Proxmox,
+        Feature::GateUpdate,
     ];
 
     /// Édition minimale qui débloque la fonctionnalité.
@@ -94,6 +97,7 @@ impl Feature {
             Feature::GateAdmin => t!("Gate administration", "Administration des Gates"),
             Feature::FileSync => t!("Compare and synchronise folders", "Comparer et synchroniser des dossiers"),
             Feature::Proxmox => t!("Proxmox VE servers", "Serveurs Proxmox VE"),
+            Feature::GateUpdate => t!("Gate update from Portunia", "Mise à jour des Gates depuis Portunia"),
         }
     }
 }

@@ -31,6 +31,13 @@ export interface GateHost {
   /** Demandes d'accès à décider sur cette Gate (badge du menu). */
   pendingApprovals(b: Gate): number;
   allowsAdmin(): boolean;
+  /** Page « État de la Gate » (Gate 0.39 et suivantes). */
+  openStatus(b: Gate): void;
+  /** Mise à jour d'une Gate depuis Portunia (Pro). */
+  allowsUpdate(): boolean;
+  /** Santé lue sur la Gate (ok, alerte, erreur), pour la pastille. */
+  health(b: Gate): string | undefined;
+  setHealth(id: string, level: string): void;
   /** Extension de protocole activée (Bureau à distance pour les serveurs RDP). */
   protocolEnabled(id: string): boolean;
   filter(): string;
@@ -45,6 +52,11 @@ const MODE_TITLE: Record<GateServer['mode'], string> = {
   rebond: t('End-to-end relay through the Gate: nothing is recorded', 'Relais de bout en bout par la Gate : rien n\'est enregistré'),
 };
 const COLLAPSED_KEY = 'portunia.gates.replis';
+const HEALTH_TITLE: Record<string, string> = {
+  ok: t('Gate healthy', 'Gate en bonne santé'),
+  alerte: t('Gate needs attention: see Gate status', 'Gate à surveiller : voir État de la Gate'),
+  erreur: t('Gate problem: see Gate status', 'Problème sur la Gate : voir État de la Gate'),
+};
 
 function remaining(expires: string): string {
   const ms = Date.parse(expires) - Date.now();
@@ -86,10 +98,21 @@ export class GatePanel {
         // Liste des serveurs à jour pour chaque Gate connecté (en parallèle, sans bloquer).
         await Promise.all(this.list.filter((b) => b.connected).map((b) => this.refresh(b.id, true)));
         this.list = await gates.list();
+        void this.loadHealth();
       }
     } catch (e) {
       this.host.toast(errorText(e), 'error');
     }
+    this.render();
+  }
+
+  /** Santé des Gates administrées (Gate 0.39 et suivantes ; les autres n'ont pas de pastille). */
+  private async loadHealth() {
+    const { gateLevel } = await import('./gatestatus');
+    await Promise.all(this.list.filter((b) => b.connected && b.role === 'admin').map(async (b) => {
+      const level = await gateLevel(b);
+      if (level) this.host.setHealth(b.id, level);
+    }));
     this.render();
   }
 
@@ -204,6 +227,7 @@ export class GatePanel {
         ? { label: t('Refresh the list', 'Actualiser la liste'), icon: 'refresh', action: () => this.refresh(b.id) }
         : { label: t('Sign in again', 'Se reconnecter'), icon: 'lock', action: () => this.reconnect(b.id) },
       ...(b.role === 'admin' && b.connected ? [{ label: t('Administer', 'Administrer'), icon: 'settings', action: () => this.host.openAdmin(b) }] : []),
+      ...(b.role === 'admin' && b.connected ? [{ label: t('Gate status', 'État de la Gate'), icon: 'chart' as const, action: () => this.host.openStatus(b) }] : []),
       ...((b.role === 'admin' || b.role === 'auditor' || b.ownReplay) && b.connected
         ? [{ label: b.role === 'user' ? t('My sessions', 'Mes sessions') : 'Audit', icon: 'play', action: () => this.host.openAudit(b) }] : []),
       ...(b.connected ? [{ label: this.host.pendingApprovals(b) ? t(`Approvals (${this.host.pendingApprovals(b)} waiting)`, `Approbations (${this.host.pendingApprovals(b)} en attente)`) : t('Approvals', 'Approbations'), icon: 'check', action: () => this.host.openApprovals(b) }] : []),
@@ -227,7 +251,7 @@ export class GatePanel {
         class: 'gate-main', title: b.connected ? `${b.host} · ${b.login} (${roleLabel(b.role)})` : t('Sign in again', 'Se reconnecter'),
         onclick: () => (b.connected ? this.toggle(b.id) : this.reconnect(b.id)),
       },
-        h('span', { class: `led ${state}` }),
+        h('span', { class: `led ${state}${b.connected && this.host.health(b) ? ` h-${this.host.health(b)}` : ''}`, title: b.connected && this.host.health(b) ? HEALTH_TITLE[this.host.health(b)!] ?? '' : '' }),
         h('span', { class: 'grow' },
           h('span', { class: 'gate-name ellipsis' }, b.name),
           h('span', { class: 'gate-sub ellipsis' }, b.connected ? `${b.login} · ${remaining(b.expires)}` : t('session expired · click to sign in again', 'session expirée · cliquer pour se reconnecter')))),
@@ -451,8 +475,9 @@ function openBypass(host: GateHost, b: Gate, list: { session: Session; server: G
 
 // ---------- Administration ----------
 
-type Section = 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'rdp' | 'assistance' | 'durcissement' | 'reglages';
+type Section = 'etat' | 'cibles' | 'comptes' | 'groupes' | 'regles' | 'portail' | 'rdp' | 'assistance' | 'durcissement' | 'reglages';
 const SECTIONS: { id: Section; label: string; admin: boolean }[] = [
+  { id: 'etat', label: t('Status', 'État'), admin: true },
   { id: 'cibles', label: t('Servers and vault', 'Serveurs et coffre'), admin: true },
   { id: 'comptes', label: t('Accounts', 'Comptes'), admin: true },
   { id: 'groupes', label: t('Groups', 'Groupes'), admin: true },
@@ -628,6 +653,10 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
   };
 
   const SECTION_RENDER: Record<Section, () => Promise<HTMLElement>> = {
+    etat: async () => {
+      const { renderGateStatus } = await import('./gatestatus');
+      return renderGateStatus(b, { toast: host.toast, allowsUpdate: () => host.allowsUpdate(), allowsSettings: () => host.allowsAdmin(), onLevel: (id, level) => host.setHealth(id, level) });
+    },
     cibles: async () => {
       const { cibles } = await call<{ cibles: any[] }>('GET', '/admin/cibles');
       const rows = cibles.map((tg) => h('tr', {},
@@ -802,7 +831,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       sw.addEventListener('click', async () => {
         const on = sw.getAttribute('aria-checked') !== 'true';
         if (!on && p.sessions_en_cours > 0 && !confirm(t(`Disabling the portal closes the ${p.sessions_en_cours} open web session(s). Continue?`, `Désactiver le portail ferme les ${p.sessions_en_cours} session(s) web en cours. Continuer ?`))) return;
-        if (on && !p.url) host.toast(t('First give the portal\'s public address, then save.', 'Indiquez d\'abord l\'adresse publique du portail, puis enregistrez.'), 'info');
+        if (on && !p.url && p.mode !== 'interne') host.toast(t('First give the portal\'s public address, then save.', 'Indiquez d\'abord l\'adresse publique du portail, puis enregistrez.'), 'info');
         try { await call('PUT', '/admin/portail', { actif: on }); host.toast(on ? t('Web portal enabled', 'Portail web activé') : t('Web portal disabled', 'Portail web désactivé')); reload(); } catch (e) { fail(e); }
       });
       const tunnel = { relie: ['ok', t('connected', 'relié')], deconnecte: ['warn', t('not connected', 'non relié')], absent: ['off', t('not set up', 'non configuré')] }[p.tunnel as string] ?? ['off', p.tunnel];
@@ -830,8 +859,18 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const proxys = input({ id: 'p-proxys', value: bare(p.proxys), placeholder: '10.0.5.10, 10.0.5.11' });
       const entete = input({ id: 'p-entete', value: p.entete ?? 'X-Forwarded-For' });
       const reseaux = input({ id: 'p-reseaux', value: bare(p.reseaux), placeholder: '10.0.0.0/8, 192.168.91.0/24' });
+      // Gate 0.39 et plus : entrée interne ouverte en même temps que l'entrée externe.
+      const hasInternal = p.interne !== undefined;
+      const intOpen = checkbox('p-int', t('Also open the portal on the company network (internal entry)', 'Ouvrir aussi le portail sur le réseau de l\'entreprise (entrée interne)'), !!p.interne?.actif);
+      const intNets = input({ id: 'p-int-reseaux', value: bare(p.interne?.reseaux), placeholder: '10.0.0.0/8, 192.168.91.0/24' });
+      const intUrl = input({ id: 'p-int-url', value: p.interne?.url ?? '', placeholder: 'https://gate.lan:8446' });
+      const intCode = checkbox('p-int-code', t('Require the authenticator code on the internal entry', 'Exiger le code d\'authentification sur l\'entrée interne'), p.interne?.code_toujours ?? true);
+      intOpen.box.addEventListener('change', () => drawModes());
+      const internalOn = () => hasInternal && (mode === 'interne' || intOpen.box.checked);
       const MODES: { id: string; name: string; hint: string; flow: string; team?: boolean }[] = [
-        { id: 'interne', name: t('Internal or VPN', 'Interne ou VPN'), hint: t('Nothing exposed on the Internet', 'Rien d\'exposé sur Internet'), flow: t('Workstation or VPN → HTTPS → Gate → servers', 'Poste ou VPN → HTTPS → Gate → serveurs') },
+        hasInternal
+          ? { id: 'interne', name: t('None', 'Aucune'), hint: t('Internal entry only: nothing exposed on the Internet', 'Entrée interne seulement : rien d\'exposé sur Internet'), flow: t('Workstation or VPN → HTTPS → Gate → servers', 'Poste ou VPN → HTTPS → Gate → serveurs') }
+          : { id: 'interne', name: t('Internal or VPN', 'Interne ou VPN'), hint: t('Nothing exposed on the Internet', 'Rien d\'exposé sur Internet'), flow: t('Workstation or VPN → HTTPS → Gate → servers', 'Poste ou VPN → HTTPS → Gate → serveurs') },
         { id: 'cloudflare', name: 'Cloudflare', hint: t('Tunnel: no inbound port', 'Tunnel : aucun port entrant'), flow: t('Browser → Cloudflare ← outbound tunnel ← Gate → servers', 'Navigateur → Cloudflare ← tunnel sortant ← Gate → serveurs') },
         { id: 'direct', name: t('Direct HTTPS', 'HTTPS direct'), hint: t('No proxy, small organisations', 'Sans proxy, petites structures'), flow: t('Browser → HTTPS → Gate → servers', 'Navigateur → HTTPS → Gate → serveurs') },
         { id: 'proxy', name: t('Proxy or WAF', 'Proxy ou WAF'), hint: 'F5, Imperva, HAProxy, Nginx…', team: true, flow: t('Browser → WAF in the DMZ → HTTPS → Gate → servers', 'Navigateur → WAF en DMZ → HTTPS → Gate → serveurs') },
@@ -1122,7 +1161,8 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       }
       const drawModes = () => {
         const current = MODES.find((m) => m.id === mode)!;
-        const needsListener = mode !== 'cloudflare' && mode !== 'relais' && !p.ecoute.proxy && !https;
+        const listened = (mode !== 'cloudflare' && mode !== 'relais') || internalOn();
+        const needsListener = listened && !p.ecoute.proxy && !https;
         modeBody.replaceChildren(...[
           h('div', { class: 'expo-modes' }, ...MODES.map((m) => h('button', {
             type: 'button', class: `expo-mode${m.id === mode ? ' on' : ''}`, 'aria-pressed': String(m.id === mode),
@@ -1133,12 +1173,22 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
             field(t('Trusted proxies', 'Proxys de confiance'), proxys, t('any other address is refused', 'toute autre adresse est refusée')),
             field(t('Visitor address header', 'En-tête de l\'adresse réelle'), entete, t('read from the right: what the visitor writes is ignored', 'lu de droite à gauche : ce que le visiteur écrit est ignoré'))),
           mode === 'proxy' && h('p', { class: 'muted small' }, t('The WAF must let the web socket and WebAssembly files through.', 'Le WAF doit laisser passer le WebSocket et les fichiers WebAssembly.')),
-          (mode === 'interne' || mode === 'direct') && field(t('Allowed networks', 'Réseaux autorisés'), reseaux, mode === 'interne' ? t('empty: private networks', 'vide : les réseaux privés') : t('empty: the whole Internet', 'vide : tout Internet')),
+          (mode === 'direct' || (!hasInternal && mode === 'interne')) && field(t('Allowed networks', 'Réseaux autorisés'), reseaux, mode === 'interne' ? t('empty: private networks', 'vide : les réseaux privés') : t('empty: the whole Internet', 'vide : tout Internet')),
           mode === 'direct' && h('p', { class: 'gate-warn' }, t('The Gate is then directly exposed and it holds the vault: limit the allowed networks, or prefer a proxy.', 'La Gate est alors exposée directement et elle détient le coffre : limitez les réseaux autorisés, ou préférez un proxy.')),
           mode === 'relais' && relayBody(),
           mode === 'cloudflare' && managed && cloudflareBody(),
-          (mode === 'interne' || mode === 'direct' || mode === 'proxy') && https && httpsBody(),
-          (mode === 'interne' || mode === 'direct' || mode === 'proxy') && certificate && certBox,
+          hasInternal && h('h3', {}, t('Internal entry', 'Entrée interne')),
+          hasInternal && mode !== 'interne' && intOpen.row,
+          hasInternal && h('p', { class: 'muted small' }, mode === 'interne'
+            ? t('Workstations of the company network (or VPN) reach the portal over the HTTPS listener below.', 'Les postes du réseau de l\'entreprise (ou du VPN) joignent le portail par l\'écoute HTTPS ci-dessous.')
+            : t('Workstations of the company network reach the portal directly over the HTTPS listener below, while the external entry stays open. The Gate decides the entry from the connection, never from what the browser says.', 'Les postes du réseau de l\'entreprise joignent le portail directement par l\'écoute HTTPS ci-dessous, en même temps que l\'entrée externe. La Gate décide de l\'entrée d\'après la connexion, jamais d\'après ce que dit le navigateur.')),
+          internalOn() && h('div', { class: 'row2' },
+            field(t('Internal networks', 'Réseaux internes'), intNets, t('empty: private networks (10/8, 172.16/12, 192.168/16)', 'vide : les réseaux privés (10/8, 172.16/12, 192.168/16)')),
+            field(t('Internal address', 'Adresse interne'), intUrl, t('the one typed on the network; empty: any name of the Gate', 'celle tapée sur le réseau ; vide : tout nom de la Gate'))),
+          internalOn() && intCode.row,
+          internalOn() && mode === 'proxy' && h('p', { class: 'muted small' }, t('The trusted proxies always count as the external entry, even with a private address.', 'Les proxys de confiance comptent toujours comme l\'entrée externe, même avec une adresse privée.')),
+          listened && https && httpsBody(),
+          listened && certificate && certBox,
           needsListener && h('p', { class: 'gate-warn' }, t(
             'HTTPS listening is off on this Gate. Set PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 in /etc/portunia-gate/portunia-gate.env, restart the Gate and open the port.',
             'L\'écoute HTTPS est coupée sur cette Gate. Réglez PORTUNIA_GATE_PORTAL_TLS_LISTEN=0.0.0.0:8446 dans /etc/portunia-gate/portunia-gate.env, redémarrez la Gate et ouvrez le port.')),
@@ -1154,6 +1204,10 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         if (secret.value.trim()) body.turnstile_secret = secret.value.trim();
         if (!site.value.trim() && p.turnstile_secret_defini) body.turnstile_secret = '';
         if (hasModes) Object.assign(body, { mode, proxys: [proxys.value], entete: entete.value.trim(), reseaux: [reseaux.value] });
+        if (hasInternal) Object.assign(body, {
+          interne_actif: mode === 'interne' || intOpen.box.checked, interne_reseaux: [intNets.value],
+          interne_url: intUrl.value.trim(), interne_code_toujours: intCode.box.checked,
+        });
         try { await call('PUT', '/admin/portail', body); host.toast(t('Web portal saved', 'Portail web enregistré')); reload(); } catch (e) { fail(e); }
       } }, t('Save', 'Enregistrer'));
 
@@ -1165,7 +1219,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           stat(p.sessions_en_cours, t('open web sessions', 'sessions web en cours')), stat(p.connexions_jour, t('sign-ins today', 'connexions aujourd\'hui')), stat(p.echecs_jour, t('failures today', 'échecs aujourd\'hui')),
           (p.mode ?? 'cloudflare') === 'cloudflare' && h('div', { class: 'portal-stat' }, h('b', { class: `chip ${tunnel[0]}` }, tunnel[1]), h('span', {}, t('Cloudflare tunnel', 'tunnel Cloudflare')))),
         h('div', {}, closeAll),
-        hasModes && h('h3', {}, t('Exposure mode', 'Mode d\'exposition')),
+        hasModes && h('h3', {}, hasInternal ? t('External entry', 'Entrée externe') : t('Exposure mode', 'Mode d\'exposition')),
         hasModes && modeBody,
         h('h3', {}, t('Address', 'Adresse')),
         field(t('Public address', 'Adresse publique'), url, t('the one visitors type; checked at every connection', 'celle que tapent les visiteurs ; vérifiée à chaque connexion')),
@@ -1334,6 +1388,8 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const langue = r.langue === undefined ? null : select('s-langue', [['', t('System language', 'Langue du système')], ['en', 'English'], ['fr', 'Français']], r.langue);
       // Gate 0.28 et suivantes : copies des fichiers copiés en Bureau à distance, gardées par session.
       const copies = r.copies_fichiers_mo === undefined ? null : input({ id: 's-copies', type: 'number', min: 0, max: 10240, value: String(r.copies_fichiers_mo) });
+      // Gate 0.39 et suivantes : jours de conservation des enregistrements (0 : toujours).
+      const retention = r.conservation_jours === undefined ? null : input({ id: 's-retention', type: 'number', min: 0, max: 36500, value: String(r.conservation_jours) });
       const notificationsBlock = (n: any) => {
         const host_ = input({ id: 'n-host', value: n.smtp_hote, placeholder: 'smtp.exemple.fr' });
         const port = input({ id: 'n-port', type: 'number', min: 1, max: 65535, value: String(n.smtp_port || 587) });
@@ -1383,6 +1439,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
             ...(langue ? { langue: langue.value } : {}),
             ...(notice ? { direct_prevenir: notice.box.checked } : {}),
             ...(copies ? { copies_fichiers_mo: Number(copies.value) || 0 } : {}),
+            ...(retention ? { conservation_jours: Number(retention.value) || 0 } : {}),
           });
           host.toast(t('Settings saved', 'Réglages enregistrés'));
         } catch (e) { fail(e); }
@@ -1397,6 +1454,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         h('h3', {}, t('Session replay', 'Relecture des sessions')),
         own.row,
         notice ? notice.row : null,
+        retention ? field(t('Keep recordings (days)', 'Garder les enregistrements (jours)'), retention, t('0: forever; otherwise the recordings of sessions ended earlier are deleted every hour (the sessions stay in the list)', '0 : toujours ; sinon les enregistrements des sessions terminées avant sont supprimés chaque heure (les sessions restent dans la liste)')) : null,
         field(t('Sensitive commands', 'Commandes sensibles'), sensitive, t('one per line; marked in red on the player\'s timeline', 'une par ligne ; repérées en rouge sur la barre de temps du lecteur')),
         copies ? h('h3', {}, t('Remote Desktop file copy', 'Copie de fichiers en Bureau à distance')) : null,
         copies ? field(t('Copies kept per session (MB)', 'Copies gardées par session (Mo)'), copies, t('0: none, only name, size and SHA-256 are logged; otherwise the files copied, up to this size, next to the recording', '0 : aucune, seuls nom, taille et SHA-256 sont tracés ; sinon les fichiers copiés, jusqu\'à cette taille, à côté de l\'enregistrement')) : null,

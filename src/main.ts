@@ -220,6 +220,8 @@ tree.addEventListener('tree-top', () => search.focus());
 
 // ---------- Extension Portunia Gate (Gates) ----------
 
+/** Santé des Gates administrées (pastille de la barre latérale). */
+const gateHealth = new Map<string, string>();
 const gatePanel = new GatePanel($('gates'), {
   toast,
   openServer: (b, s) => openGateServer(b, s),
@@ -237,6 +239,14 @@ const gatePanel = new GatePanel($('gates'), {
   pendingApprovals: (b) => approvalWatch?.pending.get(b.id) ?? 0,
   protocolEnabled: (id) => extensionEnabled(id),
   allowsAdmin: () => allows('gateAdmin'),
+  openStatus: (b) => openGateStatus(b),
+  allowsUpdate: () => allows('gateUpdate'),
+  health: (b) => gateHealth.get(b.id),
+  setHealth: (id, level) => {
+    if (gateHealth.get(id) === level) return;
+    gateHealth.set(id, level);
+    gatePanel?.render();
+  },
   filter: () => state.filter,
   clearFilter: () => { search.value = ''; state.filter = ''; renderTree(); },
 });
@@ -375,6 +385,22 @@ function openGateAdmin(b: Gate) {
   const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
   if (existing) return activate(existing.id);
   const view = h('div', { class: 'page-view' }, renderGateAdmin(b, gatePanel.host));
+  views.append(view);
+  const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
+  state.tabs.push(tab);
+  activate(tab.id);
+}
+
+/** État d'une Gate (santé, matériel, services, mise à jour) : pour tout administrateur de la Gate. */
+async function openGateStatus(b: Gate) {
+  const title = tr(`Status · ${b.name}`, `État · ${b.name}`);
+  const existing = state.tabs.find((t) => t.kind === 'admin' && t.title === title);
+  if (existing) return activate(existing.id);
+  const { renderGateStatus } = await import('./gatestatus');
+  const view = h('div', { class: 'page-view' },
+    h('div', { class: 'ext-page gate-admin' },
+      h('header', {}, h('h2', {}, title)),
+      renderGateStatus(b, { toast, allowsUpdate: () => allows('gateUpdate'), allowsSettings: () => allows('gateAdmin'), onLevel: (id, level) => gatePanel.host.setHealth(id, level) })));
   views.append(view);
   const tab: Tab = { id: crypto.randomUUID(), kind: 'admin', title, view, state: 'connected', receive: false };
   state.tabs.push(tab);

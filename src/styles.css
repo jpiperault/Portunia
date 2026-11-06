@@ -1056,3 +1056,51 @@ body.detached #relecture { height: 100vh; }
 
 /* Relecture d'une session encore ouverte (Audit › En direct) */
 .ap-live { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--danger); padding: 2px 8px; border-radius: 999px; background: rgb(255 123 123 / .14); }
+
+/* État de la Gate (Gate 0.39) */
+.led.on.h-alerte { background: var(--warn); }
+.led.on.h-erreur { background: var(--danger); }
+.gs { display: flex; flex-direction: column; gap: 14px; max-width: 1100px; }
+.gs-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.gs-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.gs-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--dot-ring); flex: none; }
+.gs-dot.big { width: 11px; height: 11px; margin-right: 0; }
+.gs-dot.ok { background: var(--ok); }
+.gs-dot.alerte { background: var(--warn); }
+.gs-dot.erreur { background: var(--danger); }
+.gs-dot.info { background: var(--accent); }
+.gs-alerts { border: 1px solid var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.gs-alerts.erreur { border-color: var(--danger); }
+.gs-alerts > div::before { content: "⚠ "; }
+.gs-update { border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.gs-update.quiet { border-color: var(--line); background: transparent; }
+.gs-up-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.gs-up-title { font-weight: 600; }
+.gs-confirm { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.gs-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.gs-at { display: inline-flex; gap: 6px; align-items: center; }
+.gs-cmd { display: inline-block; padding: 4px 8px; border-radius: 6px; background: var(--field); border: 1px solid var(--line); user-select: all; width: fit-content; }
+.gs-last.retour_arriere, .gs-last.echec { color: var(--danger); }
+.gs-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.gs-step { padding: 3px 9px; border-radius: 12px; font-size: 12px; background: var(--chip-bg); color: var(--muted); }
+.gs-step.done { color: var(--ok); }
+.gs-step.on { background: var(--accent); color: var(--accent-ink); }
+.gs-log { margin: 0; font-size: 11.5px; max-height: 120px; overflow: auto; white-space: pre-wrap; color: var(--text-2); }
+.gs-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.gs-tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.gs-label { font-size: 12px; color: var(--muted); }
+.gs-big { font-size: 20px; font-weight: 600; }
+.gs-bar { height: 5px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; }
+.gs-bar i { display: block; height: 100%; background: var(--ok); }
+.gs-tile.alerte .gs-bar i { background: var(--warn); }
+.gs-tile.erreur .gs-bar i { background: var(--danger); }
+.gs-tile.alerte .gs-big { color: var(--warn); }
+.gs-tile.erreur .gs-big { color: var(--danger); }
+.gs-spark { width: 100%; height: 26px; }
+.gs-spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.gs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.gs-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; }
+.gs-card h3 { margin: 0 0 6px; font-size: 13px; }
+.gs-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+.gs-row:last-child { border-bottom: 0; }
+.gs-val { color: var(--muted); text-align: right; min-width: 0; overflow-wrap: anywhere; }
