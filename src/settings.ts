@@ -120,7 +120,7 @@ export function onSettingsChange(fn: (s: Settings) => void): () => void {
 }
 
 /** Pile de polices : la police choisie, puis des valeurs sûres. */
-export const fontStack = (s: Settings) => `"${s.fontFamily}", "Cascadia Mono", Consolas, monospace`;
+export const fontStack = (s: Settings) => `"${s.fontFamily}", "Cascadia Mono", Consolas, Menlo, "SF Mono", monospace`;
 
 export function openSettingsDialog(toastFn: (message: string, kind?: 'info' | 'error') => void) {
   const s = settings();

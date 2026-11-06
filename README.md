@@ -10,6 +10,25 @@ Portunia was called **Termoria** until version 0.39. The update to Portunia remo
 
 Download `Portunia_x.y.z_x64-setup.exe` from the [Releases](https://github.com/jpiperault/Portunia-releases/releases) and run it. The installer asks whether to install for yourself only (no administrator rights) or for all users of the PC (one administrator prompt); an update keeps the mode chosen the first time. Portunia then updates itself: a banner offers each new version.
 
+## Portunia on macOS
+
+Requires macOS 11 or later, on Apple Silicon or Intel (one universal app).
+
+1. Download `Portunia_x.y.z_universal.dmg` from the [Releases](https://github.com/jpiperault/Portunia-releases/releases), open it and drag Portunia to `Applications`.
+2. Portunia is signed ad hoc, not notarized by Apple (no Apple Developer account). The first time, macOS refuses to open it: open `System Settings > Privacy & Security`, scroll to the message about Portunia and click **Open Anyway** (on older macOS: right-click the app, then **Open**). This is asked only once.
+3. Updates are offered by the in-app banner and install without this prompt. After an update, macOS may ask again for access to the Keychain (the vault key is stored there, protected by Touch ID if you enabled it): choose **Always Allow**.
+4. To move your data from Windows, make a backup in Portunia on Windows and import it on the Mac.
+
+Development on a Mac: install the Xcode command line tools (`xcode-select --install`), Rust from https://rustup.rs and Node.js LTS, then add both targets used by the universal build:
+
+```bash
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+npm install
+npm run tauri dev
+```
+
+The checklist to run before a Mac release is in [docs/recette-macos.md](docs/recette-macos.md).
+
 ## Installing the development tools (once)
 
 1. **Visual Studio C++ build tools**: install "Build Tools for Visual Studio" and tick "Desktop development with C++".
@@ -190,4 +209,4 @@ The core knows no protocol. An extension:
 ## Ideas for later
 
 - External extensions downloaded from the catalogue and loaded without rebuilding (signed, isolated WASM modules).
-- Linux, then macOS versions.
+- Linux version.

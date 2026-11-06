@@ -25,6 +25,8 @@ jobs:
         with:
           toolchain: stable
 
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: |
@@ -32,12 +34,29 @@ jobs:
             rdp-helper -> target
 
       - run: npm ci
-      - run: node scripts/build-rdp.mjs
+      # Moteur RDP universel (lipo), attendu par « externalBin » pour la cible universelle.
+      - run: node scripts/build-rdp.mjs --release
+        env:
+          PORTUNIA_RDP_UNIVERSAL: '1'
       - run: cargo test --manifest-path src-tauri/Cargo.toml
       - run: cargo test --manifest-path rdp-helper/Cargo.toml
       - run: npm test
       - run: npm run build
-      - run: npm run tauri build -- --no-bundle
+      # Pas de clé de signature des mises à jour ici (aucun secret) : on n'en produit pas.
+      - run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":false}}'
+      - name: Vérifier l'architecture et la signature
+        run: |
+          APP="src-tauri/target/universal-apple-darwin/release/bundle/macos/Portunia.app"
+          test -d "$APP"
+          ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          for bin in "$APP"/Contents/MacOS/*; do
+            echo "$bin : $(lipo -archs "$bin")"
+            test "$(lipo -archs "$bin" | tr ' ' '\n' | sort | tr '\n' ' ')" = "arm64 x86_64 "
+          done
+          codesign -v --verbose=2 "$APP"
+          codesign -v --verbose=2 "$APP/Contents/MacOS/portunia-rdp"
+          codesign -dv --verbose=2 "$APP/Contents/MacOS/portunia-rdp" 2>&1 | grep -E 'Signature|flags|Identifier'
+
 
   windows:
     runs-on: windows-latest

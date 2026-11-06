@@ -48,21 +48,21 @@ Produire un `.app` et un `.dmg` universels signés ad-hoc, les publier dans la m
 
 ## Tasks
 
-- [ ] Générer `icon.icns` et le référencer dans `tauri.macos.conf.json`
-- [ ] Entitlements et hardened runtime, signature ad-hoc. Tauri signe aussi l'`externalBin` (`portunia-rdp`) : à vérifier en CI avec `codesign -dv --verbose=2` sur les deux binaires
-- [ ] `build-rdp.mjs` universel avec `lipo`. Test : `lipo -archs` affiche `x86_64 arm64`
-- [ ] `release.yml`, tâche `macos` :
+- [x] Générer `icon.icns` et le référencer dans `tauri.macos.conf.json`
+- [x] Entitlements et hardened runtime, signature ad-hoc. Tauri signe aussi l'`externalBin` (`portunia-rdp`) : à vérifier en CI avec `codesign -dv --verbose=2` sur les deux binaires
+- [x] `build-rdp.mjs` universel avec `lipo`. Test : `lipo -archs` affiche `x86_64 arm64`
+- [x] `release.yml`, tâche `macos` :
   - `needs: windows`
   - `rustup target add aarch64-apple-darwin x86_64-apple-darwin`
   - `PORTUNIA_RDP_UNIVERSAL=1`
   - `tauri-action` **au même SHA épinglé** que la tâche Windows, mêmes `owner`, `repo`, `releaseCommitish`, `tagName`, `releaseName`, `includeUpdaterJson: true`, plus `args: --target universal-apple-darwin`
   - secrets de mise à jour existants seulement (`TAURI_SIGNING_PRIVATE_KEY*`, `RELEASES_TOKEN`)
   - `releaseBody` mis à jour dans la tâche Windows ? **NON** : ne pas toucher à la tâche Windows. Le texte « setup.exe » reste. Le `.dmg` est mentionné dans le README
-- [ ] Bloc de notarisation **prêt mais désactivé** : étape conditionnée par `if: ${{ secrets.APPLE_ID != '' }}` (via une variable `env` intermédiaire, la syntaxe directe sur secrets n'étant pas autorisée), avec les variables `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` documentées en commentaire
-- [ ] Dernière étape de la tâche `macos` : télécharger le `latest.json` de la release et lancer `node scripts/check-latest-json.mjs latest.json` (échoue si une plateforme manque ou si une URL pointe un artefact d'une autre plateforme)
-- [ ] `check-latest-json.mjs` : fonction pure plus un auto-test (`node scripts/check-latest-json.mjs --self-test` avec un JSON valide et deux invalides, en code inline, sans framework)
-- [ ] Passe WebKit : relire le CSS et les API utilisées (`navigator.clipboard`, `ResizeObserver`, `:has()`, `backdrop-filter` avec préfixe `-webkit-`, glisser-déposer de fichiers, police du terminal). Corriger ce qui est manifestement incompatible avec Safari 14+ (macOS 11). Noter le reste pour la recette
-- [ ] `docs/recette-macos.md` : grille à cocher pour **Apple Silicon** et **Intel**. Elle couvre :
+- [x] Bloc de notarisation **prêt mais désactivé** : étape conditionnée par `if: ${{ secrets.APPLE_ID != '' }}` (via une variable `env` intermédiaire, la syntaxe directe sur secrets n'étant pas autorisée), avec les variables `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` documentées en commentaire
+- [x] Dernière étape de la tâche `macos` : télécharger le `latest.json` de la release et lancer `node scripts/check-latest-json.mjs latest.json` (échoue si une plateforme manque ou si une URL pointe un artefact d'une autre plateforme)
+- [x] `check-latest-json.mjs` : fonction pure plus un auto-test (`node scripts/check-latest-json.mjs --self-test` avec un JSON valide et deux invalides, en code inline, sans framework)
+- [x] Passe WebKit : relire le CSS et les API utilisées (`navigator.clipboard`, `ResizeObserver`, `:has()`, `backdrop-filter` avec préfixe `-webkit-`, glisser-déposer de fichiers, police du terminal). Corriger ce qui est manifestement incompatible avec Safari 14+ (macOS 11). Noter le reste pour la recette
+- [x] `docs/recette-macos.md` : grille à cocher pour **Apple Silicon** et **Intel**. Elle couvre :
   - première installation (Gatekeeper) et import des données Windows par sauvegarde
   - SSH (mot de passe, clé, agent), SFTP, FTP, S3, VNC, Telnet, série
   - tunnels, Gate, Proxmox
@@ -71,23 +71,23 @@ Produire un `.app` et un `.dmg` universels signés ad-hoc, les publier dans la m
   - menu Édition et Cmd+C/V dans les champs, thème clair/sombre « Comme macOS »
   - Touch ID (activation, déverrouillage, annulation, changement de mot de passe)
   - mise à jour automatique N-1 → N, et vérification que Windows se met toujours à jour
-- [ ] README FR et EN : section macOS
+- [x] README FR et EN : section macOS
 
 ## Acceptance Criteria
 
-- [ ] `node scripts/check-latest-json.mjs --self-test` réussit
+- [x] `node scripts/check-latest-json.mjs --self-test` réussit
 - [ ] `macos-build.yml` produit un `.dmg` universel. `lipo -archs` sur `Portunia.app/Contents/MacOS/*` affiche `x86_64 arm64`. `codesign -v` réussit sur l'application et sur `portunia-rdp` (BLOCKED si la CI est indisponible)
-- [ ] `git diff main -- .github/workflows/release.yml` ne montre **que des ajouts** (aucune ligne de la tâche `windows` modifiée ou supprimée)
-- [ ] Invariants « Config Windows intacte » et « Plateformes de `latest.json` » verts
-- [ ] `npm run build` et `cargo test` (src-tauri, rdp-helper) passent
-- [ ] `docs/recette-macos.md` existe et couvre chaque protocole de la liste ci-dessus
+- [x] `git diff main -- .github/workflows/release.yml` ne montre **que des ajouts** (aucune ligne de la tâche `windows` modifiée ou supprimée)
+- [x] Invariants « Config Windows intacte » et « Plateformes de `latest.json` » verts
+- [x] `npm run build` et `cargo test` (src-tauri, rdp-helper) passent
+- [x] `docs/recette-macos.md` existe et couvre chaque protocole de la liste ci-dessus
 
 ## Verification
 
-- [ ] `node scripts/check-latest-json.mjs --self-test`
-- [ ] `npm run build`
-- [ ] `cargo test --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path rdp-helper/Cargo.toml`
-- [ ] commandes de vérification d'INVARIANTS.md
+- [x] `node scripts/check-latest-json.mjs --self-test`
+- [x] `npm run build`
+- [x] `cargo test --manifest-path src-tauri/Cargo.toml && cargo test --manifest-path rdp-helper/Cargo.toml`
+- [x] commandes de vérification d'INVARIANTS.md
 
 > **Note :** le smoke test du serveur de dev et la vérification du contenu sont faits par l'orchestrateur après fusion. Les sprint-executors ne font que de la vérification statique.
 
@@ -101,9 +101,34 @@ Produire un `.app` et un `.dmg` universels signés ad-hoc, les publier dans la m
 
 ## Agent Notes (filled during execution)
 
-- Assigned to:
-- Started:
-- Completed:
+- Assigned to: sprint-executor (sonnet), branche `feat/macos-s5`
+- Started: 2026-11-06
+- Completed: 2026-11-06 (CI et tâches de release non exécutées : voir « Issues found »)
 - Decisions made:
-- Assumptions:
-- Issues found:
+  - `icon.icns` existait déjà (fusionné avant ce sprint, 69 Ko, non modifié) : simplement référencé dans `tauri.macos.conf.json` (`icons/icon.png` + `icons/icon.icns`). Aucune régénération, donc aucun autre fichier d'icône touché.
+  - `Entitlements.plist` : `network.client` et `device.serial` seulement. `allow-jit` volontairement omis (WKWebView tourne dans le processus WebContent d'Apple) ; à ajouter si la recette montre un crash au démarrage sous hardened runtime. Ces deux clés n'agissent qu'en sandbox : elles sont documentées comme sans effet ici.
+  - `build-rdp.mjs` en mode universel produit en plus `portunia-rdp-aarch64-apple-darwin` et `portunia-rdp-x86_64-apple-darwin` : `tauri build --target universal-apple-darwin` compile Portunia une fois par architecture et `tauri-build` exige chaque binaire externe par triplet (et le triplet de l'hôte pour `cargo test`). Sans option, le script est inchangé.
+  - `release.yml` : deux étapes tauri-action exclusives (ad hoc / notarisée) selon `env.NOTARIZE` (calculé au niveau de la tâche depuis `secrets.APPLE_ID`). Une seule étape avec des variables APPLE_* vides risquait de déclencher la signature avec une identité vide. Le moteur RDP est compilé avec `--release` dans la tâche macOS.
+  - `latest.json` vérifié par `gh release download` (RELEASES_TOKEN) puis `check-latest-json.mjs` ; le tag passe par une variable d'environnement (pas d'interpolation dans `run`).
+  - `macos-build.yml` : `--bundles app,dmg`, puis boucle `lipo -archs` sur `Contents/MacOS/*` (ordre normalisé) et `codesign -v` sur l'app et `portunia-rdp`.
+  - `check-latest-json.mjs` contrôle aussi la présence de `signature`, l'extension `-setup.exe` (Windows), `.app.tar.gz` (darwin) et l'identité des deux URL darwin.
+  - `tauri-plugin-updater` : `default-features = false` sans `zip` est suffisant pour `.app.tar.gz` : sur macOS, `tar` et `flate2` sont des dépendances inconditionnelles du plugin (v2.14.0). La feature `zip` ne sert qu'au zip Windows et à l'AppImage. Aucun changement de Cargo.toml.
+- Corrections WebKit (passe CSS/API) :
+  - `src/styles.css` : ajout de `-webkit-backdrop-filter` (écran verrouillé) ; ajout de `-webkit-user-select` à côté des `user-select: none` ; séparation des listes de sélecteurs contenant `:has()` (`.ext-grid ...`, `.seg-opt.on, .seg-opt:has(input:checked)`) pour qu'un WebKit sans `:has()` (Safari < 15.4) ne jette pas toute la règle.
+  - `src/settings.ts` : `fontStack` ajoute `Menlo, "SF Mono"` avant `monospace` (Cascadia et Consolas n'existent pas sur Mac). Sans effet sous Windows.
+  - Sans changement : `navigator.clipboard` (déclenché par un geste ; `readText` peut demander une autorisation sous WKWebView), `ResizeObserver` (Safari 13.1+), `inset` (14.1+), `accent-color` (15.4+, simple dégradé esthétique).
+- Renvoyé à la recette : `clipboard.readText()` (collage dans le terminal et VNC) et son éventuelle demande d'autorisation ; rendu de `accent-color` ; glisser-déposer de fichiers (`onDragDropEvent` de Tauri, pas du DOM) ; police par défaut « Cascadia Mono » listée dans les réglages alors qu'absente du Mac (fallback Menlo à valider visuellement).
+- Assumptions :
+  - 🟢 Les deux entrées darwin pointent la même archive `.app.tar.gz` (comportement documenté de tauri-action en universel).
+  - 🟡 tauri-action ne remplace pas le `releaseBody` d'une release existante quand `releaseBody` est absent de la tâche macOS (non vérifiable ici ; à surveiller à la première release).
+  - 🟡 `gh` est présent sur `macos-latest` (c'est le cas des images GitHub), authentifié par `GH_TOKEN`.
+  - 🟡 Le nom du `.dmg` est `Portunia_<version>_universal.dmg` (README).
+- Issues found :
+  - Rien de bloquant. Hors périmètre : la tâche `windows` de `release.yml` n'a pas de `releaseBody` pour le Mac (contrainte du sprint) ; le `.dmg` n'est mentionné que dans le README.
+  - Build local `tauri build --target universal-apple-darwin --bundles app,dmg` (createUpdaterArtifacts désactivé en local, faute de clé) : `.app` produit ; `lipo -archs` = `x86_64 arm64` sur `portunia` et `portunia-rdp` ; `codesign -v` OK sur l'app et `portunia-rdp` ; `codesign -dv` : `flags=0x10002(adhoc,runtime)` sur les deux (hardened runtime + ad hoc confirmés, `externalBin` bien signé). La création du `.dmg` a échoué ici sur un délai AppleEvent du Finder (-1712, AppleScript de `bundle_dmg.sh` sans accès GUI/Automation en session agent) : limite d'environnement, non vérifiée localement.
+  - Exécution CI (`macos-build.yml`, `release.yml`) impossible ici : BLOCKED, à vérifier au premier push de la branche.
+- Corrections après relecture :
+  - `macos-build.yml` : `tauri build` reçoit `--config '{"bundle":{"createUpdaterArtifacts":false}}'` (aucun secret dans ce job, sinon « public key found but no private key »). `tauri.conf.json` inchangé.
+  - `release.yml` (tâche macos, deux étapes tauri-action) : `releaseBody` identique au caractère près à celui de la tâche windows (3 lignes identiques, aucune ligne `-` dans le diff), pour ne pas vider le corps de la release existante. L'hypothèse 🟡 sur `releaseBody` est ainsi levée.
+  - `check-latest-json.mjs` : option `--tag vX.Y.Z` (documentée en en-tête) exigeant `version == tag sans « v »` et `/download/<tag>/` dans chaque URL ; `release.yml` passe `--tag "$TAG"`.
+  - Auto-test : cas ajoutés (écrits avant le code) pour signature absente, URL Windows sans `-setup.exe`, bon tag, version différente du tag, URL d'un autre tag.

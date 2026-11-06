@@ -91,3 +91,103 @@ jobs:
           files: |
             src-tauri/target/release/bundle/nsis/*
             assist/*
+
+  # Mac universel (Intel + Apple Silicon), signé ad-hoc : pas de compte Apple Developer, donc pas
+  # de notarisation (Gatekeeper demande « Ouvrir quand même » à la première installation).
+  # Après la tâche Windows : tauri-action fusionne darwin-aarch64 et darwin-x86_64 dans le
+  # latest.json que Windows vient de créer ; en parallèle, les deux tâches se marcheraient dessus.
+  #
+  # Notarisation (désactivée) : pour l'activer, définir ces secrets dans le dépôt ; l'étape
+  # « Publier (notarisée) » remplace alors l'étape ad-hoc.
+  #   APPLE_CERTIFICATE           certificat « Developer ID Application » (.p12) encodé en base64
+  #   APPLE_CERTIFICATE_PASSWORD  mot de passe du .p12
+  #   APPLE_SIGNING_IDENTITY      par ex. « Developer ID Application: Nom (TEAMID) »
+  #   APPLE_ID                    identifiant Apple du compte développeur
+  #   APPLE_PASSWORD              mot de passe d'application (appleid.apple.com)
+  #   APPLE_TEAM_ID               identifiant d'équipe
+  macos:
+    needs: windows
+    runs-on: macos-latest
+    env:
+      # Un secret ne se teste pas directement dans « if: » : on passe par cette variable.
+      NOTARIZE: ${{ secrets.APPLE_ID != '' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+
+      - run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: |
+            src-tauri -> target
+            rdp-helper -> target
+
+      - run: npm ci
+
+      # Moteur RDP universel (lipo des deux architectures), attendu par « externalBin ».
+      - run: node scripts/build-rdp.mjs --release
+        env:
+          PORTUNIA_RDP_UNIVERSAL: '1'
+
+      - name: Publier (signature ad-hoc)
+        if: ${{ env.NOTARIZE != 'true' }}
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          owner: jpiperault
+          repo: Portunia-releases
+          releaseCommitish: main
+          tagName: ${{ github.ref_name }}
+          releaseName: Portunia ${{ github.ref_name }}
+          releaseBody: "Install Portunia with the « setup.exe » file below; later versions then install automatically from the app. — Installez Portunia avec le fichier « setup.exe » ci-dessous ; les versions suivantes s'installent ensuite automatiquement depuis l'application."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --target universal-apple-darwin
+
+      - name: Publier (notarisée)
+        if: ${{ env.NOTARIZE == 'true' }}
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          owner: jpiperault
+          repo: Portunia-releases
+          releaseCommitish: main
+          tagName: ${{ github.ref_name }}
+          releaseName: Portunia ${{ github.ref_name }}
+          releaseBody: "Install Portunia with the « setup.exe » file below; later versions then install automatically from the app. — Installez Portunia avec le fichier « setup.exe » ci-dessous ; les versions suivantes s'installent ensuite automatiquement depuis l'application."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          args: --target universal-apple-darwin
+
+      # Dernier garde-fou : le latest.json publié doit contenir les trois plateformes,
+      # chacune avec la bonne archive (jamais l'artefact d'une autre plateforme).
+      - name: Vérifier latest.json
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release download "$TAG" --repo jpiperault/Portunia-releases --pattern latest.json --clobber
+          node scripts/check-latest-json.mjs latest.json --tag "$TAG"
