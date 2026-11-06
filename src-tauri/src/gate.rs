@@ -444,6 +444,21 @@ pub fn gate_export(state: State<'_, AppState>, dest: String, content: String) ->
     std::fs::write(&dest, content).map_err(|e| format!("Écriture impossible : {e}"))
 }
 
+/// Export binaire d'une relecture (vidéo) : octets bruts dans le corps de la requête, chemin
+/// de destination en hexadécimal (UTF-8) dans l'en-tête « x-dest » (en-têtes ASCII seulement).
+#[tauri::command]
+pub fn gate_export_bytes(state: State<'_, AppState>, request: tauri::ipc::Request<'_>) -> CmdResult<()> {
+    state.unlocked()?;
+    state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
+    let hex = request.headers().get("x-dest").and_then(|v| v.to_str().ok()).unwrap_or_default();
+    let bytes: Option<Vec<u8>> = (hex.len() % 2 == 0).then(|| (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok()).collect()).flatten();
+    let dest = bytes.and_then(|b| String::from_utf8(b).ok()).filter(|d| !d.is_empty()).ok_or_else(|| t!("Destination missing", "Destination manquante").to_string())?;
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err(t!("Expected binary content", "Contenu binaire attendu").into());
+    };
+    std::fs::write(&dest, data).map_err(|e| format!("{} {e}", t!("Cannot write:", "Écriture impossible :")))
+}
+
 /// Export CSV du journal, écrit dans le fichier choisi.
 #[tauri::command]
 pub async fn gate_journal_csv(state: State<'_, AppState>, id: String, query: String, dest: String) -> CmdResult<()> {
@@ -777,6 +792,27 @@ pub fn gate_rdp_replay_seek(replay: String, t: f64) -> CmdResult<()> {
     let r = all.get_mut(&replay).ok_or_else(|| t!("Session closed", "Session fermée").to_string())?;
     writeln!(r.stdin, "{}", json!({ "type": "seek", "t": t })).map_err(err)?;
     r.stdin.flush().map_err(err)
+}
+
+/// Lecteur détaché : la relecture d'une session dans sa propre fenêtre (relecture.html), qui
+/// n'a que les droits nécessaires (capabilities/relecture.json).
+#[tauri::command]
+pub fn gate_replay_window(app: AppHandle, state: State<'_, AppState>, id: String, session: String, reveal: bool, title: String) -> CmdResult<()> {
+    state.unlocked()?;
+    state.license.lock().unwrap().require(crate::license::Feature::GateAdmin).map_err(full)?;
+    let safe = |v: &str| !v.is_empty() && v.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    if !safe(&id) || !safe(&session) {
+        return Err(t!("Session not found", "Session introuvable").into());
+    }
+    let label = format!("relecture-{}", uuid::Uuid::new_v4().simple());
+    let url = format!("relecture.html?gate={id}&session={session}{}", if reveal { "&reveler=1" } else { "" });
+    tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App(url.into()))
+        .title(format!("{} — Portunia", title.chars().take(120).collect::<String>()))
+        .inner_size(1280.0, 800.0)
+        .min_inner_size(640.0, 420.0)
+        .build()
+        .map_err(err)?;
+    Ok(())
 }
 
 /// Ferme la relecture (moteur arrêté, fichier temporaire effacé).

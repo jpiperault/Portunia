@@ -1036,5 +1036,15 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 /* Proxmox VE : journal système et SMART des nœuds. */
 .pve-log { max-height: 50vh; overflow: auto; margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--chip-bg); color: var(--text-2); font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* Lecteur détaché (relecture.html) : toute la fenêtre */
+body.detached { margin: 0; height: 100vh; overflow: hidden; background: var(--work); }
+body.detached #relecture { height: 100vh; }
+
+/* Fabrication d'une vidéo de relecture */
+.audit-pane { position: relative; }
+.video-progress { position: absolute; right: 18px; bottom: 18px; z-index: 5; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: var(--card, #1d2230); border: 1px solid var(--line); box-shadow: 0 6px 24px rgb(0 0 0 / .3); font-size: 13px; }
+.vp-bar { width: 160px; height: 6px; border-radius: 3px; background: var(--chip-bg); overflow: hidden; }
+.vp-fill { width: 0; height: 100%; background: var(--accent); transition: width .2s; }
+
 /* Relecture d'une session encore ouverte (Audit › En direct) */
 .ap-live { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--danger); padding: 2px 8px; border-radius: 999px; background: rgb(255 123 123 / .14); }

@@ -6,6 +6,7 @@ import { h, icon } from './dom';
 import { fontStack, settings } from './settings';
 import { terminalTheme } from './theme';
 import { LOCALE, t } from './i18n';
+import type { VideoSource } from './videoexport';
 
 /** Réponse de GET /audit/sessions/{id}/enregistrement. */
 export interface AuditRecording {
@@ -28,6 +29,10 @@ export interface AuditPlayerOptions {
   reveal(): void;
   exportCast(): void;
   exportText(): void;
+  /** Vidéo MP4 de la relecture (absent : pas de bouton). */
+  exportVideo?(): void;
+  /** Ouvre le lecteur dans sa propre fenêtre (absent : déjà détaché). */
+  detach?(): void;
 }
 
 interface Ev { t: number; k: string; d: string }
@@ -265,7 +270,9 @@ export class AuditPlayer {
         ? h('button', { class: 'btn sm', title: t('Shows input typed without echo (passwords) in clear. Written to the log.', 'Affiche en clair les saisies sans écho (mots de passe). Inscrit au journal.'), onclick: () => this.opts.reveal() }, t(`Reveal ${r.saisies_masquees} masked input(s)`, `Révéler ${r.saisies_masquees} saisie(s) masquée(s)`))
         : null,
       h('button', { class: 'btn sm', title: r.revele ? t('Original file, signed by the Gate', 'Fichier d\'origine, signé par la Gate') : t('Masked copy (without input typed without echo), not signed', 'Copie masquée (sans les saisies sans écho), non signée'), onclick: () => this.opts.exportCast() }, icon('download', 14), t('.cast recording', 'Enregistrement .cast')),
-      h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')));
+      h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')),
+      this.opts.exportVideo ? h('button', { class: 'btn sm', title: t('MP4 video with keystrokes as subtitles and a watermark (written to the Gate\'s log)', 'Vidéo MP4 avec la frappe en sous-titres et un filigrane (inscrite au journal de la Gate)'), onclick: () => this.opts.exportVideo!() }, icon('download', 14), t('Video', 'Vidéo')) : null,
+      this.opts.detach ? h('button', { class: 'btn sm', title: t('Open the player in its own window', 'Ouvrir le lecteur dans sa propre fenêtre'), onclick: () => this.opts.detach!() }, '⧉ ', t('Detach', 'Détacher')) : null);
     const head = h('div', { class: 'ap-head' },
       h('h2', {}, s.serveur, ' ', s.mode ? h('span', { class: `badge mode-${s.mode}` }, s.mode === 'enregistre' ? t('recorded', 'enregistré') : s.mode) : null, this.liveBadge),
       this.headInfo,
@@ -513,6 +520,87 @@ export class AuditPlayer {
     if (this.position >= this.duration) this.playing = false;
     this.render();
     if (this.playing) this.frame = requestAnimationFrame(() => this.tick());
+  }
+
+  /** Lignes de la frappe pour les sous-titres .srt. */
+  subtitleLines(): { t: number; end: number; text: string }[] {
+    return this.lines.map((l) => ({ t: l.t, end: l.end, text: l.secret ? '••••••' : l.text }));
+  }
+
+  /**
+   * Source de la vidéo : l'écran du terminal dessiné cellule par cellule à chaque temps (la
+   * relecture avance dans le terminal du lecteur, mise en pause pendant l'export).
+   */
+  videoSource(): VideoSource {
+    if (this.playing) this.toggle();
+    const theme = terminalTheme();
+    const base = [theme.black, theme.red, theme.green, theme.yellow, theme.blue, theme.magenta, theme.cyan, theme.white,
+      theme.brightBlack, theme.brightRed, theme.brightGreen, theme.brightYellow, theme.brightBlue, theme.brightMagenta, theme.brightCyan, theme.brightWhite];
+    const fallback = ['#000000', '#cd3131', '#0dbc79', '#e5e510', '#2472c8', '#bc3fbc', '#11a8cd', '#e5e5e5', '#666666', '#f14c4c', '#23d18b', '#f5f543', '#3b8eea', '#d670d6', '#29b8db', '#ffffff'];
+    const palette = (i: number): string => {
+      if (i < 16) return base[i] ?? fallback[i];
+      if (i < 232) {
+        const n = i - 16;
+        const v = (x: number) => (x ? 55 + x * 40 : 0);
+        return `rgb(${v(Math.floor(n / 36))},${v(Math.floor(n / 6) % 6)},${v(n % 6)})`;
+      }
+      const g = 8 + (i - 232) * 10;
+      return `rgb(${g},${g},${g})`;
+    };
+    const fg0 = theme.foreground ?? '#e5e5e5';
+    const bg0 = theme.background ?? '#000000';
+    const rgb = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+    const cw = 9, ch = 18;
+    const cols = this.term.cols, rows = this.term.rows;
+    return {
+      width: cols * cw,
+      height: rows * ch,
+      duration: this.duration,
+      draw: async (ctx, time) => {
+        this.seek(time);
+        await new Promise<void>((r) => this.term.write('', r));
+        ctx.fillStyle = bg0;
+        ctx.fillRect(0, 0, cols * cw, rows * ch);
+        ctx.textBaseline = 'middle';
+        const buf = this.term.buffer.active;
+        for (let y = 0; y < rows; y++) {
+          const line = buf.getLine(buf.viewportY + y);
+          if (!line) continue;
+          for (let x = 0; x < cols; x++) {
+            const cell = line.getCell(x);
+            if (!cell) continue;
+            let fg = cell.isFgRGB() ? rgb(cell.getFgColor()) : cell.isFgPalette() ? palette(cell.getFgColor()) : fg0;
+            let bg = cell.isBgRGB() ? rgb(cell.getBgColor()) : cell.isBgPalette() ? palette(cell.getBgColor()) : null;
+            if (cell.isInverse()) { const f = fg; fg = bg ?? bg0; bg = f; }
+            if (bg) { ctx.fillStyle = bg; ctx.fillRect(x * cw, y * ch, cw * Math.max(1, cell.getWidth()), ch); }
+            const chars = cell.getChars();
+            if (!chars || chars === ' ' || cell.isInvisible()) continue;
+            ctx.font = `${cell.isBold() ? '700 ' : ''}15px "Cascadia Mono", Consolas, monospace`;
+            ctx.fillStyle = fg;
+            ctx.fillText(chars, x * cw, y * ch + ch / 2);
+          }
+        }
+        // Curseur du terminal.
+        if (buf.cursorY < rows) { ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(buf.cursorX * cw, buf.cursorY * ch + ch - 3, cw, 2); }
+      },
+      subtitle: (time) => {
+        let line: Line | undefined;
+        for (const l of this.lines) { if (l.t <= time) line = l; else break; }
+        if (!line || time - Math.max(line.end, line.t) > 2.5) return null;
+        // Pendant la frappe : seulement ce qui est déjà tapé.
+        let text = line.text;
+        if (time < line.end && !line.screen) {
+          text = '';
+          for (const k of line.keys) {
+            if (k.t > time) break;
+            if (k.k === 'x') text += '•'.repeat([...k.d].length);
+            else if (k.d === '' || k.d === '') text = text.slice(0, -1);
+            else if (k.d.length === 1 && k.d >= ' ') text += k.d;
+          }
+        }
+        return `${this.rec.session.compte.toUpperCase()}  ${line.secret ? '••••••' : text}`;
+      },
+    };
   }
 
   /** Transcription horodatée : les lignes tapées (ou repérées), avec l'état de la signature. */

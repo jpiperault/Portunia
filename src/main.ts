@@ -1,7 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
 import { api, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
-import { save } from '@tauri-apps/plugin-dialog';
 import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
 import { ProxmoxPanel, PROXMOX_EXTENSION } from './proxmox';
 import { ASSIST_EXTENSION, openAssistDialog } from './assist';
@@ -33,14 +32,12 @@ import { checkForUpdates } from './updates';
 import { allows, currentEdition, EDITION_LABEL, initLock, isLocked, loadLicense, lockNow } from './security';
 import { openRecordings, setPlayerHandler, stamp } from './recordings';
 import type { Player } from './player';
-import type { AuditPlayer, AuditRecording } from './auditplayer';
-import type { RdpPlayer, RdpRecording } from './rdpplayer';
-import type { WebPlayer, WebRecording } from './webplayer';
+import { buildReplay, replayTitle, ReplayPlayer } from './replayview';
 import type { AuditRow } from './audit';
 import { folderColors, recordings, shells, ShellSpec } from './api';
 import { defaultShell, hideShell, loadShells, setDefaultShell, shellIcon, shellsLoaded, visibleShells } from './localshells';
 import { colorOf, FOLDER_COLORS, initTheme, paint } from './theme';
-import { LANG, LOCALE, t as tr } from './i18n';
+import { LANG, t as tr } from './i18n';
 import { invoke } from '@tauri-apps/api/core';
 import { appShortcut, canElevate, initPlatform, IS_MAC, keys, localizeShortcutTitles, runUnlessBusy } from './platform';
 import { listen } from '@tauri-apps/api/event';
@@ -84,7 +81,7 @@ interface Tab {
   /** Lecteur d'enregistrement (onglet « replay »). */
   player?: Player;
   /** Relecture d'une session de Gate (onglet « replay »). */
-  auditPlayer?: AuditPlayer | RdpPlayer | WebPlayer;
+  auditPlayer?: ReplayPlayer;
   /** Outils réseau (onglet « tools »). */
   netTools?: NetToolsView;
   /** Commande sur plusieurs serveurs (onglet « multi »). */
@@ -398,85 +395,29 @@ async function openGateAudit(b: Gate) {
 
 /** Relecture d'une session de la Gate dans un onglet. `reveal` : saisies masquées en clair (administrateur). */
 async function openAuditReplay(b: Gate, s: AuditRow, start?: number, reveal = false, replace?: Tab) {
-  const title = `▶ ${s.serveur} · ${new Date(s.debut).toLocaleString(LOCALE, { dateStyle: 'short', timeStyle: 'short' })}`;
+  const title = replayTitle(s.serveur, s.debut);
   const existing = !replace && start == null && state.tabs.find((t) => t.kind === 'replay' && t.title === title);
   if (existing) return activate(existing.id);
-  let rec: AuditRecording;
-  try {
-    rec = await gates.admin<AuditRecording>(b.id, 'GET', `/audit/sessions/${s.id}/enregistrement${reveal ? '?reveler=true' : ''}`);
-  } catch (e) {
-    return toast(errorText(e) === 'SESSION_EXPIREE' ? tr('Gate session expired: sign in again (sidebar).', 'Session de la Gate expirée : reconnectez-vous (barre latérale).') : errorText(e), 'error');
-  }
   const view = h('div', { class: 'pane audit-pane' });
-  const stamp = new Date(s.debut).toISOString().slice(0, 16).replace(/[T:]/g, '-');
-  const exportFile = async (name: string, ext: string, content: string, done: string) => {
-    const dest = await save({ defaultPath: `${s.serveur}-${s.compte}-${stamp}${name}.${ext}`, filters: [{ name: ext === 'cast' ? tr('asciicast recording', 'Enregistrement asciicast') : tr('Text', 'Texte'), extensions: [ext] }] });
-    if (!dest) return;
-    try { await gates.exportFile(dest, content); toast(`${done} : ${dest}`); } catch (e) { toast(errorText(e), 'error'); }
-  };
-  let player: AuditPlayer | RdpPlayer | WebPlayer;
   // Onglet qui affiche ce lecteur (remplacé par la version révélée).
   let owner: Tab | undefined = replace;
-  // Interface web : journal d'actions (pages, envois, WebSocket, coffre).
-  if (s.type === 'web') {
-    const { WebPlayer } = await import('./webplayer');
-    const web: WebPlayer = new WebPlayer(view, rec as unknown as WebRecording, {
-      viewer: b.login,
-      start,
-      exportText: () => exportFile('-actions', 'txt', web.transcript(), tr('Transcript exported', 'Transcription exportée')),
-    });
-    player = web;
-  // Bureau à distance : l'image est décodée par le moteur RDP à partir du flux enregistré.
-  } else if (s.type === 'rdp') {
-    const { RdpPlayer } = await import('./rdpplayer');
-    const rdp = new RdpPlayer(view, rec as unknown as RdpRecording, {
-      viewer: b.login,
-      start,
-      canReveal: b.role === 'admin',
-      reveal: () => {
-        if (!confirm(tr('Show the copied-pasted text in clear? This replay will be written to the gate\'s log.', 'Afficher en clair le texte copié-collé ? Cette relecture sera inscrite au journal de la Gate.'))) return;
-        openAuditReplay(b, s, undefined, true, owner);
+  const built = await buildReplay(b, s.id, view, {
+    start,
+    reveal,
+    host: {
+      toast,
+      reveal: () => openAuditReplay(b, s, undefined, true, owner),
+      // Lecteur dans sa propre fenêtre : l'onglet se ferme.
+      detach: () => {
+        gates.openReplayWindow(b.id, s.id, reveal, title)
+          .then(() => { if (owner) closeTab(owner.id); })
+          .catch((e) => toast(errorText(e), 'error'));
       },
-      exportText: () => exportFile('-transcription', 'txt', rdp.transcript(), tr('Transcript exported', 'Transcription exportée')),
-      open: (onMessage) => gates.rdpReplay(b.id, s.id, onMessage),
-    });
-    player = rdp;
-  } else try {
-    const { AuditPlayer } = await import('./auditplayer');
-    const ssh: AuditPlayer = new AuditPlayer(view, rec, {
-      viewer: b.login,
-      start,
-      canReveal: b.role === 'admin',
-      reveal: () => {
-        if (!confirm(tr('Show input typed without echo (usually passwords) in clear? This replay will be written to the gate\'s log.', 'Afficher en clair les saisies sans écho (le plus souvent des mots de passe) ? Cette relecture sera inscrite au journal de la Gate.'))) return;
-        openAuditReplay(b, s, undefined, true, owner);
-      },
-      exportCast: () => exportFile(rec.revele ? '' : '-masque', 'cast', rec.cast, rec.revele ? tr('Signed recording exported', 'Enregistrement signé exporté') : tr('Masked copy exported (not signed)', 'Copie masquée exportée (non signée)')),
-      exportText: () => exportFile('-transcription', 'txt', ssh.transcript(), tr('Transcript exported', 'Transcription exportée')),
-    });
-    player = ssh;
-  } catch (e) {
-    return toast(`Enregistrement illisible : ${errorText(e)}`, 'error');
-  }
+    },
+  });
+  if (!built) return;
+  const player = built.player;
   views.append(view);
-  // Session encore ouverte (Audit › En direct) : l'enregistrement est relu toutes les 3 secondes
-  // et le lecteur s'allonge, jusqu'à la fin de la session.
-  if (!rec.session.fin) {
-    const live = player;
-    let busy = false;
-    live.liveTimer = window.setInterval(async () => {
-      if (busy) return;
-      busy = true;
-      try {
-        const next = await gates.admin<AuditRecording>(b.id, 'GET', `/audit/sessions/${s.id}/enregistrement?suite=true${reveal ? '&reveler=true' : ''}`);
-        await live.extend(next as never);
-        if (next.session.fin) clearInterval(live.liveTimer);
-      } catch {
-        // Gate injoignable un instant : nouvel essai au tour suivant.
-      }
-      busy = false;
-    }, 3000);
-  }
   if (replace) {
     replace.auditPlayer?.dispose();
     replace.view.remove();

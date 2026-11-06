@@ -405,6 +405,13 @@ export const gates = {
   journalCsv: (id: string, query: string, dest: string) => invoke<void>('gate_journal_csv', { id, query, dest }),
   /** Écrit un export de l'audit (enregistrement, transcription) dans le fichier choisi. */
   exportFile: (dest: string, content: string) => invoke<void>('gate_export', { dest, content }),
+  /** Lecteur détaché : la relecture dans sa propre fenêtre. */
+  openReplayWindow: (id: string, session: string, reveal: boolean, title: string) => invoke<void>('gate_replay_window', { id, session, reveal, title }),
+  /** Fichier binaire (vidéo) : octets bruts, chemin en hexadécimal dans un en-tête. */
+  exportBytes: async (dest: string, data: Blob) => {
+    const hex = [...new TextEncoder().encode(dest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    await rawInvoke<void>('gate_export_bytes', new Uint8Array(await data.arrayBuffer()), { headers: { 'x-dest': hex } });
+  },
   /** Relecture d'une session Bureau à distance : le moteur RDP décode l'image enregistrée. */
   rdpReplay: async (id: string, session: string, onMessage: (m: any) => void) => {
     const channel = new Channel<any>();

@@ -6,6 +6,7 @@ import { h, icon } from './dom';
 import { LOCALE, t } from './i18n';
 import { detectLayout, LayoutChoice, Line, lineText, typedLines } from './rdpkeys';
 import { drawPixels } from './screen';
+import type { VideoSource } from './videoexport';
 
 /** Réponse de GET /audit/sessions/{id}/enregistrement pour une session RDP. */
 export interface RdpRecording {
@@ -51,6 +52,10 @@ export interface RdpPlayerOptions {
   canReveal: boolean;
   reveal(): void;
   exportText(): void;
+  /** Vidéo MP4 de la relecture (absent : pas de bouton). */
+  exportVideo?(): void;
+  /** Ouvre le lecteur dans sa propre fenêtre (absent : déjà détaché). */
+  detach?(): void;
   /** Démarre le moteur ; ses messages arrivent par `onMessage`. */
   open(onMessage: (m: ReplayMessage) => void): Promise<ReplayEngine>;
 }
@@ -99,6 +104,8 @@ export class RdpPlayer {
   private wanted: number | null = null;
   private sent = -1;
   private closed = false;
+  /** Attentes d'une image rendue (vidéo), libérées au message « position ». */
+  private waiters: (() => void)[] = [];
   private resizer!: ResizeObserver;
 
   private readonly canvas = h('canvas', { class: 'rp-canvas', width: '1280', height: '720' }) as HTMLCanvasElement;
@@ -210,6 +217,7 @@ export class RdpPlayer {
       case 'position':
         this.loading.hidden = true;
         this.inflight = false;
+        this.waiters.splice(0).forEach((w) => w());
         if (this.wanted != null) { const w = this.wanted; this.wanted = null; this.request(w); }
         break;
       case 'closed':
@@ -256,7 +264,9 @@ export class RdpPlayer {
       this.opts.canReveal && masked && !r.revele
         ? h('button', { class: 'btn sm', title: t('Shows the copied-pasted text. Written to the log.', 'Affiche le texte copié-collé. Inscrit au journal.'), onclick: () => this.opts.reveal() }, t(`Reveal ${masked} copy-paste(s)`, `Révéler ${masked} copier-coller`))
         : null,
-      h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')));
+      h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')),
+      this.opts.exportVideo ? h('button', { class: 'btn sm', title: t('MP4 video with keystrokes as subtitles, the mouse and a watermark (written to the Gate\'s log)', 'Vidéo MP4 avec la frappe en sous-titres, la souris et un filigrane (inscrite au journal de la Gate)'), onclick: () => this.opts.exportVideo!() }, icon('download', 14), t('Video', 'Vidéo')) : null,
+      this.opts.detach ? h('button', { class: 'btn sm', title: t('Open the player in its own window', 'Ouvrir le lecteur dans sa propre fenêtre'), onclick: () => this.opts.detach!() }, '⧉ ', t('Detach', 'Détacher')) : null);
     const head = h('div', { class: 'ap-head' },
       h('h2', {}, s.serveur, ' ', h('span', { class: 'badge proto-rdp' }, 'RDP'), ' ', h('span', { class: 'badge mode-enregistre' }, t('recorded', 'enregistré')), this.liveBadge),
       this.headInfo,
@@ -507,6 +517,69 @@ export class RdpPlayer {
     if (this.position >= this.duration) this.playing = false;
     this.render();
     if (this.playing) this.frame = requestAnimationFrame(() => this.tick());
+  }
+
+  /** Amène le moteur à ce temps et attend l'image (vidéo). */
+  private async frameAt(time: number) {
+    while (this.inflight) await new Promise<void>((r) => this.waiters.push(r));
+    if (Math.abs(time - this.sent) < 0.001 || !this.engine) return;
+    const done = new Promise<void>((r) => this.waiters.push(r));
+    this.position = time;
+    this.request(time);
+    await done;
+  }
+
+  /** Lignes de la frappe pour les sous-titres .srt. */
+  subtitleLines(): { t: number; end: number; text: string }[] {
+    return this.lines.map((l) => ({ t: l.t, end: l.end, text: l.text || l.keys.map((k) => k.chip).filter(Boolean).join(' ') }));
+  }
+
+  /** Source de la vidéo : l'image décodée par le moteur, la souris et les clics. */
+  videoSource(): VideoSource {
+    if (this.playing) this.toggle();
+    return {
+      width: this.canvas.width,
+      height: this.canvas.height,
+      duration: this.duration,
+      draw: async (ctx, time) => {
+        await this.frameAt(time);
+        ctx.drawImage(this.canvas, 0, 0);
+        let last: (typeof this.moves)[number] | undefined;
+        for (const m of this.moves) { if (m.t <= time) last = m; else break; }
+        if (!last) return;
+        if (last.k === 'clic' && time - last.t < 1) {
+          ctx.strokeStyle = 'rgba(255,200,0,0.9)';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(last.x, last.y, 16, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        // Pointeur : une flèche blanche bordée de noir.
+        ctx.beginPath();
+        ctx.moveTo(last.x, last.y);
+        ctx.lineTo(last.x, last.y + 18);
+        ctx.lineTo(last.x + 5, last.y + 14);
+        ctx.lineTo(last.x + 9, last.y + 22);
+        ctx.lineTo(last.x + 12, last.y + 20);
+        ctx.lineTo(last.x + 8, last.y + 12);
+        ctx.lineTo(last.x + 14, last.y + 12);
+        ctx.closePath();
+        ctx.fillStyle = '#fff';
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 1.5;
+        ctx.fill();
+        ctx.stroke();
+      },
+      subtitle: (time) => {
+        if (!this.withInput) return null;
+        let line: Line | undefined;
+        for (const l of this.lines) { if (l.t <= time) line = l; else break; }
+        if (!line || time - Math.max(line.end, line.t) > 2.5) return null;
+        const shown = time < line.end ? line.keys.filter((k) => k.t <= time) : line.keys;
+        const text = shown.map((k) => (k.gone !== undefined && k.gone <= time ? '' : k.text ?? (k.chip ? ` ${k.chip} ` : ''))).join('').trim();
+        return text ? `${this.rec.session.compte.toUpperCase()}  ${text}` : null;
+      },
+    };
   }
 
   /** Transcription horodatée : frappe, clics et copier-coller, avec l'état de la signature. */

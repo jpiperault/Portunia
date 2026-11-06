@@ -29,7 +29,7 @@ export class WebPlayer {
   /** Relecture du journal qui grandit (session en direct), arrêtée à la fermeture. */
   liveTimer = 0;
 
-  constructor(readonly el: HTMLElement, private rec: WebRecording, private readonly opts: { viewer: string; start?: number; exportText(): void }) {
+  constructor(readonly el: HTMLElement, private rec: WebRecording, private readonly opts: { viewer: string; start?: number; exportText(): void; detach?(): void }) {
     this.build();
   }
 
@@ -52,7 +52,8 @@ export class WebPlayer {
       h('h2', {}, s.serveur, ' ', h('span', { class: 'badge proto-web' }, 'WEB'), s.fin ? null : h('span', { class: 'ap-live' }, t('● LIVE', '● EN DIRECT'))),
       h('span', { class: 'muted small' }, `${s.compte} · ${date(s.debut)} → ${date(s.fin)} · ${s.adresse || '—'}`),
       seal,
-      h('div', { class: 'ap-actions' }, h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription'))));
+      h('div', { class: 'ap-actions' }, h('button', { class: 'btn sm', onclick: () => this.opts.exportText() }, icon('download', 14), t('Transcript', 'Transcription')),
+        this.opts.detach ? h('button', { class: 'btn sm', title: t('Open the player in its own window', 'Ouvrir le lecteur dans sa propre fenêtre'), onclick: () => this.opts.detach!() }, '⧉ ', t('Detach', 'Détacher')) : null));
     const kinds = h('div', { class: 'wp-filters', role: 'tablist' });
     const tab = (k: WebAction['k'] | 'tout', label: string) => {
       const b = h('button', { role: 'tab', 'aria-selected': String(k === this.filter) }, label);

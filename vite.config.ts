@@ -17,5 +17,12 @@ export default defineConfig({
     // WebView2 (Chromium récent) : pas besoin de transpiler pour de vieux navigateurs.
     target: 'chrome105',
     sourcemap: false,
+    // Deux pages : l'application, et le lecteur détaché (relecture.html).
+    rollupOptions: {
+      input: {
+        main: new URL('./index.html', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
+        relecture: new URL('./relecture.html', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'),
+      },
+    },
   },
 });

@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "relecture",
+  "description": "Fenêtres du lecteur détaché (relecture des sessions d'une Gate) : enregistrer les exports, suivre le thème.",
+  "windows": [
+    "relecture-*"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-save",
+    "core:window:allow-set-theme"
+  ]
+}
