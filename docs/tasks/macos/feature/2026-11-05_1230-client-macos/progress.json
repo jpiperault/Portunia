@@ -6,6 +6,6 @@
     { "id": 2, "file": "sprints/02-systeme-mac.md", "title": "systeme-mac", "status": "done", "depends_on": [1], "batch": 2, "model": "sonnet", "branch": "feat/macos-s2", "merged": true },
     { "id": 3, "file": "sprints/03-interface-mac.md", "title": "interface-mac", "status": "done", "depends_on": [1], "batch": 2, "model": "sonnet", "branch": "feat/macos-s3", "merged": true },
     { "id": 4, "file": "sprints/04-trousseau-touchid.md", "title": "trousseau-touchid", "status": "done", "depends_on": [1, 3], "batch": 3, "model": "sonnet", "branch": "feat/macos-s4", "merged": true },
-    { "id": 5, "file": "sprints/05-packaging-release.md", "title": "packaging-release", "status": "not_started", "depends_on": [2, 3, 4], "batch": 4, "model": "sonnet", "branch": null, "merged": false }
+    { "id": 5, "file": "sprints/05-packaging-release.md", "title": "packaging-release", "status": "done", "depends_on": [2, 3, 4], "batch": 4, "model": "sonnet", "branch": "feat/macos-s5", "merged": true }
   ]
 }
