@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, assistFile, assistOffer, assistSend, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
+import { api, assistFile, assistOffer, assistSend, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectProxmoxTerminal, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
 import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
 import { ProxmoxPanel, PROXMOX_EXTENSION } from './proxmox';
 import { ASSIST_EXTENSION, AssistPanel, openAssistDialog } from './assist';
@@ -369,6 +369,14 @@ const proxmoxPanel = new ProxmoxPanel($('proxmox'), {
     const connect = (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => connectProxmox(p.id, node, kind, vmid, cols, rows, onEvent, upgrade);
     openSession(session, undefined, { connect, typing: false });
   },
+  openTerminal: (p, node, kind, vmid, title, cmd) => {
+    // Terminal texte de Proxmox (termproxy) : onglet terminal ordinaire.
+    const session: Session = { id: '', name: `${title} · ${p.name}`, folder: '', protocol: 'telnet', tags: [], secretKeys: [], values: { host: p.host, port: p.port } };
+    const connect = (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => connectProxmoxTerminal(p.id, node, kind, vmid, cols, rows, onEvent, cmd);
+    openSession(session, undefined, { connect, typing: false });
+  },
+  quickConnect: (text) => quickConnect(text),
+  saveSession: (protocol, name, host) => saveQuick({ protocol, name, values: { host } }),
   openMonitor: (p, node) => openProxmoxMonitor(p, node),
   vncEnabled: () => extensionEnabled('vnc'),
   allowed: () => allows('proxmox'),

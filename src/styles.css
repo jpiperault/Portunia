@@ -1001,6 +1001,17 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 /* Proxmox VE : boutons des tableaux (instantanés, sauvegardes), lignes cliquables (stockages). */
 .pve-actions { white-space: nowrap; text-align: right; }
 .pve-actions .btn + .btn { margin-left: 4px; }
+.pve-sections { display: flex; flex-direction: column; gap: 18px; }
+.pve-section { display: flex; flex-direction: column; gap: 8px; }
+.pve-section h3 { margin: 0; font-size: 13px; }
+.pve-row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.pve-boot { display: flex; flex-direction: column; gap: 4px; }
+.pve-boot-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; background: var(--chip-bg); }
+.pve-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.pve-note { padding: 8px 10px; border-radius: 6px; background: var(--chip-bg); }
+.pve-note p { margin: 0 0 6px; }
+.pve-token { display: flex; align-items: center; gap: 4px; }
+.pve-checks { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .tbl tr.clickable { cursor: pointer; }
 .tbl tr.clickable:hover { background: var(--hover); }
 

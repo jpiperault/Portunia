@@ -381,7 +381,7 @@ export async function openUpdates(panel: ProxmoxPanel, p: Pve, node: string) {
   });
   upgrade.addEventListener('click', () => {
     dialog.close();
-    panel.console(p, node, 'node', null, t(`Upgrade ${node}`, `Mise à jour ${node}`), true);
+    panel.terminal(p, node, 'node', null, t(`Upgrade ${node}`, `Mise à jour ${node}`), 'upgrade');
   });
   dialog.showModal();
   draw();
@@ -452,29 +452,6 @@ export async function openJournal(_panel: ProxmoxPanel, p: Pve, node: string) {
   refresh.addEventListener('click', load);
   dialog.showModal();
   load();
-}
-
-/** Interfaces réseau du nœud, en lecture : une erreur de réseau peut couper l'accès au nœud. */
-export async function openNetwork(_panel: ProxmoxPanel, p: Pve, node: string) {
-  const list = h('div', {});
-  const { dialog, error } = modal(t(`Network · ${node}`, `Réseau · ${node}`), [list,
-    h('p', { class: 'muted small' }, t('Read only: to change the network, use the Proxmox web interface (node › System › Network), which shows the pending changes before applying them. A mistake can cut the node off.', 'En lecture seule : pour modifier le réseau, passez par l\'interface web de Proxmox (nœud › Système › Réseau), qui montre les changements en attente avant de les appliquer. Une erreur peut couper l\'accès au nœud.'))], [], true);
-  dialog.querySelector('.dlg-foot')!.append(closeButton(dialog));
-  dialog.showModal();
-  try {
-    const ifaces = await proxmox.api<{ iface: string; type: string; method?: string; cidr?: string; address?: string; netmask?: string; gateway?: string; cidr6?: string; bridge_ports?: string; slaves?: string; 'bridge_vlan_aware'?: number; active?: number; autostart?: number; comments?: string }[]>(p.id, 'GET', `/nodes/${node}/network`);
-    list.replaceChildren(table([t('Interface', 'Interface'), t('Type', 'Type'), t('Active', 'Active'), t('Address', 'Adresse'), t('Gateway', 'Passerelle'), t('Ports', 'Ports'), t('Comment', 'Commentaire')],
-      ifaces.sort((a, b) => a.iface.localeCompare(b.iface)).map((i) => h('tr', {},
-        h('td', {}, i.iface),
-        h('td', {}, i.type, i.bridge_vlan_aware ? h('span', { class: 'muted small' }, ' VLAN') : null),
-        h('td', { class: i.active ? '' : 'muted' }, i.active ? t('yes', 'oui') : t('no', 'non')),
-        h('td', { class: 'mono small' }, [i.cidr ?? (i.address ? `${i.address}${i.netmask ? `/${i.netmask}` : ''}` : ''), i.cidr6 ?? ''].filter(Boolean).join(' ') || (i.method ?? '')),
-        h('td', { class: 'mono small' }, i.gateway ?? ''),
-        h('td', { class: 'small' }, i.bridge_ports ?? i.slaves ?? ''),
-        h('td', { class: 'muted small' }, (i.comments ?? '').trim())))));
-  } catch (e) {
-    error.textContent = errorText(e);
-  }
 }
 
 /** Disques physiques du nœud : modèle, taille, usage, santé SMART. */

@@ -98,14 +98,35 @@
         const t = Math.floor(Date.now() / 1000) - (69 - i) * 60, w = Math.sin(i / 6) + 0.4 * Math.sin(i / 1.7);
         return { time: t, cpu: Math.max(0.01, base + amp * w), iowait: 0.01 + 0.006 * Math.abs(w), memused: mem * (1 + 0.04 * w), memtotal, maxmem: memtotal, mem: mem * (1 + 0.04 * w), swapused: 0.2 * GB, netin: 2.4e6 + 1.1e6 * w, netout: 1.1e6 + 0.6e6 * w, loadavg: 2.1 + 0.8 * w, diskread: 3e6 + 2e6 * w, diskwrite: 1.5e6 + 1e6 * w };
       });
-      function pve(method, path) {
+      function pve(method, path, params) {
         if (path === '/cluster/resources') return pveRes;
         if (path === '/access/permissions') return { '/': { 'Sys.Audit': 1, 'VM.Allocate': 1 } };
         let m = path.match(/^\/nodes\/(\w+)\/rrddata$/);
         if (m) return m[1] === 'pve1' ? rrd(0.23, 0.08, 41 * GB, 64 * GB) : rrd(0.11, 0.05, 19 * GB, 32 * GB);
         m = path.match(/^\/nodes\/\w+\/(qemu|lxc)\/(\d+)\/rrddata$/);
         if (m) { const g = pveRes.find((r) => r.vmid === Number(m[2])); return rrd(g.cpu || 0.02, 0.05, g.mem, g.maxmem); }
-        if (path === '/cluster/tasks') return [];
+        if (path === '/cluster/tasks') return [{ upid: 'UPID:pve1:00001:qmstart:101:root@pam:', node: 'pve1', type: 'qmstart', id: '101', user: 'root@pam', starttime: now - 300, endtime: now - 290, status: 'OK' }, { upid: 'UPID:pve1:00002:vzdump:103:root@pam:', node: 'pve1', type: 'vzdump', id: '103', user: 'root@pam', starttime: now - 120, endtime: now - 60, status: 'ERROR: storage full' }];
+        // Écritures (POST, PUT, DELETE) : notées pour vérifier les paramètres envoyés.
+        if (method !== 'GET') { (window.__pveCalls = window.__pveCalls || []).push({ method, path, params }); return /resize|move_disk|move_volume|status\/|vzdump|network$/.test(path) && method !== 'DELETE' ? 'UPID:pve1:00009:task:101:root@pam:' : null; }
+        if (/\/tasks\/[^/]+\/status$/.test(path)) return { status: 'stopped', exitstatus: 'ERROR: storage full', type: 'vzdump', user: 'root@pam', starttime: now - 120 };
+        if (/\/tasks\/[^/]+\/log$/.test(path)) return ['INFO: starting new backup job: vzdump 103', 'INFO: Backup started at 2026-11-07 22:01:02', 'ERROR: vma_queue_write: write error - No space left on device', 'INFO: Failed at 2026-11-07 22:02:01', 'TASK ERROR: storage full'].map((t, n) => ({ n, t }));
+        if (path === '/nodes/pve1/qemu/101/config') return { digest: 'abc', name: 'srv-web-01', cores: 2, sockets: 1, memory: 4096, ostype: 'l26', cpu: 'x86-64-v2-AES', agent: '1', boot: 'order=scsi0;ide2;net0', scsihw: 'virtio-scsi-single', scsi0: 'local-lvm:vm-101-disk-0,iothread=1,size=32G', scsi1: 'local-lvm:vm-101-disk-1,size=100G', ide2: 'local:iso/debian-13.1.0-amd64-netinst.iso,media=cdrom', ide0: 'local-lvm:vm-101-cloudinit,media=cdrom', net0: 'virtio=BC:24:11:AA:BB:01,bridge=vmbr0,firewall=1', net1: 'virtio=BC:24:11:AA:BB:02,bridge=vmbr1,tag=20', ciuser: 'deploy', cipassword: '**********', sshkeys: 'ssh-ed25519%20AAAAC3Nza%20julien%40pc', ipconfig0: 'ip=10.0.1.12/24,gw=10.0.1.1', nameserver: '10.0.0.53' };
+        if (/\/lxc\/\d+\/config$/.test(path)) return { digest: 'def', hostname: 'monitoring', cores: 2, memory: 2048, rootfs: 'local-lvm:vm-201-disk-0,size=16G', mp0: 'local-lvm:vm-201-disk-1,mp=/var/lib/prometheus,size=50G', net0: 'name=eth0,bridge=vmbr0,firewall=1,hwaddr=BC:24:11:CC:DD:01,ip=dhcp,type=veth' };
+        if (/agent\/network-get-interfaces$/.test(path)) return { result: [{ name: 'lo', 'ip-addresses': [{ 'ip-address': '127.0.0.1', 'ip-address-type': 'ipv4' }] }, { name: 'ens18', 'ip-addresses': [{ 'ip-address': '10.0.1.12', 'ip-address-type': 'ipv4' }, { 'ip-address': 'fe80::be24:11ff:feaa:bb01', 'ip-address-type': 'ipv6' }, { 'ip-address': 'fd00::12', 'ip-address-type': 'ipv6' }] }] };
+        if (/lxc\/\d+\/interfaces$/.test(path)) return [{ name: 'lo', inet: '127.0.0.1/8' }, { name: 'eth0', inet: '10.0.2.31/24', inet6: 'fe80::1/64' }];
+        if (/^\/nodes\/\w+\/storage$/.test(path)) return [{ storage: 'local', type: 'dir', content: 'iso,vztmpl,backup', avail: 80 * GB, used: 20 * GB, total: 100 * GB, active: 1 }, { storage: 'local-lvm', type: 'lvmthin', content: 'images,rootdir', avail: 280 * GB, used: 180 * GB, total: 460 * GB, active: 1 }];
+        if (/storage\/local\/content$/.test(path)) return [{ volid: 'local:iso/debian-13.1.0-amd64-netinst.iso', content: 'iso', size: 0.7 * GB }, { volid: 'local:iso/virtio-win-0.1.271.iso', content: 'iso', size: 0.7 * GB }];
+        if (/^\/nodes\/\w+\/network$/.test(path)) return [{ iface: 'eno1', type: 'eth', active: 1, autostart: 1 }, { iface: 'vmbr0', type: 'bridge', active: 1, autostart: 1, cidr: '10.0.0.11/24', gateway: '10.0.0.1', bridge_ports: 'eno1' }, { iface: 'vmbr1', type: 'bridge', active: 1, autostart: 1, bridge_ports: 'eno2', bridge_vlan_aware: 1, comments: 'VLAN' }];
+        if (/firewall\/options$/.test(path)) return { enable: path.startsWith('/cluster') ? 1 : 0, policy_in: 'DROP', policy_out: 'ACCEPT' };
+        if (/firewall\/rules$/.test(path)) return [{ pos: 0, type: 'in', action: 'ACCEPT', macro: 'SSH', source: '10.0.0.0/24', enable: 1, comment: 'admin' }, { pos: 1, type: 'in', action: 'DROP', proto: 'tcp', dport: '3389', enable: 0 }];
+        if (path === '/access/users') return [{ userid: 'root@pam', enable: 1, email: 'admin@example.org', tokens: [{ tokenid: 'portunia', privsep: 0 }] }, { userid: 'marie@pve', enable: 1, groups: ['ops'], tokens: [] }, { userid: 'backup@pbs', enable: 0, tokens: [{ tokenid: 'job', privsep: 1 }] }];
+        if (path === '/access/domains') return [{ realm: 'pam', type: 'pam' }, { realm: 'pve', type: 'pve' }];
+        if (path === '/access/groups') return [{ groupid: 'ops', users: 'marie@pve', comment: 'Exploitation' }];
+        if (path === '/access/acl') return [{ path: '/', type: 'token', ugid: 'root@pam!portunia', roleid: 'PVEVMAdmin', propagate: 1 }, { path: '/vms/101', type: 'group', ugid: 'ops', roleid: 'PVEVMUser', propagate: 1 }];
+        if (path === '/access/roles') return ['Administrator', 'PVEAuditor', 'PVEVMAdmin', 'PVEVMUser', 'PVEDatastoreAdmin'].map((roleid) => ({ roleid }));
+        if (/ceph\/status$/.test(path)) return { health: { status: 'HEALTH_WARN', checks: { OSD_NEARFULL: { severity: 'HEALTH_WARN', summary: { message: '1 nearfull osd(s)' } } } }, monmap: { mons: [{ name: 'pve1' }, { name: 'pve2' }, { name: 'pve3' }] }, osdmap: { num_osds: 6, num_up_osds: 6, num_in_osds: 6 }, pgmap: { bytes_used: 2.1 * 1024 * GB, bytes_total: 5.4 * 1024 * GB, num_pgs: 129 } };
+        if (/ceph\/pool$/.test(path)) return [{ pool_name: 'vm-pool', size: 3, min_size: 2, pg_num: 128, bytes_used: 1.9 * 1024 * GB, percent_used: 0.41 }];
+        if (/ceph\/osd$/.test(path)) return { root: { type: 'root', name: 'default', children: [{ type: 'host', name: 'pve1', children: [{ type: 'osd', name: 'osd.0', status: 'up', in: 1, device_class: 'ssd', percent_used: 86 }, { type: 'osd', name: 'osd.1', status: 'up', in: 1, device_class: 'ssd', percent_used: 41 }] }] } };
         return [];
       }
 
@@ -216,7 +237,8 @@
             return 'job';
           }
           case 'pve_list': return [{ id: 'pve1', name: 'pve-lab', host: '192.168.1.5', port: 8006, fingerprint: '', user: 'root@pam', tokenId: 'portunia', hasSecret: true }];
-          case 'pve_api': return pve(args.method, args.path);
+          case 'pve_api': return pve(args.method, args.path, args.params);
+          case 'pve_api_full': return { data: pve('GET', args.path), changes: /network$/.test(args.path) ? '--- /etc/network/interfaces\n+++ /etc/network/interfaces.new\n@@ -12,3 +12,7 @@\n+auto vmbr2\n+iface vmbr2 inet static\n+\taddress 10.0.20.11/24\n+\tbridge-ports eno3' : null };
           case 'plugin:event|listen': return next++;
           case 'plugin:notification|is_permission_granted': return true;
           case 'plugin:updater|check': return null;

@@ -6,9 +6,17 @@
 //! L'interface appelle l'API à travers `pve_api` (inventaire, actions, instantanés,
 //! sauvegardes, clonage, migration, tâches, stockages).
 //!
-//! Consoles : machines virtuelles, conteneurs et shell d'un nœud passent tous par la console
-//! VNC de Proxmox (`vncproxy`, `vncshell`). Sa WebSocket est relayée sur un port local, où
-//! le moteur VNC de Portunia se connecte comme à un serveur VNC ordinaire.
+//! Consoles : machines virtuelles, conteneurs et shell d'un nœud passent par la console VNC de
+//! Proxmox (`vncproxy`, `vncshell`). Sa WebSocket est relayée sur un port local, où le moteur
+//! VNC de Portunia se connecte comme à un serveur VNC ordinaire.
+//!
+//! Terminal : conteneurs, shell du nœud et console série d'une VM passent aussi par le terminal
+//! texte de Proxmox (`termproxy`, celui de xterm.js). Le relais local parle Telnet au moteur
+//! Telnet de Portunia (taille de la fenêtre par NAWS) et le protocole de termproxy à Proxmox
+//! (« 0:longueur:données », « 1:colonnes:lignes: », « 2 » pour rester en vie) : un vrai onglet
+//! terminal, avec copier-coller et recherche.
+//!
+//! Envoi : images ISO et modèles de conteneurs envoyés du PC vers un stockage (`upload`).
 
 use std::{
     collections::HashMap,
@@ -371,6 +379,29 @@ pub async fn pve_api(state: State<'_, AppState>, id: String, method: String, pat
     api(&p, method, &path, params.as_ref()).await.map_err(full)
 }
 
+/// Lecture qui rend toute la réponse de l'API, pas seulement « data » (réseau d'un nœud :
+/// « changes » = changements en attente d'application).
+#[tauri::command]
+pub async fn pve_api_full(state: State<'_, AppState>, id: String, path: String) -> CmdResult<Value> {
+    require(&state)?;
+    let p = find(&state.data_dir, &id).map_err(full)?;
+    let data = api(&p, reqwest::Method::GET, &path, None).await.map_err(full)?;
+    // « changes » n'est pas dans data : seconde lecture brute.
+    let changes = raw_get(&p, &path).await.ok().and_then(|v| v.get("changes").cloned()).unwrap_or(Value::Null);
+    Ok(json!({ "data": data, "changes": changes }))
+}
+
+/// GET sans traitement (réponse JSON entière).
+async fn raw_get(p: &Pve, path: &str) -> Result<Value> {
+    if !path.starts_with('/') || path.contains("..") || path.contains('?') {
+        bail!("chemin d'API invalide : {path}");
+    }
+    let a = auth(p, false).await?;
+    let (http, _) = client(Some(&p.fingerprint))?;
+    let req = a.apply(http.get(format!("https://{}:{}/api2/json{path}", p.host, p.port)), false);
+    Ok(req.send().await.map_err(|e| unreachable(p, &e))?.json().await?)
+}
+
 /// Console d'une machine virtuelle (`qemu`), d'un conteneur (`lxc`) ou shell d'un nœud
 /// (`node`) : la console VNC de Proxmox, relayée sur un port local, ouverte par le moteur VNC.
 #[tauri::command]
@@ -423,20 +454,7 @@ async fn console_auth(p: &Pve) -> Result<Auth> {
 /// Relais local vers la WebSocket de la console (TLS épinglé) : une seule connexion, le flux
 /// VNC passe tel quel dans les deux sens.
 async fn bridge(p: &Pve, a: &Auth, path: &str) -> Result<u16> {
-    let mut request = format!("wss://{}:{}/api2/json{path}", p.host, p.port).into_client_request()?;
-    match a {
-        Auth::Token(header) => {
-            request.headers_mut().insert("authorization", header.parse()?);
-        }
-        Auth::Ticket { ticket, .. } => {
-            request.headers_mut().insert("cookie", format!("PVEAuthCookie={}", urlencode(ticket)).parse()?);
-        }
-    }
-    request.headers_mut().insert("sec-websocket-protocol", "binary".parse()?);
-    let name = rustls::pki_types::ServerName::try_from(p.host.clone()).map_err(|_| anyhow!(t!("Invalid Proxmox address", "Adresse Proxmox invalide")))?;
-    let tcp = tokio::net::TcpStream::connect((p.host.as_str(), p.port)).await?;
-    let tls = tokio_rustls::TlsConnector::from(Arc::new(pinned_config(&p.fingerprint)?)).connect(name, tcp).await?;
-    let (ws, _) = tokio_tungstenite::client_async(request, tls).await.map_err(|e| anyhow!("{}", t!(format!("Proxmox console: {e}"), format!("Console Proxmox : {e}"))))?;
+    let ws = console_ws(p, a, path).await?;
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
     let local = listener.local_addr()?.port();
     tauri::async_runtime::spawn(async move {
@@ -477,9 +495,320 @@ async fn bridge(p: &Pve, a: &Auth, path: &str) -> Result<u16> {
     Ok(local)
 }
 
+/// WebSocket de console de Proxmox (TLS épinglé), authentifiée comme la console.
+async fn console_ws(p: &Pve, a: &Auth, path: &str) -> Result<tokio_tungstenite::WebSocketStream<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>> {
+    let mut request = format!("wss://{}:{}/api2/json{path}", p.host, p.port).into_client_request()?;
+    match a {
+        Auth::Token(header) => {
+            request.headers_mut().insert("authorization", header.parse()?);
+        }
+        Auth::Ticket { ticket, .. } => {
+            request.headers_mut().insert("cookie", format!("PVEAuthCookie={}", urlencode(ticket)).parse()?);
+        }
+    }
+    request.headers_mut().insert("sec-websocket-protocol", "binary".parse()?);
+    let name = rustls::pki_types::ServerName::try_from(p.host.clone()).map_err(|_| anyhow!(t!("Invalid Proxmox address", "Adresse Proxmox invalide")))?;
+    let tcp = tokio::net::TcpStream::connect((p.host.as_str(), p.port)).await?;
+    let tls = tokio_rustls::TlsConnector::from(Arc::new(pinned_config(&p.fingerprint)?)).connect(name, tcp).await?;
+    let (ws, _) = tokio_tungstenite::client_async(request, tls).await.map_err(|e| anyhow!("{}", t!(format!("Proxmox console: {e}"), format!("Console Proxmox : {e}"))))?;
+    Ok(ws)
+}
+
+/// Lecture du flux Telnet du moteur de Portunia : données (IAC IAC = 0xFF), taille de la
+/// fenêtre (IAC SB NAWS l h IAC SE) ; les autres négociations sont ignorées.
+#[derive(Default)]
+struct TelnetIn {
+    state: u8,
+    sub: Vec<u8>,
+}
+
+enum TermIn {
+    Data(Vec<u8>),
+    Size(u16, u16),
+}
+
+impl TelnetIn {
+    const IAC: u8 = 255;
+    fn feed(&mut self, bytes: &[u8]) -> Vec<TermIn> {
+        let mut out = Vec::new();
+        let mut data = Vec::new();
+        for &b in bytes {
+            match self.state {
+                // 0 : données ; 1 : après IAC ; 2 : option à sauter ; 3 : sous-négociation ; 4 : IAC dans la sous-négociation.
+                0 if b == Self::IAC => self.state = 1,
+                0 => data.push(b),
+                1 => {
+                    self.state = match b {
+                        Self::IAC => {
+                            data.push(Self::IAC);
+                            0
+                        }
+                        250 => {
+                            self.sub.clear();
+                            3
+                        }
+                        251..=254 => 2,
+                        _ => 0,
+                    }
+                }
+                2 => self.state = 0,
+                3 if b == Self::IAC => self.state = 4,
+                3 => self.sub.push(b),
+                _ => {
+                    if b == 240 {
+                        // NAWS : option 31, largeur et hauteur sur deux octets.
+                        if self.sub.len() >= 5 && self.sub[0] == 31 {
+                            let cols = u16::from_be_bytes([self.sub[1], self.sub[2]]);
+                            let rows = u16::from_be_bytes([self.sub[3], self.sub[4]]);
+                            if !data.is_empty() {
+                                out.push(TermIn::Data(std::mem::take(&mut data)));
+                            }
+                            out.push(TermIn::Size(cols.max(1), rows.max(1)));
+                        }
+                        self.state = 0;
+                    } else {
+                        if b == Self::IAC {
+                            self.sub.push(Self::IAC);
+                        }
+                        self.state = 3;
+                    }
+                }
+            }
+        }
+        if !data.is_empty() {
+            out.push(TermIn::Data(data));
+        }
+        out
+    }
+}
+
+/// Message de termproxy pour une entrée du terminal.
+fn term_message(input: &TermIn) -> Vec<u8> {
+    match input {
+        TermIn::Data(d) => {
+            let mut m = format!("0:{}:", d.len()).into_bytes();
+            m.extend_from_slice(d);
+            m
+        }
+        TermIn::Size(c, r) => format!("1:{c}:{r}:").into_bytes(),
+    }
+}
+
+/// Relais local Telnet ↔ termproxy : une seule connexion (l'onglet terminal).
+async fn term_bridge(p: &Pve, a: &Auth, path: &str, user: &str, ticket: &str) -> Result<u16> {
+    let ws = console_ws(p, a, path).await?;
+    let hello = format!("{user}:{ticket}\n").into_bytes();
+    let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await?;
+    let local = listener.local_addr()?.port();
+    tauri::async_runtime::spawn(async move {
+        let Ok(Ok((socket, _))) = tokio::time::timeout(std::time::Duration::from_secs(60), listener.accept()).await else { return };
+        let _ = socket.set_nodelay(true);
+        let (mut tcp_read, mut tcp_write) = socket.into_split();
+        let (mut ws_send, mut ws_recv) = ws.split();
+        // Le serveur répète les caractères (WILL ECHO), sans mode ligne (WILL SGA), et veut la taille (DO NAWS).
+        if tcp_write.write_all(&[255, 251, 1, 255, 251, 3, 255, 253, 31]).await.is_err() || ws_send.send(Message::Binary(hello.into())).await.is_err() {
+            return;
+        }
+        let up = async {
+            let mut buf = vec![0u8; 16 * 1024];
+            let mut telnet = TelnetIn::default();
+            let mut ping = tokio::time::interval(std::time::Duration::from_secs(30));
+            ping.tick().await;
+            loop {
+                tokio::select! {
+                    n = tcp_read.read(&mut buf) => match n {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => {
+                            for input in telnet.feed(&buf[..n]) {
+                                if ws_send.send(Message::Binary(term_message(&input).into())).await.is_err() {
+                                    return;
+                                }
+                            }
+                        }
+                    },
+                    _ = ping.tick() => {
+                        if ws_send.send(Message::Binary(b"2".to_vec().into())).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+            let _ = ws_send.close().await;
+        };
+        let down = async {
+            // termproxy répond « OK » à l'authentification, avant la sortie du shell.
+            let mut greeted = false;
+            while let Some(Ok(message)) = ws_recv.next().await {
+                let mut bytes = match message {
+                    Message::Binary(b) => b.to_vec(),
+                    Message::Text(t) => t.as_bytes().to_vec(),
+                    Message::Close(_) => break,
+                    _ => continue,
+                };
+                if !greeted {
+                    greeted = true;
+                    if bytes.starts_with(b"OK") {
+                        bytes.drain(..2);
+                    }
+                }
+                // 0xFF est l'octet IAC de Telnet : doublé.
+                let mut out = Vec::with_capacity(bytes.len());
+                for b in bytes {
+                    out.push(b);
+                    if b == 255 {
+                        out.push(255);
+                    }
+                }
+                if tcp_write.write_all(&out).await.is_err() {
+                    break;
+                }
+            }
+            let _ = tcp_write.shutdown().await;
+        };
+        tokio::select! { _ = up => {}, _ = down => {} }
+    });
+    Ok(local)
+}
+
+/// Terminal texte d'un conteneur (`lxc`), du nœud (`node`, `cmd` = « upgrade » pour la mise à
+/// jour) ou console série d'une VM (`qemu`, si elle a un port série) dans un onglet terminal.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn pve_terminal(app: AppHandle, state: State<'_, AppState>, id: String, node: String, kind: String, vmid: Option<u32>, cmd: Option<String>, cols: u16, rows: u16, on_event: Channel) -> CmdResult<ConnectResponse> {
+    require(&state)?;
+    let p = find(&state.data_dir, &id).map_err(full)?;
+    if node.is_empty() || !node.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') {
+        return Err("nœud invalide".into());
+    }
+    let (base, name) = match (kind.as_str(), vmid) {
+        ("qemu" | "lxc", Some(vmid)) => (format!("/nodes/{node}/{kind}/{vmid}"), format!("{vmid} · {}", p.name)),
+        ("node", _) => (format!("/nodes/{node}"), format!("{node} · {}", p.name)),
+        _ => return Err("terminal inconnu".into()),
+    };
+    let mut params = json!({});
+    if kind == "node" && cmd.as_deref() == Some("upgrade") {
+        params["cmd"] = json!("upgrade");
+    } else if kind == "qemu" {
+        params["serial"] = json!("serial0");
+    }
+    let a = console_auth(&p).await.map_err(full)?;
+    let term = api_as(&p, Some(&a), reqwest::Method::POST, &format!("{base}/termproxy"), Some(&params)).await.map_err(|e| {
+        let e = full(e);
+        if kind == "qemu" {
+            t!(
+                format!("{e}. The text console needs a serial port on the VM (Hardware › Add › Serial port) and a console on it in the guest system."),
+                format!("{e}. La console texte demande un port série sur la VM (Matériel › Ajouter › Port série) et une console dessus dans le système invité.")
+            )
+            .to_string()
+        } else {
+            e
+        }
+    })?;
+    let port = term["port"].as_u64().or_else(|| term["port"].as_str().and_then(|s| s.parse().ok())).ok_or("Proxmox n'a pas donné de port de terminal")?;
+    let ticket = term["ticket"].as_str().ok_or("Proxmox n'a pas donné de ticket de terminal")?.to_string();
+    let user = term["user"].as_str().map(str::to_string).unwrap_or_else(|| p.user.clone());
+    let local = term_bridge(&p, &a, &format!("{base}/vncwebsocket?port={port}&vncticket={}", urlencode(&ticket)), &user, &ticket).await.map_err(full)?;
+    let values: HashMap<String, Value> = [("host".to_string(), json!("127.0.0.1")), ("port".to_string(), json!(local))].into_iter().collect();
+    start_connection(&app, &state, "telnet", name, values, cols, rows, on_event).await
+}
+
+/// Nom de fichier accepté par Proxmox pour un envoi (lettres, chiffres, « - _ . »).
+fn upload_name(path: &str) -> String {
+    let base = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    let name: String = base.chars().map(|c| if c.is_ascii_alphanumeric() || "-_.".contains(c) { c } else { '_' }).collect();
+    if name.trim_matches(['.', '_']).is_empty() {
+        "fichier.iso".into()
+    } else {
+        name
+    }
+}
+
+/// Envoie un fichier du PC vers un stockage du nœud (image ISO, modèle de conteneur) ; la
+/// progression part dans `on_progress` ({envoye, total}). Rend la tâche Proxmox (UPID).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn pve_upload(state: State<'_, AppState>, id: String, node: String, storage: String, content: String, path: String, on_progress: Channel<Value>) -> CmdResult<Value> {
+    require(&state)?;
+    let p = find(&state.data_dir, &id).map_err(full)?;
+    let valid = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    if !valid(&node) || !valid(&storage) || !["iso", "vztmpl", "import"].contains(&content.as_str()) {
+        return Err("paramètres d'envoi invalides".into());
+    }
+    let file = tokio::fs::File::open(&path).await.map_err(|e| format!("{path} : {e}"))?;
+    let total = file.metadata().await.map_err(|e| e.to_string())?.len();
+    let name = upload_name(&path);
+    let boundary = format!("----portunia{}", uuid::Uuid::new_v4().simple());
+    let head = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"content\"\r\n\r\n{content}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"filename\"; filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+    )
+    .into_bytes();
+    let tail = format!("\r\n--{boundary}--\r\n").into_bytes();
+    let length = head.len() as u64 + total + tail.len() as u64;
+    let progress = on_progress.clone();
+    // Fichier lu par morceaux ; progression au plus toutes les 300 ms.
+    let chunks = futures_util::stream::unfold((file, 0u64, std::time::Instant::now()), move |(mut f, sent, last)| {
+        let progress = progress.clone();
+        async move {
+            let mut buf = vec![0u8; 256 * 1024];
+            match f.read(&mut buf).await {
+                Ok(0) => None,
+                Ok(n) => {
+                    buf.truncate(n);
+                    let sent = sent + n as u64;
+                    let last = if last.elapsed() >= std::time::Duration::from_millis(300) {
+                        let _ = progress.send(json!({ "envoye": sent, "total": total }));
+                        std::time::Instant::now()
+                    } else {
+                        last
+                    };
+                    Some((Ok::<Vec<u8>, std::io::Error>(buf), (f, sent, last)))
+                }
+                Err(e) => Some((Err(e), (f, sent, last))),
+            }
+        }
+    });
+    let body = futures_util::stream::once(async move { Ok::<Vec<u8>, std::io::Error>(head) }).chain(chunks).chain(futures_util::stream::once(async move { Ok(tail) }));
+    let a = auth(&p, false).await.map_err(full)?;
+    let (http, _) = client(Some(&p.fingerprint)).map_err(full)?;
+    let req = http
+        .post(format!("https://{}:{}/api2/json/nodes/{node}/storage/{storage}/upload", p.host, p.port))
+        .timeout(std::time::Duration::from_secs(24 * 3600))
+        .header(reqwest::header::CONTENT_TYPE, format!("multipart/form-data; boundary={boundary}"))
+        .header(reqwest::header::CONTENT_LENGTH, length)
+        .body(reqwest::Body::wrap_stream(body));
+    let resp = a.apply(req, true).send().await.map_err(|e| full(unreachable(&p, &e)))?;
+    let status = resp.status();
+    let value: Value = resp.json().await.unwrap_or(Value::Null);
+    if !status.is_success() {
+        let message = value["message"].as_str().map(str::trim).filter(|m| !m.is_empty()).map(str::to_string).unwrap_or_else(|| status.to_string());
+        return Err(format!("Proxmox {} : {message}", status.as_u16()));
+    }
+    let _ = on_progress.send(json!({ "envoye": total, "total": total }));
+    Ok(value["data"].clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn telnet_vers_termproxy() {
+        let mut t = TelnetIn::default();
+        // Réponse WILL NAWS, taille 120×40, puis « ls » et un 0xFF doublé.
+        let inputs = t.feed(&[255, 251, 31, 255, 250, 31, 0, 120, 0, 40, 255, 240, b'l', b's', 255, 255]);
+        let messages: Vec<Vec<u8>> = inputs.iter().map(term_message).collect();
+        assert_eq!(messages, vec![b"1:120:40:".to_vec(), [b"0:3:ls".as_slice(), &[255]].concat()]);
+        // Coupé au milieu d'une négociation : la suite arrive au morceau suivant.
+        assert!(t.feed(&[255, 250, 31, 0]).is_empty());
+        let rest: Vec<Vec<u8>> = t.feed(&[80, 0, 24, 255, 240]).iter().map(term_message).collect();
+        assert_eq!(rest, vec![b"1:80:24:".to_vec()]);
+    }
+
+    #[test]
+    fn nom_envoye() {
+        assert_eq!(upload_name("C:\\ISO\\Debian 13 (net).iso"), "Debian_13__net_.iso");
+        assert_eq!(upload_name("/tmp/alpine-3.20.tar.xz"), "alpine-3.20.tar.xz");
+    }
 
     #[test]
     fn adresses() {

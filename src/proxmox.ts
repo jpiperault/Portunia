@@ -1,19 +1,21 @@
 // Extension Proxmox VE : serveurs Proxmox dans la barre latérale, nœuds, machines virtuelles et
 // conteneurs avec leur état ; actions, consoles, instantanés, sauvegardes, clonage, migration,
 // ressources, tâches et stockages. Tout passe par l'API de Proxmox (commande pve_api).
-// Création de machines et gestion des nœuds : proxmoxadmin.ts.
+// Création de machines et gestion des nœuds : proxmoxadmin.ts. Terminal, connexion SSH/RDP,
+// matériel, cloud-init, envoi d'ISO, pare-feu, droits, Ceph, stockages et réseau : proxmoxmore.ts.
 import { errorText, Manifest, proxmox, Pve, PveResource } from './api';
 import { h, icon } from './dom';
 import { LOCALE, t } from './i18n';
 import { MenuItem, showMenu } from './menu';
-import { nodePower, openCreateCt, openCreateVm, openDisks, openJournal, openNetwork, openServices, openUpdates } from './proxmoxadmin';
+import { nodePower, openCreateCt, openCreateVm, openDisks, openJournal, openServices, openUpdates } from './proxmoxadmin';
+import { openAccess, openAddStorage, openCeph, openCloudInit, openConnect, openFirewall, openHardware, openNetworkEdit, openTaskLog, openUpload, removeStorage } from './proxmoxmore';
 
 /** Proxmox VE apparaît dans la page Extensions comme les protocoles. */
 export const PROXMOX_EXTENSION: Manifest = {
   id: 'proxmox',
   name: 'Proxmox VE',
   version: '1.0.0',
-  description: t('Proxmox servers in the sidebar: create, start and stop virtual machines and containers, consoles, snapshots, backups, clone, migrate, tasks and storage; node updates, services, log, network and disks.', 'Serveurs Proxmox dans la barre latérale : création, démarrage et arrêt des machines virtuelles et conteneurs, consoles, instantanés, sauvegardes, clonage, migration, tâches et stockages ; mises à jour, services, journal, réseau et disques des nœuds.'),
+  description: t('Proxmox servers in the sidebar: create, start and stop virtual machines and containers, consoles and terminals, SSH or Remote Desktop to a machine, hardware and cloud-init, snapshots, backups, clone, migrate, tasks and their log, storage and ISO upload; node updates, services, log, network, disks, firewall, users and permissions, Ceph.', 'Serveurs Proxmox dans la barre latérale : création, démarrage et arrêt des machines virtuelles et conteneurs, consoles et terminaux, SSH ou Bureau à distance vers une machine, matériel et cloud-init, instantanés, sauvegardes, clonage, migration, tâches et leur journal, stockages et envoi d\'ISO ; mises à jour, services, journal, réseau, disques, pare-feu, utilisateurs et droits, Ceph des nœuds.'),
   view: 'screen',
   builtin: true,
   catalog: true,
@@ -26,6 +28,12 @@ export interface ProxmoxHost {
   toast(message: string, kind?: 'info' | 'error'): void;
   /** Console VNC dans un onglet (machine virtuelle, conteneur, ou shell du nœud). */
   openConsole(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string, upgrade?: boolean): void;
+  /** Terminal texte de Proxmox dans un onglet terminal (conteneur, nœud, console série d'une VM). */
+  openTerminal(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string, cmd?: 'upgrade'): void;
+  /** Connexion rapide préremplie (« ssh 192.168.1.20 », « rdp 192.168.1.30 »). */
+  quickConnect(text: string): void;
+  /** Formulaire de nouvelle session prérempli (protocole, nom, adresse). */
+  saveSession(protocol: string, name: string, host: string): void;
   /** Onglet de supervision du serveur, ou d'un seul de ses nœuds. */
   openMonitor(p: Pve, node?: string): void;
   /** Console impossible sans l'extension VNC. */
@@ -160,6 +168,8 @@ export class ProxmoxPanel {
       { label: t('Refresh', 'Actualiser'), icon: 'refresh', action: () => this.refresh(p.id) },
       { label: t('Tasks', 'Tâches'), icon: 'commands', action: () => openTasks(this, p) },
       { label: t('Storage', 'Stockages'), icon: 'drive', action: () => openStorage(this, p, nodes) },
+      { label: t('Users and permissions', 'Utilisateurs et droits'), icon: 'user', action: () => openAccess(this, p) },
+      { label: t('Datacenter firewall', 'Pare-feu du datacenter'), icon: 'shield', action: () => openFirewall(this, p, { kind: 'cluster' }) },
       { label: t('Edit', 'Modifier'), icon: 'edit', action: () => this.add(p) },
       { label: t('Copy the certificate fingerprint', 'Copier l\'empreinte du certificat'), icon: 'copy', action: () => navigator.clipboard.writeText(p.fingerprint) },
       'separator',
@@ -210,7 +220,8 @@ export class ProxmoxPanel {
           icon('server', 14), h('span', { class: 'grow ellipsis' }, node.node), h('span', { class: 'count' }, !online ? t('offline', 'hors ligne') : node.maxcpu ? pct(node.cpu) : '')));
       const nodeMenu = (): (MenuItem | 'separator')[] => [
         { label: t('Monitoring', 'Supervision'), icon: 'chart', action: () => this.host.openMonitor(p, node.node) },
-        { label: t('Node shell', 'Shell du nœud'), icon: 'terminal', action: () => this.console(p, node.node, 'node', null, `${node.node}`) },
+        { label: t('Node terminal', 'Terminal du nœud'), icon: 'terminal', action: () => this.terminal(p, node.node, 'node', null, `${node.node}`) },
+        { label: t('Node shell (VNC)', 'Shell du nœud (VNC)'), icon: 'desktop', action: () => this.console(p, node.node, 'node', null, `${node.node}`) },
         'separator',
         { label: t('Create a virtual machine…', 'Créer une machine virtuelle…'), icon: 'desktop', action: () => openCreateVm(this, p, node.node) },
         { label: t('Create a container…', 'Créer un conteneur…'), icon: 'box', action: () => openCreateCt(this, p, node.node) },
@@ -218,9 +229,12 @@ export class ProxmoxPanel {
         { label: t('Updates', 'Mises à jour'), icon: 'download', action: () => openUpdates(this, p, node.node) },
         { label: t('Services', 'Services'), icon: 'settings', action: () => openServices(this, p, node.node) },
         { label: t('System log', 'Journal système'), icon: 'commands', action: () => openJournal(this, p, node.node) },
-        { label: t('Network', 'Réseau'), icon: 'broadcast', action: () => openNetwork(this, p, node.node) },
+        { label: t('Network', 'Réseau'), icon: 'broadcast', action: () => openNetworkEdit(this, p, node.node) },
+        { label: t('Firewall', 'Pare-feu'), icon: 'shield', action: () => openFirewall(this, p, { kind: 'node', node: node.node }) },
+        { label: 'Ceph', icon: 'layers', action: () => openCeph(this, p, node.node) },
         { label: t('Disks', 'Disques'), icon: 'drive', action: () => openDisks(this, p, node.node) },
         { label: t('Storage', 'Stockages'), icon: 'drive', action: () => openStorage(this, p, [node.node]) },
+        { label: t('Send an ISO or a template…', 'Envoyer une ISO ou un modèle…'), icon: 'upload', action: () => openUpload(this, p, node.node) },
         { label: t('Tasks', 'Tâches'), icon: 'commands', action: () => openTasks(this, p, node.node) },
         'separator',
         { label: t('Restart the node…', 'Redémarrer le nœud…'), icon: 'refresh', danger: true, action: () => nodePower(this, p, node.node, 'reboot') },
@@ -239,7 +253,8 @@ export class ProxmoxPanel {
     const open = () => {
       if (template) return this.host.toast(t('A template does not start: clone it (menu « … »).', 'Un modèle ne démarre pas : clonez-le (menu « … »).'), 'info');
       if (!on) return this.host.toast(t(`${guestLabel(g)} is stopped: start it from its menu (right click).`, `${guestLabel(g)} est arrêté : démarrez-le depuis son menu (clic droit).`), 'info');
-      this.console(p, g.node, g.type, g.vmid, guestLabel(g));
+      if (g.type === 'lxc') this.terminal(p, g.node, 'lxc', g.vmid, guestLabel(g));
+      else this.console(p, g.node, g.type, g.vmid, guestLabel(g));
     };
     const title = [
       `${guestLabel(g)} (${kindLabel(g)}) · ${g.status ?? ''}${g.lock ? ` · ${t('locked', 'verrouillé')} (${g.lock})` : ''}`,
@@ -265,7 +280,10 @@ export class ProxmoxPanel {
     const act = (action: string, label: string) => ({ label, action: () => this.run(p, g.node, `${base}/status/${action}`, `${label} ${guestLabel(g)}`) });
     const items: (MenuItem | 'separator')[] = [];
     if (g.template !== 1) {
-      if (on) items.push({ label: t('Console', 'Console'), icon: 'desktop', action: () => this.console(p, g.node, g.type, g.vmid, guestLabel(g)) });
+      if (on && g.type === 'lxc') items.push({ label: t('Terminal', 'Terminal'), icon: 'terminal', action: () => this.terminal(p, g.node, 'lxc', g.vmid, guestLabel(g)) });
+      if (on) items.push({ label: g.type === 'lxc' ? t('Console (VNC)', 'Console (VNC)') : t('Console', 'Console'), icon: 'desktop', action: () => this.console(p, g.node, g.type, g.vmid, guestLabel(g)) });
+      if (on && g.type === 'qemu') items.push({ label: t('Text console (serial port)', 'Console texte (port série)'), icon: 'terminal', action: () => this.terminal(p, g.node, 'qemu', g.vmid, guestLabel(g)) });
+      if (on) items.push({ label: t('Connect with SSH or Remote Desktop…', 'Se connecter en SSH ou Bureau à distance…'), icon: 'link', action: () => openConnect(this, p, g) });
       if (!on && !paused) items.push({ ...act('start', t('Start', 'Démarrer')), icon: 'play' });
       if (on) {
         items.push({ ...act('shutdown', t('Shut down', 'Éteindre')), icon: 'power' });
@@ -288,6 +306,9 @@ export class ProxmoxPanel {
       { label: t('Clone', 'Cloner'), icon: 'copy', action: () => openClone(this, p, g) },
       { label: t('Migrate', 'Migrer'), icon: 'move', action: () => openMigrate(this, p, g) },
       { label: t('Resources and settings', 'Ressources et réglages'), icon: 'settings', action: () => openConfig(this, p, g) },
+      { label: t('Hardware', 'Matériel'), icon: 'drive', action: () => openHardware(this, p, g) },
+      ...(g.type === 'qemu' ? [{ label: t('Cloud-init', 'Cloud-init'), icon: 'user', action: () => openCloudInit(this, p, g) }] : []),
+      { label: t('Firewall', 'Pare-feu'), icon: 'shield', action: () => openFirewall(this, p, { kind: 'guest', guest: g }) },
       { label: t('Tasks', 'Tâches'), icon: 'commands', action: () => openTasks(this, p, g.node, g.vmid) },
     );
     if (g.template !== 1 && !on) {
@@ -305,6 +326,11 @@ export class ProxmoxPanel {
       },
     });
     return items;
+  }
+
+  /** Terminal texte (termproxy) : pas besoin de l'extension VNC. */
+  terminal(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string, cmd?: 'upgrade') {
+    this.host.openTerminal(p, node, kind, vmid, title, cmd);
   }
 
   console(p: Pve, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, title: string, upgrade = false) {
@@ -336,6 +362,8 @@ export class ProxmoxPanel {
         if (s.status === 'stopped') {
           const ok = s.exitstatus === 'OK' || (s.exitstatus ?? '').startsWith('WARNINGS');
           this.host.toast(ok ? t(`${label}: done`, `${label} : terminé`) : `${label} : ${s.exitstatus ?? t('failed', 'échec')}`, ok ? 'info' : 'error');
+          // Échec : le journal de la tâche dit pourquoi.
+          if (!ok) openTaskLog(p, node, upid, label);
           return ok;
         }
       } catch {
@@ -709,10 +737,10 @@ async function openTasks(_panel: ProxmoxPanel, p: Pve, node?: string, vmid?: num
       if (vmid) tasks = tasks.filter((x) => x.id === String(vmid));
       list.replaceChildren(tasks.length
         ? table([t('Start', 'Début'), t('Node', 'Nœud'), t('Task', 'Tâche'), t('Object', 'Objet'), t('User', 'Utilisateur'), t('Result', 'Résultat')],
-          tasks.sort((a, b) => b.starttime - a.starttime).slice(0, 100).map((x) => h('tr', {},
+          tasks.sort((a, b) => b.starttime - a.starttime).slice(0, 100).map((x) => h('tr', { class: 'clickable', title: t('Show the log', 'Voir le journal'), onclick: () => openTaskLog(p, x.node, x.upid, `${x.type} ${x.id ?? ''}`.trim()) },
             h('td', {}, date(x.starttime)), h('td', {}, x.node), h('td', {}, x.type), h('td', {}, x.id ?? ''), h('td', {}, x.user),
             h('td', { class: x.endtime ? (x.status === 'OK' ? '' : 'danger-text') : 'muted' }, x.endtime ? x.status ?? '' : t('running…', 'en cours…')))))
-        : h('p', { class: 'muted' }, t('No recent task.', 'Aucune tâche récente.')));
+        : h('p', { class: 'muted' }, t('No recent task.', 'Aucune tâche récente.')), h('p', { class: 'muted small' }, t('Click a task to see its log.', 'Cliquez sur une tâche pour voir son journal.')));
     } catch (e) {
       error.textContent = errorText(e);
     }
@@ -723,10 +751,15 @@ async function openTasks(_panel: ProxmoxPanel, p: Pve, node?: string, vmid?: num
 }
 
 /** Stockages des nœuds : type, contenu, place occupée ; contenu d'un stockage (images ISO, modèles, disques…). */
-async function openStorage(_panel: ProxmoxPanel, p: Pve, nodes: string[]) {
+async function openStorage(panel: ProxmoxPanel, p: Pve, nodes: string[]) {
   const list = h('div', {});
   const content = h('div', {});
-  const { dialog, error } = modal(t(`Storage · ${nodes.length === 1 ? nodes[0] : p.name}`, `Stockages · ${nodes.length === 1 ? nodes[0] : p.name}`), [list, content], [], true);
+  const again = () => { dialog.close(); openStorage(panel, p, nodes); };
+  const addBtn = h('button', { type: 'button', class: 'btn' }, icon('plus', 14), ' ', t('Add a storage…', 'Ajouter un stockage…'));
+  addBtn.addEventListener('click', () => openAddStorage(panel, p, again));
+  const sendBtn = h('button', { type: 'button', class: 'btn' }, icon('upload', 14), ' ', t('Send an ISO…', 'Envoyer une ISO…'));
+  sendBtn.addEventListener('click', () => openUpload(panel, p, nodes[0], again));
+  const { dialog, error } = modal(t(`Storage · ${nodes.length === 1 ? nodes[0] : p.name}`, `Stockages · ${nodes.length === 1 ? nodes[0] : p.name}`), [list, content], [addBtn, sendBtn], true);
   dialog.querySelector('.dlg-foot')!.append(closeButton(dialog));
   const show = async (node: string, storage: string) => {
     try {
@@ -747,10 +780,11 @@ async function openStorage(_panel: ProxmoxPanel, p: Pve, nodes: string[]) {
         rows.push(h('tr', { class: 'clickable', onclick: () => show(node, s.storage) },
           h('td', {}, s.storage), h('td', {}, node), h('td', {}, s.type), h('td', { class: 'small' }, s.content.replace(/,/g, ', ')),
           h('td', {}, s.active === 0 ? t('inactive', 'inactif') : `${bytes(s.used)} / ${bytes(s.total)} (${s.total ? Math.round(((s.used ?? 0) / s.total) * 100) : 0} %)`),
-          h('td', {}, s.shared ? t('shared', 'partagé') : '')));
+          h('td', {}, s.shared ? t('shared', 'partagé') : ''),
+          h('td', { class: 'pve-actions' }, h('button', { type: 'button', class: 'btn sm danger', onclick: async (e: MouseEvent) => { e.stopPropagation(); if (await removeStorage(panel, p, s.storage)) again(); } }, t('Remove', 'Retirer')))));
       }
     }
-    list.replaceChildren(table([t('Storage', 'Stockage'), t('Node', 'Nœud'), t('Type', 'Type'), t('Content', 'Contenu'), t('Used', 'Occupé'), ''], rows),
+    list.replaceChildren(table([t('Storage', 'Stockage'), t('Node', 'Nœud'), t('Type', 'Type'), t('Content', 'Contenu'), t('Used', 'Occupé'), '', ''], rows),
       h('p', { class: 'muted small' }, t('Click a storage to see its content.', 'Cliquez sur un stockage pour voir son contenu.')));
   } catch (e) {
     error.textContent = errorText(e);
