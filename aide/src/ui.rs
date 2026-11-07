@@ -1121,7 +1121,14 @@ pub fn run(commands: UnboundedSender<Command>) {
     unsafe {
         let _ = windows::Win32::UI::HiDpi::SetProcessDpiAwarenessContext(windows::Win32::UI::HiDpi::DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         let instance: HINSTANCE = GetModuleHandleW(None).unwrap_or_default().into();
-        let icon = LoadIconW(Some(instance), PCWSTR(1 as _)).or_else(|_| LoadIconW(None, IDI_APPLICATION)).unwrap_or_default();
+        // Logo de Portunia (ressource 1, voir build.rs), aux tailles exactes de la barre des tâches et du titre.
+        let logo = |metric_w, metric_h| {
+            LoadImageW(Some(instance), PCWSTR(1 as _), IMAGE_ICON, GetSystemMetrics(metric_w), GetSystemMetrics(metric_h), LR_DEFAULTCOLOR)
+                .map(|h| HICON(h.0))
+                .or_else(|_| LoadIconW(None, IDI_APPLICATION))
+                .unwrap_or_default()
+        };
+        let (icon, small) = (logo(SM_CXICON, SM_CYICON), logo(SM_CXSMICON, SM_CYSMICON));
         type Proc = unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT;
         for (name, proc_) in [
             (w!("PortuniaAssist"), main_proc as Proc),
@@ -1129,15 +1136,17 @@ pub fn run(commands: UnboundedSender<Command>) {
             (w!("PortuniaAssistChat"), chat_proc as Proc),
             (w!("PortuniaAssistFrame"), frame_proc as Proc),
         ] {
-            let class = WNDCLASSW {
+            let class = WNDCLASSEXW {
+                cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
                 lpfnWndProc: Some(proc_),
                 hInstance: instance,
                 lpszClassName: name,
                 hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
                 hIcon: icon,
+                hIconSm: small,
                 ..Default::default()
             };
-            RegisterClassW(&class);
+            RegisterClassExW(&class);
         }
         let main = CreateWindowExW(
             WS_EX_TOPMOST,
