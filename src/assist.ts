@@ -157,7 +157,7 @@ export class AssistPanel {
   private readonly quality = h('span', { class: 'assist-quality muted small' });
   private readonly askBtn = h('button', { type: 'button', class: 'btn small', hidden: true }, icon('pointer', 14), t('Ask for control', 'Demander le contrôle')) as HTMLButtonElement;
   private readonly chatBtn = h('button', { type: 'button', class: 'btn small', hidden: true, 'aria-expanded': 'false' }, icon('chat', 14), t('Chat', 'Discussion')) as HTMLButtonElement;
-  private readonly fileBtn = h('button', { type: 'button', class: 'btn small', hidden: true, title: t('The person accepts each file on their screen. You can also drop files or folders on the screen.', 'La personne accepte chaque fichier sur son écran. Vous pouvez aussi déposer des fichiers ou des dossiers sur l\'écran.') }, icon('upload', 14), t('Send a file', 'Envoyer un fichier')) as HTMLButtonElement;
+  private readonly fileBtn = h('button', { type: 'button', class: 'btn small', hidden: true }, icon('upload', 14), t('Send a file', 'Envoyer un fichier')) as HTMLButtonElement;
   /** Voile affiché pendant qu'on glisse des fichiers sur l'écran. */
   readonly drop = h('div', { class: 'assist-drop', hidden: true });
   private readonly cards = new Map<number, HTMLElement>();
@@ -171,12 +171,15 @@ export class AssistPanel {
   private reconnecting = false;
   private ended = '';
   private features: string[] = [];
+  /** Le programme de la personne a dit ce qu'il sait faire (début de session). */
+  private started = false;
   private asked = false;
 
   constructor(private readonly send: (m: AssistMessage) => Promise<void>, private readonly notify: (m: string, kind?: 'info' | 'error') => void, private readonly files: AssistFiles) {
     this.chatBtn.append(this.badge);
     this.bar.append(h('span', { class: 'assist-dot' }), this.status, this.quality, h('span', { class: 'spacer' }), this.askBtn, this.fileBtn, this.chatBtn);
     this.fileBtn.addEventListener('click', async () => {
+      if (this.fileBtn.getAttribute('aria-disabled') === 'true') return this.notify(this.fileBtn.title, 'error');
       const chosen = await pickFiles({ multiple: true, directory: false, title: t('Files to send to the person', 'Fichiers à envoyer à la personne') });
       const paths = chosen == null ? [] : Array.isArray(chosen) ? chosen : [chosen];
       if (paths.length) this.offer(paths);
@@ -199,7 +202,7 @@ export class AssistPanel {
 
   handle(e: AssistEvent) {
     switch (e.type) {
-      case 'debut': this.control = e.controle; this.features = e.fonctions; break;
+      case 'debut': this.control = e.controle; this.features = e.fonctions; this.started = true; break;
       case 'controle':
         if (this.asked && !e.actif) this.notify(t('The person declined to give control.', 'La personne a refusé de donner le contrôle.'));
         else if (e.actif !== this.control) this.notify(e.actif ? t('The person gave you control.', 'La personne vous a donné le contrôle.') : t('The person took back control: view only.', 'La personne a repris la main : vue seule.'));
@@ -325,7 +328,14 @@ export class AssistPanel {
     this.askBtn.hidden = !!this.ended || this.control || !this.features.includes('controle');
     this.askBtn.disabled = this.asked || this.paused || this.reconnecting;
     this.chatBtn.hidden = !this.features.includes('discussion');
-    this.fileBtn.hidden = !this.acceptsFiles();
+    // Programme de la personne trop ancien (avant 0.82) : le bouton reste visible, grisé, avec la raison.
+    const oldProgram = this.started && !this.ended && !this.features.includes('fichiers');
+    this.fileBtn.hidden = !this.acceptsFiles() && !oldProgram;
+    // Grisé mais cliquable : un clic dit pourquoi (une bulle ne s'affiche pas sur un bouton désactivé).
+    this.fileBtn.setAttribute('aria-disabled', String(oldProgram));
+    this.fileBtn.title = oldProgram
+      ? t('The person\'s Portunia Assistance is too old for files: they must download it again from the Gate page (version 0.82 or later).', 'Le Portunia Assistance de la personne est trop ancien pour les fichiers : elle doit le retélécharger depuis la page de la Gate (version 0.82 ou suivante).')
+      : t('The person accepts each file on their screen. You can also drop files or folders on the screen.', 'La personne accepte chaque fichier sur son écran. Vous pouvez aussi déposer des fichiers ou des dossiers sur l\'écran.');
     this.input.disabled = !!this.ended;
     if (this.ended) this.quality.textContent = '';
   }

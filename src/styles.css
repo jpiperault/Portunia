@@ -1108,6 +1108,7 @@ body.detached #relecture { height: 100vh; }
 .assist-pane { position: relative; }
 .assist-strip { flex: none; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 8px 3px 12px; background: var(--pane-head); border-bottom: 1px solid var(--line); font-size: 12.5px; }
 .assist-strip .spacer { flex: 1; }
+.assist-strip .btn[aria-disabled="true"] { opacity: .55; }
 .assist-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
 .assist-strip[data-state="on"] .assist-dot { background: #1d8a57; }
 .assist-strip[data-state="view"] .assist-dot { background: var(--accent); }

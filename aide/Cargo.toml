@@ -1,6 +1,6 @@
 [package]
 name = "portunia-assistance"
-version = "0.82.0"
+version = "0.82.1"
 description = "Portunia Assistance : programme de la personne aidée (assistance à distance)"
 
 edition = "2021"
