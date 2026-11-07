@@ -22,6 +22,7 @@ mod license;
 mod localfs;
 mod lock;
 mod monitor;
+mod multiexec;
 mod nettools;
 mod notes;
 mod recording;
@@ -234,7 +235,6 @@ pub fn run() {
             commands::credential_delete,
             commands::ext_list,
             commands::ext_call,
-            commands::multi_exec,
             commands::connect_with,
             commands::confirm_answer,
         ])

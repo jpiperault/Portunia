@@ -1,6 +1,6 @@
 [package]
 name = "portunia"
-version = "0.84.0"
+version = "0.85.0"
 description = "Gestionnaire de sessions distantes léger et extensible"
 edition = "2021"
 
@@ -46,7 +46,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["handshake"] }
 assist-proto = { path = "../assist-proto" }
 # Dossier envoyé dans l'assistance : mis en .zip.
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # Effacement de la clé du coffre en mémoire (vault.rs, toutes plateformes ; Touch ID sur macOS).
 zeroize = "1.9.1"
 

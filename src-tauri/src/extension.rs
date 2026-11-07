@@ -9,13 +9,21 @@
 //! le cœur vérifie le verrouillage et la licence de l'extension, puis lui passe l'appel.
 //! Une extension ne vérifie donc jamais la licence elle-même.
 
-use std::sync::Arc;
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use anyhow::{anyhow, Result};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 
-use crate::connector::{BoxFuture, RemoteExec};
+use crate::connector::{BoxFuture, ExecOutput, RemoteExec};
 use crate::license::Feature;
 
 /// Description d'une extension de fonction.
@@ -33,6 +41,49 @@ pub struct ExtManifest {
 pub trait Host: Send + Sync {
     /// Lance des commandes sur une connexion ouverte (SSH…).
     fn exec(&self, connection_id: &str) -> Result<Arc<dyn RemoteExec>>;
+    /// Session SSH enregistrée, prête pour des commandes (une connexion dédiée par commande,
+    /// sans terminal). Secrets, identifiants partagés et rebonds sont résolus par le cœur.
+    fn ssh_session(&self, session_id: &str) -> Result<Arc<dyn SessionExec>>;
+    /// Envoi d'évènements à l'interface (canal donné à `ext_call`).
+    fn events(&self) -> Result<Emit>;
+    /// Opération de fond qu'on peut arrêter depuis l'interface (net_cancel).
+    fn job(&self) -> Arc<Job>;
+    /// Lance une tâche de fond, qui peut durer après la réponse.
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>);
+}
+
+/// Session enregistrée qui lance des commandes.
+pub trait SessionExec: Send + Sync {
+    fn run(&self, command: String, timeout: Duration) -> BoxFuture<'_, ExecOutput>;
+}
+
+/// Évènements vers l'interface.
+pub type Emit = Arc<dyn Fn(Value) + Send + Sync>;
+
+/// Opération de fond : son identifiant, et l'arrêt demandé par l'interface.
+/// Elle disparaît de la liste des opérations quand la dernière copie est relâchée.
+pub struct Job {
+    pub id: String,
+    stop: Arc<AtomicBool>,
+    end: Option<Box<dyn FnOnce() + Send + Sync>>,
+}
+
+impl Job {
+    pub fn new(id: String, stop: Arc<AtomicBool>, end: impl FnOnce() + Send + Sync + 'static) -> Self {
+        Self { id, stop, end: Some(Box::new(end)) }
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.stop.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for Job {
+    fn drop(&mut self) {
+        if let Some(end) = self.end.take() {
+            end();
+        }
+    }
 }
 
 pub trait Extension: Send + Sync {
@@ -52,6 +103,7 @@ impl Extensions {
             list: vec![
                 Arc::new(crate::serverstats::Dashboard),
                 Arc::new(crate::containers::Containers),
+                Arc::new(crate::multiexec::MultiExec),
             ],
         }
     }
@@ -105,6 +157,18 @@ mod tests {
             }
             Ok(Arc::new(FakeExec(self.0)))
         }
+        fn ssh_session(&self, _: &str) -> Result<Arc<dyn SessionExec>> {
+            anyhow::bail!("aucune session")
+        }
+        fn events(&self) -> Result<Emit> {
+            anyhow::bail!("aucun canal")
+        }
+        fn job(&self) -> Arc<Job> {
+            Arc::new(Job::new("j".into(), Arc::new(AtomicBool::new(false)), || {}))
+        }
+        fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
+            tauri::async_runtime::block_on(task)
+        }
     }
 
     fn call(host: &dyn Host, ext: &str, method: &str, args: Value) -> Result<Value> {
@@ -119,6 +183,7 @@ mod tests {
         let m = exts.manifests();
         assert!(m.iter().any(|m| m.id == "dashboard" && m.feature == Some(Feature::ServerDashboard)));
         assert!(m.iter().any(|m| m.id == "containers" && m.feature == Some(Feature::Containers)));
+        assert!(m.iter().any(|m| m.id == "multiexec" && m.feature == Some(Feature::MultiExec)));
         assert!(exts.get("inconnue").is_none());
     }
 
@@ -134,5 +199,20 @@ mod tests {
         assert!(call(&host, "containers", "list", json!({})).is_err());
         assert!(call(&host, "dashboard", "effacer", json!({})).is_err());
         assert!(call(&host, "containers", "command", json!({ "kind": "docker", "what": "shell", "id": "x; rm -rf /" })).is_err());
+        // Commande sur plusieurs serveurs : sans canal d'évènements, refusée.
+        assert!(call(&host, "multiexec", "run", json!({ "sessionIds": ["s1"], "command": "uptime" })).is_err());
+        assert!(call(&host, "multiexec", "run", json!({ "sessionIds": ["s1"], "command": "  " })).is_err());
+    }
+
+    #[test]
+    fn fin_d_operation() {
+        let ended = Arc::new(AtomicBool::new(false));
+        let flag = ended.clone();
+        let job = Arc::new(Job::new("j".into(), Arc::new(AtomicBool::new(false)), move || flag.store(true, Ordering::Relaxed)));
+        let copy = job.clone();
+        drop(job);
+        assert!(!ended.load(Ordering::Relaxed));
+        drop(copy);
+        assert!(ended.load(Ordering::Relaxed));
     }
 }

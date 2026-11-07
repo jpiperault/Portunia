@@ -655,8 +655,11 @@ export interface ServerStats {
 
 export interface ExtInfo { id: string; name: string; feature: string | null; allowed: boolean }
 export const extList = () => invoke<ExtInfo[]>('ext_list');
-export const extCall = <T>(extension: string, method: string, args: Record<string, unknown> = {}) =>
-  invoke<T>('ext_call', { extension, method, args });
+export function extCall<T>(extension: string, method: string, args: Record<string, unknown> = {}, onEvent?: (e: any) => void) {
+  const channel = new Channel<unknown>();
+  if (onEvent) channel.onmessage = onEvent;
+  return invoke<T>('ext_call', { extension, method, args, onEvent: channel });
+}
 
 export const serverStats = (connectionId: string) => extCall<ServerStats>('dashboard', 'stats', { connectionId });
 
@@ -667,11 +670,8 @@ export type MultiEvent =
   | { type: 'failed'; sessionId: string; error: string; ms: number }
   | { type: 'done'; ok: number; failed: number };
 
-export function multiExec(sessionIds: string[], command: string, timeoutSecs: number, onEvent: (e: MultiEvent) => void) {
-  const channel = new Channel<MultiEvent>();
-  channel.onmessage = onEvent;
-  return invoke<string>('multi_exec', { sessionIds, command, timeoutSecs, onEvent: channel });
-}
+export const multiExec = (sessionIds: string[], command: string, timeoutSecs: number, onEvent: (e: MultiEvent) => void) =>
+  extCall<string>('multiexec', 'run', { sessionIds, command, timeoutSecs }, onEvent);
 
 // ---------- Conteneurs ----------
 

@@ -1712,11 +1712,65 @@ fn exec_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteExe
 // ---------- Extensions de fonction (voir extension.rs) ----------
 
 /// Ce que le cœur prête aux extensions de fonction.
-struct StateHost<'a>(&'a AppState);
+struct StateHost<'a> {
+    state: &'a AppState,
+    app: AppHandle,
+    events: Option<Channel<Value>>,
+}
+
+/// Session SSH enregistrée, valeurs résolues : une connexion dédiée par commande.
+struct SavedSsh {
+    app: AppHandle,
+    name: String,
+    values: HashMap<String, Value>,
+    data_dir: PathBuf,
+}
+
+impl crate::extension::SessionExec for SavedSsh {
+    fn run(&self, command: String, timeout: std::time::Duration) -> crate::connector::BoxFuture<'_, crate::connector::ExecOutput> {
+        Box::pin(async move {
+            let ctx = ConnectContext {
+                app: self.app.clone(), session_name: self.name.clone(), values: self.values.clone(), cols: 80, rows: 24,
+                sink: Arc::new(crate::connectors::ssh::QuietSink), data_dir: self.data_dir.clone(),
+            };
+            crate::connectors::ssh::run_command(&ctx, &command, timeout).await
+        })
+    }
+}
 
 impl crate::extension::Host for StateHost<'_> {
     fn exec(&self, connection_id: &str) -> anyhow::Result<Arc<dyn RemoteExec>> {
-        exec_of(self.0, connection_id).map_err(|e| anyhow::anyhow!(e))
+        exec_of(self.state, connection_id).map_err(|e| anyhow::anyhow!(e))
+    }
+
+    fn ssh_session(&self, session_id: &str) -> anyhow::Result<Arc<dyn crate::extension::SessionExec>> {
+        let state = self.state;
+        let session = state.store.lock().unwrap().get(session_id).ok_or_else(|| anyhow::anyhow!(t!("Session not found", "Session introuvable")))?;
+        if session.protocol != "ssh" {
+            anyhow::bail!("{}", t!(format!("« {} » is not an SSH session", session.name), format!("« {} » n'est pas une session SSH", session.name)));
+        }
+        let mut values = session_values(state, &session).map_err(|e| anyhow::anyhow!(e))?;
+        resolve_jump(state, &mut values, &mut Vec::new()).map_err(|e| anyhow::anyhow!(e))?;
+        Ok(Arc::new(SavedSsh { app: self.app.clone(), name: session.name, values, data_dir: state.data_dir.clone() }))
+    }
+
+    fn events(&self) -> anyhow::Result<crate::extension::Emit> {
+        let channel = self.events.clone().ok_or_else(|| anyhow::anyhow!(t!("This call needs an event channel", "Cet appel demande un canal d'évènements")))?;
+        Ok(Arc::new(move |v| {
+            let _ = channel.send(v);
+        }))
+    }
+
+    fn job(&self) -> Arc<crate::extension::Job> {
+        let (id, stop) = net_job();
+        let key = id.clone();
+        Arc::new(crate::extension::Job::new(id, stop, move || {
+            NET_JOBS.lock().unwrap().remove(&key);
+        }))
+    }
+
+    fn spawn(&self, task: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>) {
+        tauri::async_runtime::spawn(task);
     }
 }
 
@@ -1740,109 +1794,22 @@ pub fn ext_list(state: State<'_, AppState>) -> Vec<ExtInfo> {
 
 /// Seule entrée des extensions de fonction : verrouillage et licence vérifiés ici, une fois.
 #[tauri::command]
-pub async fn ext_call(state: State<'_, AppState>, extension: String, method: String, args: Value) -> CmdResult<Value> {
+pub async fn ext_call(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    extension: String,
+    method: String,
+    args: Value,
+    on_event: Channel<Value>,
+) -> CmdResult<Value> {
     state.unlocked()?;
     let ext = state.extensions.get(&extension).ok_or_else(|| t!(format!("Unknown extension: {extension}"), format!("Extension inconnue : {extension}")))?;
     if let Some(feature) = ext.manifest().feature {
         state.license.lock().unwrap().require(feature).map_err(full)?;
     }
-    let host = StateHost(&state);
+    // Le canal est toujours fourni ; seules les méthodes qui en ont besoin s'en servent.
+    let host = StateHost { state: &state, app, events: Some(on_event) };
     ext.call(&host, &method, args).await.map_err(full)
-}
-
-// ---------- Commande sur plusieurs serveurs (Pro) ----------
-
-#[derive(Serialize, Clone)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum MultiEvent {
-    #[serde(rename_all = "camelCase")]
-    Result { session_id: String, status: Option<u32>, stdout: String, stderr: String, ms: u64 },
-    #[serde(rename_all = "camelCase")]
-    Failed { session_id: String, error: String, ms: u64 },
-    Done { ok: usize, failed: usize },
-}
-
-/// Serveurs interrogés en même temps.
-const MULTI_PARALLEL: usize = 8;
-
-/// Lance `command` sur chaque session SSH (connexion dédiée, sans terminal).
-/// Renvoie l'identifiant de l'opération (arrêt : net_cancel).
-#[tauri::command]
-pub fn multi_exec(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    session_ids: Vec<String>,
-    command: String,
-    timeout_secs: Option<u64>,
-    on_event: Channel<MultiEvent>,
-) -> CmdResult<String> {
-    state.unlocked()?;
-    state.license.lock().unwrap().require(Feature::MultiExec).map_err(full)?;
-    if command.trim().is_empty() {
-        return Err(t!("Give a command", "Indiquez une commande").into());
-    }
-    // Valeurs préparées tout de suite (secrets, identifiants partagés, Gates) : erreurs par serveur.
-    let mut targets = Vec::new();
-    for id in &session_ids {
-        let prepared = (|| -> CmdResult<(String, HashMap<String, Value>)> {
-            let session = state.store.lock().unwrap().get(id).ok_or(t!("Session not found", "Session introuvable"))?;
-            if session.protocol != "ssh" {
-                return Err(format!("« {} » n'est pas une session SSH", session.name));
-            }
-            let mut values = session_values(&state, &session)?;
-            resolve_jump(&state, &mut values, &mut Vec::new())?;
-            Ok((session.name, values))
-        })();
-        targets.push((id.clone(), prepared));
-    }
-    let (job, stop) = net_job();
-    let job_id = job.clone();
-    let data_dir = state.data_dir.clone();
-    let timeout = std::time::Duration::from_secs(timeout_secs.unwrap_or(60).clamp(5, 3600));
-    tauri::async_runtime::spawn(async move {
-        let limit = Arc::new(tokio::sync::Semaphore::new(MULTI_PARALLEL));
-        let mut set = tokio::task::JoinSet::new();
-        for (session_id, prepared) in targets {
-            let (limit, stop, app, data_dir, command, channel) = (limit.clone(), stop.clone(), app.clone(), data_dir.clone(), command.clone(), on_event.clone());
-            set.spawn(async move {
-                let _permit = limit.acquire_owned().await;
-                let started = std::time::Instant::now();
-                if stop.load(std::sync::atomic::Ordering::Relaxed) {
-                    let _ = channel.send(MultiEvent::Failed { session_id, error: t!("Cancelled", "Annulé").into(), ms: 0 });
-                    return false;
-                }
-                let result = match prepared {
-                    Err(e) => Err(e),
-                    Ok((name, values)) => {
-                        let ctx = ConnectContext {
-                            app, session_name: name, values, cols: 80, rows: 24,
-                            sink: Arc::new(crate::connectors::ssh::QuietSink), data_dir,
-                        };
-                        crate::connectors::ssh::run_command(&ctx, &command, timeout).await.map_err(full)
-                    }
-                };
-                let ms = started.elapsed().as_millis() as u64;
-                match result {
-                    Ok(out) => {
-                        let ok = out.status == Some(0);
-                        let _ = channel.send(MultiEvent::Result { session_id, status: out.status, stdout: out.stdout, stderr: out.stderr, ms });
-                        ok
-                    }
-                    Err(error) => {
-                        let _ = channel.send(MultiEvent::Failed { session_id, error, ms });
-                        false
-                    }
-                }
-            });
-        }
-        let (mut ok, mut failed) = (0, 0);
-        while let Some(r) = set.join_next().await {
-            if r.unwrap_or(false) { ok += 1 } else { failed += 1 }
-        }
-        NET_JOBS.lock().unwrap().remove(&job);
-        let _ = on_event.send(MultiEvent::Done { ok, failed });
-    });
-    Ok(job_id)
 }
 
 /// Session enregistrée ouverte avec des valeurs en plus (ex. remoteCommand pour un conteneur).
