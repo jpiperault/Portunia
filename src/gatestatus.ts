@@ -170,7 +170,7 @@ export function renderGateStatus(b: Gate, host: StatusHost): HTMLElement {
       row(t('Oldest recording', 'Plus ancien enregistrement'), rec.plus_ancien ? new Date(rec.plus_ancien).toLocaleDateString(LOCALE) : '—'),
       row(t('Rate', 'Rythme'), st.par_jour != null ? t(`+${bytes(st.par_jour)} per day`, `+${bytes(st.par_jour)} par jour`) : '—'),
       fullIn != null ? row(t('Disk full in', 'Disque plein dans'), t(`about ${fullIn} days`, `environ ${fullIn} jours`), fullIn < 14 ? 'alerte' : '') : null,
-      retentionRow(st.conservation_jours ?? 0));
+      keepRow(KEEP_RECORDINGS, st.conservation_jours ?? 0));
 
     const journal = d.journal;
     const activity = card(t('Activity and integrity', 'Activité et intégrité'),
@@ -181,35 +181,48 @@ export function renderGateStatus(b: Gate, host: StatusHost): HTMLElement {
       journal
         ? row(t('Signed audit log', 'Journal signé'), journal.ok ? t(`intact · checked ${when(journal.verifie_le)}`, `intact · vérifié le ${when(journal.verifie_le)}`) : t(`TAMPERED: ${journal.erreur ?? ''}`, `ALTÉRÉ : ${journal.erreur ?? ''}`), journal.ok ? 'ok' : 'erreur')
         : row(t('Signed audit log', 'Journal signé'), t('checked a few minutes after start', 'vérifié quelques minutes après le démarrage')),
+      d.journal_jours !== undefined ? keepRow(KEEP_JOURNAL, d.journal_jours ?? 0) : null,
+      d.journal_purge ? row(t('Last purge', 'Dernière purge'), t(`${d.journal_purge.supprimes} events · ${when(d.journal_purge.date)} · chain from #${d.journal_purge.depuis}`, `${d.journal_purge.supprimes} événements · ${when(d.journal_purge.date)} · chaîne depuis le n° ${d.journal_purge.depuis}`)) : null,
       d.reseau ? row(t('Network', 'Réseau'), `↓ ${bytes(d.reseau.recu_s)}/s ↑ ${bytes(d.reseau.envoye_s)}/s`) : null);
 
     root.replaceChildren(...nn(head, alerts, updateCard(up), tiles, h('div', { class: 'gs-grid' }, services, storage, activity)));
   };
 
-  // --- Conservation des enregistrements ---
-  const retentionRow = (days: number) => {
+  // --- Conservation des enregistrements et du journal ---
+  type Keep = { key: 'conservation_jours' | 'journal_jours'; label: string; cli: string; choices: number[]; ask: (v: number) => string; done: (v: number) => string };
+  const KEEP_RECORDINGS: Keep = {
+    key: 'conservation_jours', label: t('Keep recordings', 'Garder les enregistrements'), cli: 'recording_days', choices: [0, 30, 90, 180, 365, 730, 1825],
+    ask: (v) => t(`Delete the recordings of sessions ended more than ${v} days ago, now and then every hour? The sessions stay in the list.`, `Supprimer les enregistrements des sessions terminées depuis plus de ${v} jours, maintenant puis chaque heure ? Les sessions restent dans la liste.`),
+    done: (v) => v ? t(`Recordings kept ${v} days`, `Enregistrements gardés ${v} jours`) : t('Recordings kept forever', 'Enregistrements gardés toujours'),
+  };
+  const KEEP_JOURNAL: Keep = {
+    key: 'journal_jours', label: t('Keep the audit log', 'Garder le journal'), cli: 'audit_days', choices: [0, 90, 180, 365, 730, 1825, 3650],
+    ask: (v) => t(`Delete the audit log events older than ${v} days, now and then every day? The chain is checked first; a signed anchor keeps it verifiable.`, `Supprimer les événements du journal de plus de ${v} jours, maintenant puis chaque jour ? La chaîne est vérifiée avant ; une ancre signée la garde vérifiable.`),
+    done: (v) => v ? t(`Audit log kept ${v} days`, `Journal gardé ${v} jours`) : t('Audit log kept forever', 'Journal gardé toujours'),
+  };
+  const daysText = (v: number) => v === 0 ? t('forever', 'toujours') : v % 365 === 0 ? t(`${v / 365} year${v > 365 ? 's' : ''}`, `${v / 365} an${v > 365 ? 's' : ''}`) : t(`${v} days`, `${v} jours`);
+  const keepRow = (k: Keep, days: number) => {
     if (!host.allowsSettings()) {
-      return row(t('Keep recordings', 'Garder les enregistrements'), h('span', { title: t('On the server: sudo portunia-gate setting recording_days DAYS', 'Sur le serveur : sudo portunia-gate setting recording_days JOURS') }, days ? t(`${days} days`, `${days} jours`) : t('forever', 'toujours')));
+      return row(k.label, h('span', { title: t(`On the server: sudo portunia-gate setting ${k.cli} DAYS`, `Sur le serveur : sudo portunia-gate setting ${k.cli} JOURS`) }, daysText(days)));
     }
-    const choices: [number, string][] = [[0, t('forever', 'toujours')], [30, t('30 days', '30 jours')], [90, t('90 days', '90 jours')], [180, t('180 days', '180 jours')], [365, t('1 year', '1 an')], [730, t('2 years', '2 ans')], [1825, t('5 years', '5 ans')]];
-    if (!choices.some(([v]) => v === days)) choices.push([days, t(`${days} days`, `${days} jours`)]);
-    const sel = h('select', { class: 'input sm', 'aria-label': t('Keep recordings', 'Garder les enregistrements') }, ...choices.map(([v, l]) => h('option', { value: String(v), selected: v === days }, l))) as HTMLSelectElement;
+    const choices = k.choices.includes(days) ? k.choices : [...k.choices, days];
+    const sel = h('select', { class: 'input sm', 'aria-label': k.label }, ...choices.map((v) => h('option', { value: String(v), selected: v === days }, daysText(v)))) as HTMLSelectElement;
     sel.addEventListener('focus', () => { confirmOpen = true; });
     sel.addEventListener('blur', () => { confirmOpen = false; });
     sel.addEventListener('change', async () => {
       const v = Number(sel.value);
-      if (v > 0 && !confirm(t(`Delete the recordings of sessions ended more than ${v} days ago, now and then every hour? The sessions stay in the list.`, `Supprimer les enregistrements des sessions terminées depuis plus de ${v} jours, maintenant puis chaque heure ? Les sessions restent dans la liste.`))) {
+      if (v > 0 && !confirm(k.ask(v))) {
         sel.value = String(days);
         return;
       }
       try {
-        await call('PUT', '/admin/reglages', { conservation_jours: v });
-        host.toast(v ? t(`Recordings kept ${v} days`, `Enregistrements gardés ${v} jours`) : t('Recordings kept forever', 'Enregistrements gardés toujours'));
+        await call('PUT', '/admin/reglages', { [k.key]: v });
+        host.toast(k.done(v));
         confirmOpen = false;
         schedule(1500);
       } catch (e) { host.toast(errorText(e), 'error'); sel.value = String(days); }
     });
-    return row(t('Keep recordings', 'Garder les enregistrements'), sel);
+    return row(k.label, sel);
   };
 
   // --- Mise à jour ---

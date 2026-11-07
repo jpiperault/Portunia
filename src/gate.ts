@@ -1433,6 +1433,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const copies = r.copies_fichiers_mo === undefined ? null : input({ id: 's-copies', type: 'number', min: 0, max: 10240, value: String(r.copies_fichiers_mo) });
       // Gate 0.39 et suivantes : jours de conservation des enregistrements (0 : toujours).
       const retention = r.conservation_jours === undefined ? null : input({ id: 's-retention', type: 'number', min: 0, max: 36500, value: String(r.conservation_jours) });
+      const journalDays = r.journal_jours === undefined ? null : input({ id: 's-journal-days', type: 'number', min: 0, max: 36500, value: String(r.journal_jours) });
       const notificationsBlock = (n: any) => {
         const host_ = input({ id: 'n-host', value: n.smtp_hote, placeholder: 'smtp.exemple.fr' });
         const port = input({ id: 'n-port', type: 'number', min: 1, max: 65535, value: String(n.smtp_port || 587) });
@@ -1483,6 +1484,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
             ...(notice ? { direct_prevenir: notice.box.checked } : {}),
             ...(copies ? { copies_fichiers_mo: Number(copies.value) || 0 } : {}),
             ...(retention ? { conservation_jours: Number(retention.value) || 0 } : {}),
+            ...(journalDays ? { journal_jours: Number(journalDays.value) || 0 } : {}),
           });
           host.toast(t('Settings saved', 'Réglages enregistrés'));
         } catch (e) { fail(e); }
@@ -1498,6 +1500,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         own.row,
         notice ? notice.row : null,
         retention ? field(t('Keep recordings (days)', 'Garder les enregistrements (jours)'), retention, t('0: forever; otherwise the recordings of sessions ended earlier are deleted every hour (the sessions stay in the list)', '0 : toujours ; sinon les enregistrements des sessions terminées avant sont supprimés chaque heure (les sessions restent dans la liste)')) : null,
+        journalDays ? field(t('Keep the audit log (days)', 'Garder le journal d\'audit (jours)'), journalDays, t('0: forever; otherwise at least 90, older events are deleted every day after checking the chain', '0 : toujours ; sinon au moins 90, les événements plus anciens sont supprimés chaque jour après vérification de la chaîne')) : null,
         field(t('Sensitive commands', 'Commandes sensibles'), sensitive, t('one per line; marked in red on the player\'s timeline', 'une par ligne ; repérées en rouge sur la barre de temps du lecteur')),
         copies ? h('h3', {}, t('Remote Desktop file copy', 'Copie de fichiers en Bureau à distance')) : null,
         copies ? field(t('Copies kept per session (MB)', 'Copies gardées par session (Mo)'), copies, t('0: none, only name, size and SHA-256 are logged; otherwise the files copied, up to this size, next to the recording', '0 : aucune, seuls nom, taille et SHA-256 sont tracés ; sinon les fichiers copiés, jusqu\'à cette taille, à côté de l\'enregistrement')) : null,
