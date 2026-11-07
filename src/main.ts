@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, assistSend, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
+import { api, assistFile, assistOffer, assistSend, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
 import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
 import { ProxmoxPanel, PROXMOX_EXTENSION } from './proxmox';
 import { ASSIST_EXTENSION, AssistPanel, openAssistDialog } from './assist';
@@ -326,6 +326,9 @@ async function openGateDesktop(b: Gate, s: GateServer) {
  * Assistance à distance : écran de la personne aidée dans un onglet Bureau à distance, à travers
  * le relais de la Gate (chiffré de bout en bout par le code qu'elle a lu).
  */
+/** Bandeau d'assistance de chaque onglet (fichiers déposés sur l'écran). */
+const assistPanels = new WeakMap<HTMLElement, AssistPanel>();
+
 function openAssist(b: Gate, code: string) {
   const session: Session = {
     id: '', name: tr(`Assistance · ${code}`, `Assistance · ${code}`), folder: '', protocol: 'rdp', tags: [], secretKeys: [],
@@ -333,7 +336,10 @@ function openAssist(b: Gate, code: string) {
   };
   // Bandeau de l'onglet : contrôle, pause, qualité, discussion.
   const assist = crypto.randomUUID();
-  const panel = new AssistPanel((m) => assistSend(assist, m), toast);
+  const panel = new AssistPanel((m) => assistSend(assist, m), toast, {
+    offer: (paths) => assistOffer(assist, paths),
+    file: (id, dest) => assistFile(assist, id, dest),
+  });
   const onAssist = (e: any) => panel.handle(e);
   const connect = async (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
     try {
@@ -347,7 +353,8 @@ function openAssist(b: Gate, code: string) {
   const decorate = (view: HTMLElement, screen: HTMLElement) => {
     view.classList.add('assist-pane');
     view.insertBefore(panel.bar, screen);
-    view.append(panel.chat);
+    view.append(panel.chat, panel.drop);
+    assistPanels.set(view, panel);
   };
   return openSession(session, undefined, { connect, typing: false, decorate });
 }
@@ -1574,6 +1581,13 @@ function overFiles(pos: { x: number; y: number }) {
   return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
 }
 getCurrentWebview().onDragDropEvent(({ payload }) => {
+  // Assistance : fichiers ou dossiers déposés sur l'écran = proposés à la personne aidée.
+  const view = activeTab()?.view;
+  const assistPanel = view ? assistPanels.get(view) : undefined;
+  if (assistPanel?.acceptsFiles()) {
+    if (payload.type === 'drop') return assistPanel.offer(payload.paths);
+    return assistPanel.setDropping(payload.type !== 'leave');
+  }
   const files = activeTab()?.files;
   // Bureau à distance : fichiers déposés sur l'écran = mis au presse-papiers de la session.
   const screen = activeTab()?.screen;

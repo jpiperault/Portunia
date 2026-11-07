@@ -7,9 +7,10 @@
 //!   (message de confirmation), sans que le relais ni un tiers puisse le deviner hors ligne.
 //!   Trois essais au plus côté personne aidée, qui change ensuite de code.
 //! - **Chiffrement** ChaCha20-Poly1305, une clé par sens, nonce = compteur de messages.
-//!   Chaque message porte une sorte : contrôle (JSON) ou données (flux RDP).
+//!   Chaque message porte une sorte : contrôle (JSON), données (flux RDP) ou morceau de fichier.
 
 pub mod link;
+pub mod transfer;
 pub use link::Link;
 
 use chacha20poly1305::{aead::Aead, ChaCha20Poly1305, KeyInit, Nonce};
@@ -160,6 +161,8 @@ pub enum Kind {
     Control = 0,
     /// Données : flux RDP.
     Data = 1,
+    /// Morceau de fichier (voir [`transfer`]) ; seulement si l'autre côté annonce « fichiers ».
+    File = 2,
 }
 
 /// Chiffre les messages envoyés (un compteur par sens : un message rejoué ou réordonné est refusé).
@@ -195,6 +198,7 @@ impl Opener {
         let kind = match plain.remove(0) {
             0 => Kind::Control,
             1 => Kind::Data,
+            2 => Kind::File,
             _ => return Err(Error::Tampered),
         };
         Ok((kind, plain))

@@ -5,8 +5,11 @@
 //!     coupure) ; avec --coupure N, il coupe les deux côtés une fois, N secondes après la mise en
 //!     relation, pour éprouver la reprise.
 //!   cargo run --example essai_liaison -- depanneur ws://127.0.0.1:18555 "483 216 907" 13391 [--message TEXTE] [--demande-controle]
+//!       [--envoyer FICHIER] [--recevoir DOSSIER] [--limite OCTETS]
 //!     côté dépanneur, comme Portunia : liaison avec accusés et reprise, puis serveur RDP local
-//!     relayé sur le port donné (y connecter un client RDP).
+//!     relayé sur le port donné (y connecter un client RDP). --envoyer propose un fichier à la
+//!     personne aidée ; --recevoir range ce qu'elle envoie (accepté d'office) ; --limite annonce la
+//!     taille maximale d'un fichier (offre gratuite : 104857600).
 
 use std::{
     collections::HashMap,
@@ -14,7 +17,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use assist_proto::{Code, Handshake, Kind, Link, Role};
+use assist_proto::{
+    transfer::{Outgoing, Transfers},
+    Code, Handshake, Kind, Link, Role,
+};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -201,7 +207,13 @@ async fn resume(base: &str, place: &str, token: &str, link: &mut Link) -> Option
     None
 }
 
-async fn helper_main(base: String, code: Code, port: u16, message: Option<String>, ask: bool) {
+struct Files {
+    send: Option<String>,
+    dir: Option<String>,
+    limit: Option<u64>,
+}
+
+async fn helper_main(base: String, code: Code, port: u16, message: Option<String>, ask: bool, files: Files) {
     let (mut ws, _) = tokio_tungstenite::connect_async(format!("{base}/api/v1/assistance/{}", code.nameplate)).await.unwrap();
     let token = loop {
         if let Some(Ok(Message::Text(t))) = ws.next().await {
@@ -226,8 +238,18 @@ async fn helper_main(base: String, code: Code, port: u16, message: Option<String
         }
     };
     println!("ACCORD {accord}");
-    let f = link.seal(Kind::Control, json!({ "type": "fonctions", "liste": ["liaison", "discussion", "pause", "controle", "reprise"] }).to_string().as_bytes());
+    let f = link.seal(Kind::Control, json!({ "type": "fonctions", "liste": ["liaison", "discussion", "pause", "controle", "reprise", "fichiers"], "fichiers_max": files.limit }).to_string().as_bytes());
     ws.send(Message::Binary(f.into())).await.unwrap();
+    let mut transfers = Transfers::new(Role::Helper, files.dir.clone().unwrap_or_else(|| std::env::temp_dir().join("essai-recus").to_string_lossy().into_owned()).into(), files.limit, true);
+    if let Some(p) = &files.send {
+        match transfers.offer(std::path::Path::new(p)) {
+            Ok(o) => {
+                let f = link.seal(Kind::Control, o.to_string().as_bytes());
+                ws.send(Message::Binary(f.into())).await.unwrap();
+            }
+            Err(e) => println!("FICHIER refusé avant envoi : {e:?}"),
+        }
+    }
     if let Some(m) = message {
         let f = link.seal(Kind::Control, json!({ "type": "message", "texte": m }).to_string().as_bytes());
         ws.send(Message::Binary(f.into())).await.unwrap();
@@ -249,6 +271,7 @@ async fn helper_main(base: String, code: Code, port: u16, message: Option<String
     'session: loop {
         let lost = loop {
             tokio::select! {
+                biased;
                 n = rd.read(&mut buf) => match n {
                     Ok(0) | Err(_) => {
                         let fin = link.seal(Kind::Control, json!({ "type": "fin" }).to_string().as_bytes());
@@ -269,6 +292,19 @@ async fn helper_main(base: String, code: Code, port: u16, message: Option<String
                             let v: Value = serde_json::from_slice(&c).unwrap_or(Value::Null);
                             if v["type"] == "recu" { link.acked(v["n"].as_u64().unwrap_or(0)); } else { println!("CONTRÔLE {v}"); }
                             if v["type"] == "fin" { break 'session; }
+                            if v["type"].as_str().is_some_and(|t| t.starts_with("fichier_")) {
+                                if let Some(r) = transfers.on_control(&v) {
+                                    let f = link.seal(Kind::Control, r.to_string().as_bytes());
+                                    if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                                }
+                            }
+                        }
+                        Ok((Kind::File, d)) => {
+                            if let Some(r) = transfers.on_data(&d) {
+                                let f = link.seal(Kind::Control, r.to_string().as_bytes());
+                                if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                            }
+                            if let Some(a) = link.take_ack() { if tx.send(Message::Binary(a.into())).await.is_err() { break true; } }
                         }
                         Err(e) => { println!("ALTÉRÉ {e}"); break 'session; }
                     },
@@ -278,9 +314,19 @@ async fn helper_main(base: String, code: Code, port: u16, message: Option<String
                 },
                 _ = tick.tick() => {
                     if let Some(a) = link.take_ack() { if tx.send(Message::Binary(a.into())).await.is_err() { break true; } }
+                    for c in transfers.take_changes() {
+                        println!("FICHIER {} {} {}/{} {:?} {:?}", c.id, c.name, c.done, c.size, c.state, c.problem);
+                    }
                     if last.elapsed() >= Duration::from_secs(2) {
                         last = Instant::now();
                         println!("DÉBIT {:.0} Ko/s reçus, aller-retour {:?}", down as f64 / 1024.0 / started.elapsed().as_secs_f64(), link.rtt());
+                    }
+                }
+                // Fichier : seulement dans la place que l'image laisse libre.
+                _ = std::future::ready(()), if transfers.sending() && link.flow && link.in_flight() + 64 * 1024 <= link.window() / 2 => {
+                    if let Some(o) = transfers.next() {
+                        let f = match o { Outgoing::Data(d) => link.seal(Kind::File, &d), Outgoing::Control(c) => link.seal(Kind::Control, c.to_string().as_bytes()) };
+                        if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
                     }
                 }
             }
@@ -309,7 +355,8 @@ async fn main() {
     match args.get(1).map(String::as_str) {
         Some("relais") => relay_main(args[2].parse().unwrap(), opt("--coupure").and_then(|v| v.parse().ok())).await,
         Some("depanneur") => {
-            helper_main(args[2].clone(), Code::parse(&args[3]).expect("code"), args[4].parse().unwrap(), opt("--message"), args.iter().any(|a| a == "--demande-controle")).await
+            let files = Files { send: opt("--envoyer"), dir: opt("--recevoir"), limit: opt("--limite").and_then(|v| v.parse().ok()) };
+            helper_main(args[2].clone(), Code::parse(&args[3]).expect("code"), args[4].parse().unwrap(), opt("--message"), args.iter().any(|a| a == "--demande-controle"), files).await
         }
         _ => eprintln!("relais PORT [--coupure N] | depanneur URL CODE PORT [--message T] [--demande-controle]"),
     }

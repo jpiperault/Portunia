@@ -1,13 +1,15 @@
 //! Fenêtres de Portunia Assist (Windows), dessinées avec Direct2D :
 //! - la fenêtre principale (code, accord, fin), dans le style de Windows 11 ;
 //! - pendant la session, une barre flottante en haut de l'écran (qui, depuis quand, qualité,
-//!   pause, contrôle, discussion, Arrêter), la fenêtre de discussion, et un cadre de couleur
-//!   autour de l'écran. Les trois sont absents de l'image envoyée au dépanneur.
+//!   pause, contrôle, discussion, fichiers, Arrêter), les fenêtres de discussion et de fichiers,
+//!   et un cadre de couleur autour de l'écran. Toutes sont absentes de l'image envoyée au
+//!   dépanneur, et ignorent les clics et les touches qu'il envoie.
 //! Échap trois fois de suite arrête aussi tout.
 
 use std::{
     cell::RefCell,
     collections::HashMap,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, AtomicIsize, Ordering},
         mpsc, Arc, Mutex, OnceLock,
@@ -46,6 +48,8 @@ use windows::{
     },
 };
 
+use assist_proto::transfer::{Problem, Snapshot, State as FileState, ANSWER_FOR};
+
 use crate::relay::{Command, Event, Summary};
 
 // ---------- État partagé avec la session ----------
@@ -74,6 +78,31 @@ struct SessionView {
     /// (message de la personne ?, texte)
     messages: Vec<(bool, String)>,
     unread: bool,
+    /// Fichiers de la session ; Portunia sait-il en échanger ? taille maximale ; pastille.
+    files: Vec<Snapshot>,
+    files_on: bool,
+    files_limit: Option<u64>,
+    files_badge: bool,
+}
+
+impl SessionView {
+    fn new(who: &str, control: bool) -> Self {
+        Self {
+            who: who.into(),
+            control,
+            paused: false,
+            since: Instant::now(),
+            rtt: None,
+            reconnecting: false,
+            asking: false,
+            messages: Vec::new(),
+            unread: false,
+            files: Vec::new(),
+            files_on: false,
+            files_limit: None,
+            files_badge: false,
+        }
+    }
 }
 
 struct Shared {
@@ -90,10 +119,13 @@ static FRAME: AtomicIsize = AtomicIsize::new(0);
 static BAR: AtomicIsize = AtomicIsize::new(0);
 static CHAT: AtomicIsize = AtomicIsize::new(0);
 static EDIT: AtomicIsize = AtomicIsize::new(0);
+static FILES: AtomicIsize = AtomicIsize::new(0);
 static DARK: AtomicBool = AtomicBool::new(false);
 /// Démonstration : fenêtres photographiables (pas d'exclusion de la capture).
 static DEMO: AtomicBool = AtomicBool::new(false);
 const WM_APP_UPDATE: u32 = WM_APP + 1;
+/// Un fichier est proposé : la fenêtre des fichiers s'ouvre (posté à la barre).
+const WM_APP_FILES: u32 = WM_APP + 3;
 const WM_MOUSELEAVE: u32 = 0x02a3;
 const EM_LIMITTEXT: u32 = 0x00c5;
 const TIMER: usize = 1;
@@ -102,6 +134,7 @@ const TIMER: usize = 1;
 const MAIN_W: f32 = 440.0;
 const CHAT_W: f32 = 340.0;
 const CHAT_H: f32 = 400.0;
+const FILES_W: f32 = 360.0;
 const BAR_H: f32 = 46.0;
 const CONSENT_FOR: Duration = Duration::from_secs(60);
 
@@ -183,20 +216,11 @@ impl crate::relay::Ui for WindowUi {
         rx.recv().ok().flatten()
     }
     fn connected(&mut self, who: &str, control: bool) {
-        *shared().session.lock().unwrap() = SessionView {
-            who: who.into(),
-            control,
-            paused: false,
-            since: Instant::now(),
-            rtt: None,
-            reconnecting: false,
-            asking: false,
-            messages: Vec::new(),
-            unread: false,
-        };
+        *shared().session.lock().unwrap() = SessionView::new(who, control);
         set(Screen::Session);
     }
     fn event(&mut self, event: Event) {
+        let mut open_files = false;
         {
             let mut s = shared().session.lock().unwrap();
             match event {
@@ -212,11 +236,32 @@ impl crate::relay::Ui for WindowUi {
                 Event::Paused(on) => s.paused = on,
                 Event::Reconnecting(on) => s.reconnecting = on,
                 Event::Quality(rtt) => s.rtt = Some(rtt),
+                Event::Files(list, limit) => {
+                    let was = |id: u32, st: FileState| s.files.iter().any(|o| o.id == id && o.state == st);
+                    let asked = list.iter().any(|f| f.state == FileState::Asking && !was(f.id, FileState::Asking));
+                    let arrived = list.iter().any(|f| f.incoming && f.state == FileState::Done && !was(f.id, FileState::Done));
+                    s.files = list;
+                    s.files_limit = limit;
+                    s.files_on = true;
+                    if (asked || arrived) && hwnd(&FILES).is_none() {
+                        s.files_badge = true;
+                    }
+                    open_files = asked;
+                }
             }
         }
         post(&BAR);
         post(&CHAT);
+        post(&FILES);
         post(&MAIN);
+        if open_files {
+            if let Some(b) = hwnd(&BAR) {
+                // SAFETY : message posté à notre barre, traitée sur son fil.
+                unsafe {
+                    let _ = PostMessageW(Some(b), WM_APP_FILES, WPARAM(0), LPARAM(0));
+                }
+            }
+        }
     }
     fn ended(&mut self, summary: &Summary) {
         set(Screen::Ended(summary.clone()));
@@ -338,6 +383,13 @@ enum Act {
     Deny,
     Send,
     CloseChat,
+    Files,
+    CloseFiles,
+    SendFile,
+    OpenFolder,
+    FileYes(u32),
+    FileNo(u32),
+    FileCancel(u32),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -350,6 +402,8 @@ enum St {
     Code,
     Icon,
     IconSmall,
+    /// Extension d'un fichier (petit, gras).
+    Tiny,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -382,6 +436,9 @@ enum Item {
     Badge { r: R },
     Bubble { r: R, text: String, mine: bool },
     Sep { r: R },
+    /// Pastille de fichier : extension, programme (orange).
+    FileIcon { r: R, ext: String, program: bool },
+    Progress { r: R, frac: f32 },
 }
 
 impl Item {
@@ -405,6 +462,9 @@ mod glyph {
     pub const WARN: char = '\u{E7BA}';
     pub const SEND: char = '\u{E724}';
     pub const SYNC: char = '\u{E895}';
+    pub const FILE: char = '\u{E8A5}';
+    pub const FOLDER: char = '\u{E838}';
+    pub const UPLOAD: char = '\u{E898}';
 }
 
 struct Gfx {
@@ -471,6 +531,7 @@ fn style(st: St) -> (f32, DWRITE_FONT_WEIGHT) {
         St::Code => (27.0, DWRITE_FONT_WEIGHT_SEMI_BOLD),
         St::Icon => (16.0, DWRITE_FONT_WEIGHT_NORMAL),
         St::IconSmall => (13.0, DWRITE_FONT_WEIGHT_NORMAL),
+        St::Tiny => (9.5, DWRITE_FONT_WEIGHT_SEMI_BOLD),
     }
 }
 
@@ -538,6 +599,72 @@ fn clock(d: Duration) -> String {
         format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
     } else {
         format!("{}:{:02}", s / 60, s % 60)
+    }
+}
+
+// ---------- Fichiers : textes ----------
+
+/// Taille lisible : « 2,4 Mo » ou « 2.4 MB ».
+fn size_text(bytes: u64) -> String {
+    let fr = shared().fr;
+    let units: [&str; 4] = if fr { ["o", "Ko", "Mo", "Go"] } else { ["B", "KB", "MB", "GB"] };
+    let mut v = bytes as f64;
+    let mut u = 0;
+    while v >= 1024.0 && u < 3 {
+        v /= 1024.0;
+        u += 1;
+    }
+    let n = if u == 0 || v >= 10.0 { format!("{v:.0}") } else { format!("{v:.1}") };
+    format!("{} {}", if fr { n.replace('.', ",") } else { n }, units[u])
+}
+
+/// Nom raccourci au milieu s'il est trop long (« Notice_imp…ante.pdf »).
+fn short_file(name: &str, max: usize) -> String {
+    let c: Vec<char> = name.chars().collect();
+    if c.len() <= max {
+        return name.into();
+    }
+    let keep = (max - 1) / 2;
+    format!("{}…{}", c[..keep].iter().collect::<String>(), c[c.len() - keep..].iter().collect::<String>())
+}
+
+fn extension(name: &str) -> String {
+    match name.rsplit_once('.') {
+        Some((_, e)) if !e.is_empty() && e.len() <= 4 => e.to_uppercase(),
+        _ => tr("FILE", "FICH").into(),
+    }
+}
+
+/// État d'un fichier en une ligne, et sa couleur.
+fn file_status(f: &Snapshot, limit: Option<u64>) -> (String, u32) {
+    let p = pal();
+    let fr = shared().fr;
+    let txt = |en: String, frs: String| if fr { frs } else { en };
+    match f.state {
+        FileState::Asking => (tr("Waiting for your answer", "En attente de votre réponse").into(), p.muted),
+        FileState::Waiting => (tr("Waiting for the person helping you…", "En attente de la personne qui vous aide…").into(), p.muted),
+        FileState::Active if f.incoming || f.done < f.size => {
+            let pct = if f.size == 0 { 100 } else { f.done * 100 / f.size };
+            (txt(format!("{} of {} · {pct} %", size_text(f.done), size_text(f.size)), format!("{} sur {} · {pct} %", size_text(f.done), size_text(f.size))), p.muted)
+        }
+        FileState::Active => (tr("Checking…", "Vérification…").into(), p.muted),
+        FileState::Done if f.incoming => (txt(format!("Received · {}", size_text(f.size)), format!("Reçu · {}", size_text(f.size))), p.accent_strong),
+        FileState::Done => (txt(format!("Sent · {}", size_text(f.size)), format!("Envoyé · {}", size_text(f.size))), p.accent_strong),
+        FileState::Refused => match f.problem {
+            Some(Problem::TooBig) => {
+                let max = limit.map(size_text).unwrap_or_default();
+                (txt(format!("Too big: {max} at most"), format!("Trop gros : {max} au plus")), p.danger)
+            }
+            Some(Problem::Timeout) => (tr("No answer: declined", "Sans réponse : refusé").into(), p.muted),
+            Some(Problem::Busy) => (tr("Declined: too many requests", "Refusé : trop de demandes").into(), p.muted),
+            _ if f.incoming => (tr("Declined", "Refusé").into(), p.muted),
+            _ => (tr("Declined by the person helping you", "Refusé par la personne qui vous aide").into(), p.muted),
+        },
+        FileState::Canceled => (tr("Cancelled", "Annulé").into(), p.muted),
+        FileState::Failed => match f.problem {
+            Some(Problem::Corrupt) => (tr("Damaged in transit: deleted", "Abîmé en route : effacé").into(), p.danger),
+            _ => (tr("Cannot read or write the file", "Lecture ou écriture du fichier impossible").into(), p.danger),
+        },
     }
 }
 
@@ -645,10 +772,11 @@ fn main_layout(screen: &Screen, pulse: bool) -> (Vec<Item>, f32) {
             text(&mut items, &mut y, &sub, St::Muted, p.muted, 16.0);
             if !s.who.is_empty() {
                 let cw = (inner - 16.0) / 3.0;
+                let exchanged: Vec<&Snapshot> = s.files.iter().filter(|f| f.state == FileState::Done).collect();
                 let stats = [
                     (clock(s.duration), tr("Duration", "Durée")),
                     (if s.control { tr("Yes", "Oui") } else { tr("No", "Non") }.to_string(), tr("Control given", "Contrôle donné")),
-                    (s.messages.to_string(), tr("Messages", "Messages")),
+                    if exchanged.is_empty() { (s.messages.to_string(), tr("Messages", "Messages")) } else { (exchanged.len().to_string(), tr("Files", "Fichiers")) },
                 ];
                 for (i, (value, label)) in stats.into_iter().enumerate() {
                     items.push(Item::Card { r: R::new(pad + i as f32 * (cw + 8.0), y, cw, 58.0) });
@@ -656,8 +784,28 @@ fn main_layout(screen: &Screen, pulse: bool) -> (Vec<Item>, f32) {
                     items.push(Item::Text { r: R::new(pad + i as f32 * (cw + 8.0) + 12.0, y + 32.0, cw - 24.0, 18.0), text: label.into(), st: St::Small, color: p.muted, al: Al::Left });
                 }
                 y += 58.0 + 16.0;
+                // Fichiers échangés, et leur sens.
+                let shown: Vec<&&Snapshot> = exchanged.iter().take(4).collect();
+                if !shown.is_empty() {
+                    let ch = 14.0 + shown.len() as f32 * 24.0;
+                    items.push(Item::Card { r: R::new(pad, y, inner, ch) });
+                    for (i, f) in shown.iter().enumerate() {
+                        let ry = y + 7.0 + i as f32 * 24.0;
+                        let arrow = if f.incoming { "↓" } else { "↑" };
+                        items.push(Item::Text { r: R::new(pad + 14.0, ry, inner - 110.0, 24.0), text: format!("{arrow}  {}", short_file(&f.name, 38)), st: St::Body, color: p.ink, al: Al::Left });
+                        let what = if f.incoming { tr("received", "reçu") } else { tr("sent", "envoyé") };
+                        items.push(Item::Text { r: R::new(pad + inner - 100.0, ry, 86.0, 24.0), text: what.into(), st: St::Small, color: p.muted, al: Al::Right });
+                    }
+                    y += ch + 16.0;
+                }
             }
-            let x = buttons(&mut items, w - pad, y, &[(Act::Close, tr("Close", "Fermer"), Kind::Primary)]);
+            let received = s.files.iter().any(|f| f.incoming && f.state == FileState::Done);
+            let list: &[(Act, &str, Kind)] = if received {
+                &[(Act::OpenFolder, tr("Open the folder", "Ouvrir le dossier"), Kind::Secondary), (Act::Close, tr("Close", "Fermer"), Kind::Primary)]
+            } else {
+                &[(Act::Close, tr("Close", "Fermer"), Kind::Primary)]
+            };
+            let x = buttons(&mut items, w - pad, y, list);
             items.push(Item::Text {
                 r: R::new(pad, y - 4.0, x - pad, 40.0),
                 text: tr("You can delete this program: nothing was installed.", "Vous pouvez supprimer ce programme : rien n'a été installé.").into(),
@@ -726,13 +874,17 @@ fn bar_layout(s: &SessionView) -> (Vec<Item>, f32) {
     items.push(Item::Sep { r: R::new(x, 11.0, 1.0, h - 22.0) });
     x += 7.0;
     let tool = |on: bool| if on { Kind::ToolOn } else { Kind::Tool };
-    for (act, icon, on) in [
+    let mut tools = vec![
         (Act::Pause, if s.paused { glyph::PLAY } else { glyph::PAUSE }, s.paused),
         (Act::Hand, glyph::HAND, s.control),
         (Act::Chat, glyph::CHAT, hwnd(&CHAT).is_some()),
-    ] {
+    ];
+    if s.files_on {
+        tools.push((Act::Files, glyph::FILE, hwnd(&FILES).is_some()));
+    }
+    for (act, icon, on) in tools {
         items.push(Item::Button { r: R::new(x, 7.0, 36.0, 32.0), act, label: String::new(), kind: tool(on), icon: Some(icon) });
-        if act == Act::Chat && s.unread {
+        if (act == Act::Chat && s.unread) || (act == Act::Files && s.files_badge) {
             items.push(Item::Badge { r: R::new(x + 25.0, 10.0, 8.0, 8.0) });
         }
         x += 38.0;
@@ -780,7 +932,103 @@ fn chat_layout(s: &SessionView) -> (Vec<Item>, f32) {
     (items, h)
 }
 
-unsafe fn draw(rt: &ID2D1HwndRenderTarget, items: &[Item], hover: Option<Act>, focus: Option<Act>, bg: u32) {
+/// Fenêtre des fichiers : demande en cours (accepter, refuser), sinon « Envoyer un fichier… »,
+/// puis les fichiers de la session, du plus récent au plus ancien.
+fn files_layout(s: &SessionView) -> (Vec<Item>, f32) {
+    let p = pal();
+    let (w, pad) = (FILES_W, 16.0);
+    let inner = w - 2.0 * pad;
+    let fr = shared().fr;
+    let mut items = Vec::new();
+    items.push(Item::Text { r: R::new(pad, 0.0, 200.0, 44.0), text: tr("Files", "Fichiers").into(), st: St::Strong, color: p.ink, al: Al::Left });
+    items.push(Item::Button { r: R::new(w - 44.0, 6.0, 36.0, 32.0), act: Act::CloseFiles, label: String::new(), kind: Kind::Tool, icon: Some(glyph::CLOSE) });
+    items.push(Item::Sep { r: R::new(0.0, 44.0, w, 1.0) });
+    let mut y = 58.0;
+    let name = short_name(&s.who);
+    let asking: Vec<&Snapshot> = s.files.iter().filter(|f| f.state == FileState::Asking).collect();
+    if let Some(f) = asking.first() {
+        let title = match (f.program, fr) {
+            (true, true) => format!("{name} veut vous envoyer un programme"),
+            (true, false) => format!("{name} wants to send you a program"),
+            (false, true) => format!("{name} veut vous envoyer un fichier"),
+            (false, false) => format!("{name} wants to send you a file"),
+        };
+        let th = measure(&title, St::Strong, inner).1;
+        items.push(Item::Text { r: R::new(pad, y, inner, th), text: title, st: St::Strong, color: p.ink, al: Al::Left });
+        y += th + 12.0;
+        items.push(Item::FileIcon { r: R::new(pad, y, 34.0, 40.0), ext: extension(&f.name), program: f.program });
+        let fname = short_file(&f.name, 44);
+        let nh = measure(&fname, St::Body, inner - 46.0).1;
+        items.push(Item::Text { r: R::new(pad + 46.0, y, inner - 46.0, nh), text: fname, st: St::Body, color: p.ink, al: Al::Left });
+        let sub = if fr {
+            format!("{} · sera rangé dans Téléchargements\\Portunia Assistance", size_text(f.size))
+        } else {
+            format!("{} · will be saved in Downloads\\Portunia Assistance", size_text(f.size))
+        };
+        let sh = measure(&sub, St::Small, inner - 46.0).1;
+        items.push(Item::Text { r: R::new(pad + 46.0, y + nh + 2.0, inner - 46.0, sh), text: sub, st: St::Small, color: p.muted, al: Al::Left });
+        y += (nh + sh + 2.0).max(40.0) + 12.0;
+        if f.program {
+            let warn = tr(
+                "A program can change your computer. Accept only if you know the person helping you.",
+                "Un programme peut modifier votre ordinateur. Acceptez seulement si vous connaissez la personne qui vous aide.",
+            );
+            let wh = measure(warn, St::Small, inner - 44.0).1 + 20.0;
+            items.push(Item::Warn { r: R::new(pad, y, inner, wh), text: warn.into() });
+            y += wh + 12.0;
+        }
+        let left = ANSWER_FOR.saturating_sub(f.asked.elapsed());
+        let t = if fr { format!("Refus automatique dans {}", clock(left)) } else { format!("Declined automatically in {}", clock(left)) };
+        let x = buttons(&mut items, w - pad, y, &[(Act::FileNo(f.id), tr("Decline", "Refuser"), Kind::Secondary), (Act::FileYes(f.id), tr("Accept", "Accepter"), Kind::Primary)]);
+        items.push(Item::Text { r: R::new(pad, y, x - pad, 32.0), text: t, st: St::Small, color: p.muted, al: Al::Left });
+        y += 32.0 + 10.0;
+        if asking.len() > 1 {
+            let more = asking.len() - 1;
+            let t = if fr { format!("Et {more} autre(s) fichier(s) proposé(s) ensuite") } else { format!("And {more} more file(s) offered next") };
+            items.push(Item::Text { r: R::new(pad, y, inner, 18.0), text: t, st: St::Small, color: p.muted, al: Al::Left });
+            y += 22.0;
+        }
+    } else {
+        let label = if fr { format!("Envoyer un fichier à {name}…") } else { format!("Send a file to {name}…") };
+        items.push(Item::Button { r: R::new(pad, y, inner, 36.0), act: Act::SendFile, label, kind: Kind::Secondary, icon: Some(glyph::UPLOAD) });
+        y += 36.0 + 6.0;
+        let hint = match (s.files_limit, fr) {
+            (Some(l), true) => format!("Vous choisissez le fichier. {} au plus.", size_text(l)),
+            (Some(l), false) => format!("You choose the file. {} at most.", size_text(l)),
+            (None, _) => tr("You choose the file; nothing else is sent.", "Vous choisissez le fichier ; rien d'autre n'est envoyé.").into(),
+        };
+        items.push(Item::Text { r: R::new(pad, y, inner, 18.0), text: hint, st: St::Small, color: p.muted, al: Al::Left });
+        y += 18.0 + 10.0;
+    }
+    let others: Vec<&Snapshot> = s.files.iter().rev().filter(|f| f.state != FileState::Asking).take(5).collect();
+    if !others.is_empty() {
+        items.push(Item::Sep { r: R::new(pad, y, inner, 1.0) });
+        y += 12.0;
+    }
+    for f in others {
+        items.push(Item::FileIcon { r: R::new(pad, y, 30.0, 36.0), ext: extension(&f.name), program: f.program });
+        let tw = inner - 40.0 - 38.0;
+        let arrow = if f.incoming { "↓ " } else { "↑ " };
+        items.push(Item::Text { r: R::new(pad + 40.0, y, tw, 19.0), text: format!("{arrow}{}", short_file(&f.name, 36)), st: St::Body, color: p.ink, al: Al::Left });
+        let (status, color) = file_status(f, s.files_limit);
+        items.push(Item::Text { r: R::new(pad + 40.0, y + 19.0, tw, 17.0), text: status, st: St::Small, color, al: Al::Left });
+        let bx = w - pad - 34.0;
+        if matches!(f.state, FileState::Active | FileState::Waiting) {
+            items.push(Item::Button { r: R::new(bx, y + 2.0, 34.0, 32.0), act: Act::FileCancel(f.id), label: String::new(), kind: Kind::Tool, icon: Some(glyph::CLOSE) });
+        } else if f.incoming && f.state == FileState::Done {
+            items.push(Item::Button { r: R::new(bx, y + 2.0, 34.0, 32.0), act: Act::OpenFolder, label: String::new(), kind: Kind::Tool, icon: Some(glyph::FOLDER) });
+        }
+        if f.state == FileState::Active {
+            let frac = if f.size == 0 { 1.0 } else { f.done as f32 / f.size as f32 };
+            items.push(Item::Progress { r: R::new(pad + 40.0, y + 40.0, tw, 4.0), frac });
+            y += 8.0;
+        }
+        y += 36.0 + 10.0;
+    }
+    (items, y + 6.0)
+}
+
+unsafe fn draw(rt: &windows::Win32::Graphics::Direct2D::ID2D1RenderTarget, items: &[Item], hover: Option<Act>, focus: Option<Act>, bg: u32) {
     let p = pal();
     let brush = |c: u32, a: f32| -> Option<ID2D1SolidColorBrush> { rt.CreateSolidColorBrush(&color(c, a), None).ok() };
     rt.Clear(Some(&color(bg, 1.0)));
@@ -930,6 +1178,21 @@ unsafe fn draw(rt: &ID2D1HwndRenderTarget, items: &[Item], hover: Option<Act>, f
                     rt.FillRectangle(&r.d2d(), &b);
                 }
             }
+            Item::FileIcon { r, ext, program } => {
+                let (fill, ink) = if *program { (p.warn_bg, p.warn) } else { (p.accent_soft, p.accent_strong) };
+                if let Some(b) = brush(fill, 1.0) {
+                    rt.FillRoundedRectangle(&round(*r, 5.0), &b);
+                }
+                text(*r, ext, St::Tiny, ink, Al::Center, true);
+            }
+            Item::Progress { r, frac } => {
+                if let Some(b) = brush(p.line, 1.0) {
+                    rt.FillRoundedRectangle(&round(*r, 2.0), &b);
+                }
+                if let Some(b) = brush(p.accent, 1.0) {
+                    rt.FillRoundedRectangle(&round(R::new(r.x, r.y, (r.w * frac.clamp(0.0, 1.0)).max(r.h), r.h), 2.0), &b);
+                }
+            }
         }
     }
     let _ = D2D1_DRAW_TEXT_OPTIONS_CLIP;
@@ -974,6 +1237,8 @@ fn layout_for(h: HWND) -> (Vec<Item>, f32) {
         bar_layout(&shared().session.lock().unwrap())
     } else if Some(h) == hwnd(&CHAT) {
         chat_layout(&shared().session.lock().unwrap())
+    } else if Some(h) == hwnd(&FILES) {
+        files_layout(&shared().session.lock().unwrap())
     } else {
         main_layout(&shared().screen.lock().unwrap(), PULSE.load(Ordering::Relaxed))
     }
@@ -1057,6 +1322,73 @@ unsafe fn act(h: HWND, a: Act) {
         }
         Act::Send => send_chat(),
         Act::Stop => command(Command::Stop),
+        Act::Files => open_files(true),
+        Act::CloseFiles => {
+            if let Some(f) = hwnd(&FILES) {
+                let _ = DestroyWindow(f);
+            }
+        }
+        Act::SendFile => {
+            let paths = pick_files(h);
+            if !paths.is_empty() {
+                command(Command::SendFiles(paths));
+            }
+        }
+        Act::OpenFolder => {
+            let dir = downloads_dir().join("Portunia Assistance");
+            let _ = std::process::Command::new("explorer.exe").arg(&dir).spawn();
+        }
+        Act::FileYes(id) | Act::FileNo(id) => command(Command::FileAnswer(id, matches!(a, Act::FileYes(_)))),
+        Act::FileCancel(id) => command(Command::FileCancel(id)),
+    }
+}
+
+/// Dossier Téléchargements de la personne (celui choisi dans Windows, même déplacé).
+pub fn downloads_dir() -> PathBuf {
+    use windows::Win32::UI::Shell::{FOLDERID_Downloads, SHGetKnownFolderPath, KF_FLAG_DEFAULT};
+    // Essais : un dossier à part, jamais les vrais Téléchargements.
+    #[cfg(feature = "essai")]
+    if let Some(d) = std::env::var_os("PORTUNIA_ASSISTANCE_TELECHARGEMENTS") {
+        return PathBuf::from(d);
+    }
+    // SAFETY : chemin rendu par Windows, libéré après copie.
+    unsafe {
+        if let Ok(p) = SHGetKnownFolderPath(&FOLDERID_Downloads, KF_FLAG_DEFAULT, None) {
+            let s = p.to_string().unwrap_or_default();
+            windows::Win32::System::Com::CoTaskMemFree(Some(p.0 as *const _));
+            if !s.is_empty() {
+                return PathBuf::from(s);
+            }
+        }
+    }
+    std::env::var_os("USERPROFILE").map(|u| PathBuf::from(u).join("Downloads")).unwrap_or_else(std::env::temp_dir)
+}
+
+/// Sélecteur de fichiers de Windows (plusieurs à la fois). Il est visible du dépanneur.
+unsafe fn pick_files(owner: HWND) -> Vec<PathBuf> {
+    use windows::Win32::UI::Controls::Dialogs::{
+        GetOpenFileNameW, OFN_ALLOWMULTISELECT, OFN_EXPLORER, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+    };
+    let mut buf = vec![0u16; 64 * 1024];
+    let title = wide(tr("Send files to the person helping you", "Envoyer des fichiers à la personne qui vous aide"));
+    let mut ofn = OPENFILENAMEW {
+        lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
+        hwndOwner: owner,
+        lpstrFile: windows::core::PWSTR(buf.as_mut_ptr()),
+        nMaxFile: buf.len() as u32,
+        lpstrTitle: PCWSTR(title.as_ptr()),
+        Flags: OFN_ALLOWMULTISELECT | OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR,
+        ..Default::default()
+    };
+    if !GetOpenFileNameW(&mut ofn).as_bool() {
+        return Vec::new();
+    }
+    // Un fichier : son chemin. Plusieurs : le dossier, puis les noms.
+    let parts: Vec<String> = buf.split(|c| *c == 0).take_while(|p| !p.is_empty()).map(String::from_utf16_lossy).collect();
+    match parts.as_slice() {
+        [one] => vec![PathBuf::from(one)],
+        [dir, names @ ..] => names.iter().map(|n| Path::new(dir).join(n)).collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -1101,17 +1433,7 @@ unsafe fn copy_text(h: HWND, text: &str) {
 pub fn run(commands: UnboundedSender<Command>) {
     let _ = SHARED.set(Arc::new(Shared {
         screen: Mutex::new(Screen::Connecting),
-        session: Mutex::new(SessionView {
-            who: String::new(),
-            control: false,
-            paused: false,
-            since: Instant::now(),
-            rtt: None,
-            reconnecting: false,
-            asking: false,
-            messages: Vec::new(),
-            unread: false,
-        }),
+        session: Mutex::new(SessionView::new("", false)),
         consent: Mutex::new(None),
         commands,
         fr: system_is_french(),
@@ -1134,6 +1456,7 @@ pub fn run(commands: UnboundedSender<Command>) {
             (w!("PortuniaAssist"), main_proc as Proc),
             (w!("PortuniaAssistBar"), bar_proc as Proc),
             (w!("PortuniaAssistChat"), chat_proc as Proc),
+            (w!("PortuniaAssistFiles"), files_proc as Proc),
             (w!("PortuniaAssistFrame"), frame_proc as Proc),
         ] {
             let class = WNDCLASSEXW {
@@ -1246,6 +1569,9 @@ unsafe fn mouse(h: HWND, msg: u32, lp: LPARAM) -> bool {
             true
         }
         WM_LBUTTONUP => {
+            if GetMessageExtraInfo().0 as usize == crate::input::INJECTED {
+                return true;
+            }
             let (x, y) = cursor(h, lp);
             if let Some(a) = hit(h, x, y) {
                 act(h, a);
@@ -1258,6 +1584,9 @@ unsafe fn mouse(h: HWND, msg: u32, lp: LPARAM) -> bool {
 
 /// Clavier : Tab passe d'un bouton à l'autre, Entrée et Espace l'activent.
 unsafe fn keys(h: HWND, wp: WPARAM) -> bool {
+    if GetMessageExtraInfo().0 as usize == crate::input::INJECTED {
+        return true;
+    }
     let key = wp.0 as u16;
     let acts: Vec<Act> = layout_for(h).0.iter().filter_map(Item::act).map(|(a, _)| a).collect();
     if acts.is_empty() {
@@ -1447,10 +1776,11 @@ unsafe fn place_bar(bar: HWND, first: bool) {
     forget_target(bar);
     let _ = SetWindowPos(bar, Some(HWND_TOPMOST), x, y, w, h, SWP_NOACTIVATE);
     place_chat();
+    place_files();
 }
 
 unsafe fn remove_overlays() {
-    for slot in [&CHAT, &FRAME, &BAR] {
+    for slot in [&CHAT, &FILES, &FRAME, &BAR] {
         if let Some(h) = hwnd(slot) {
             let _ = DestroyWindow(h);
             slot.store(0, Ordering::Relaxed);
@@ -1509,6 +1839,11 @@ unsafe extern "system" fn bar_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) ->
         }
         WM_EXITSIZEMOVE => {
             place_chat();
+            place_files();
+            LRESULT(0)
+        }
+        WM_APP_FILES => {
+            open_files(false);
             LRESULT(0)
         }
         #[cfg(feature = "essai")]
@@ -1552,6 +1887,10 @@ unsafe fn toggle_chat() {
     if let Some(c) = hwnd(&CHAT) {
         let _ = DestroyWindow(c);
         return;
+    }
+    // Une seule fenêtre sous la barre à la fois.
+    if let Some(f) = hwnd(&FILES) {
+        let _ = DestroyWindow(f);
     }
     let Ok(chat) = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, w!("PortuniaAssistChat"), w!(""), WS_POPUP, 0, 0, 300, 300, None, None, None, None) else { return };
     let round: i32 = 2;
@@ -1654,6 +1993,75 @@ unsafe extern "system" fn chat_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -
     }
 }
 
+/// Fichiers : sous la barre, centrés sur elle ; hauteur selon le contenu.
+unsafe fn place_files() {
+    let (Some(win), Some(bar)) = (hwnd(&FILES), hwnd(&BAR)) else { return };
+    let s = scale(bar);
+    let mut b = RECT::default();
+    let _ = GetWindowRect(bar, &mut b);
+    let (_, height) = files_layout(&shared().session.lock().unwrap());
+    let (w, h) = ((FILES_W * s) as i32, (height * s) as i32);
+    let x = ((b.left + b.right) / 2 - w / 2).max(0);
+    let _ = SetWindowPos(win, Some(HWND_TOPMOST), x, b.bottom + (8.0 * s) as i32, w, h, SWP_NOACTIVATE);
+}
+
+/// Ouvre la fenêtre des fichiers (ou la ferme, avec `toggle`). Elle ne prend pas le clavier :
+/// la personne garde la fenêtre où elle travaille.
+unsafe fn open_files(toggle: bool) {
+    if let Some(f) = hwnd(&FILES) {
+        if toggle {
+            let _ = DestroyWindow(f);
+        }
+        return;
+    }
+    if let Some(c) = hwnd(&CHAT) {
+        let _ = DestroyWindow(c);
+    }
+    let Ok(win) = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE, w!("PortuniaAssistFiles"), w!(""), WS_POPUP, 0, 0, 300, 300, None, None, None, None)
+    else {
+        return;
+    };
+    let round: i32 = 2;
+    let _ = DwmSetWindowAttribute(win, DWMWA_WINDOW_CORNER_PREFERENCE, (&round as *const i32).cast(), 4);
+    exclude(win);
+    FILES.store(win.0 as isize, Ordering::Relaxed);
+    shared().session.lock().unwrap().files_badge = false;
+    place_files();
+    let _ = ShowWindow(win, SW_SHOWNOACTIVATE);
+    SetTimer(Some(win), TIMER, 1000, None);
+    post(&BAR);
+}
+
+unsafe extern "system" fn files_proc(h: HWND, msg: u32, wp: WPARAM, lp: LPARAM) -> LRESULT {
+    if mouse(h, msg, lp) {
+        return LRESULT(0);
+    }
+    match msg {
+        WM_APP_UPDATE | WM_TIMER => {
+            place_files();
+            let _ = InvalidateRect(Some(h), None, false);
+            LRESULT(0)
+        }
+        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        WM_PAINT => {
+            paint(h);
+            LRESULT(0)
+        }
+        WM_ERASEBKGND => LRESULT(1),
+        WM_SIZE => {
+            forget_target(h);
+            LRESULT(0)
+        }
+        WM_DESTROY => {
+            forget_target(h);
+            FILES.store(0, Ordering::Relaxed);
+            post(&BAR);
+            LRESULT(0)
+        }
+        _ => DefWindowProcW(h, msg, wp, lp),
+    }
+}
+
 /// Échap trois fois en deux secondes sur ce PC (pas celles envoyées par le dépanneur) : arrêt.
 unsafe extern "system" fn escape_hook(code: i32, wp: WPARAM, lp: LPARAM) -> LRESULT {
     static PRESSES: Mutex<Vec<Instant>> = Mutex::new(Vec::new());
@@ -1684,12 +2092,24 @@ pub fn demo(dir: &str) {
     let wait = |ms| std::thread::sleep(Duration::from_millis(ms));
     wait(800);
     let mut ui = WindowUi;
+    // Chaque fenêtre est dessinée hors écran, à partir du même état que la vraie.
     let shot = |name: &str, slot: &AtomicIsize| {
         wait(700);
-        if let Some(h) = hwnd(slot) {
-            if let Err(e) = save(h, &format!("{dir}/{name}.png")) {
-                let _ = std::fs::write(format!("{dir}/{name}.erreur.txt"), format!("{e:#}"));
-            }
+        let (items, w, h) = if std::ptr::eq(slot, &MAIN) {
+            let (i, h) = main_layout(&shared().screen.lock().unwrap(), false);
+            (i, MAIN_W, h)
+        } else if std::ptr::eq(slot, &BAR) {
+            let (i, w) = bar_layout(&shared().session.lock().unwrap());
+            (i, w, BAR_H)
+        } else if std::ptr::eq(slot, &CHAT) {
+            let (i, h) = chat_layout(&shared().session.lock().unwrap());
+            (i, CHAT_W, h)
+        } else {
+            let (i, h) = files_layout(&shared().session.lock().unwrap());
+            (i, FILES_W, h)
+        };
+        if let Err(e) = render(&items, w, h, &format!("{dir}/{name}.png")) {
+            let _ = std::fs::write(format!("{dir}/{name}.erreur.txt"), format!("{e:#}"));
         }
     };
     let dark = std::env::args().any(|a| a == "--sombre");
@@ -1717,6 +2137,36 @@ pub fn demo(dir: &str) {
     }
     ui.event(Event::Message("C'est installé. Vous pouvez essayer d'imprimer ?".into()));
     shot("5-discussion", &CHAT);
+    // Fichiers : un programme proposé, puis la liste pendant la réception.
+    let snap = |id: u32, name: &str, size: u64, done: u64, incoming: bool, state: FileState, problem: Option<Problem>| Snapshot {
+        id,
+        name: name.into(),
+        size,
+        done,
+        incoming,
+        state,
+        problem,
+        program: assist_proto::transfer::is_program(name),
+        path: None,
+        asked: Instant::now(),
+    };
+    let notice = snap(2, "Notice_imprimante.pdf", 2_516_582, 2_516_582, true, FileState::Done, None);
+    let report = snap(1, "rapport-erreurs.txt", 86_016, 86_016, false, FileState::Done, None);
+    ui.event(Event::Files(vec![report.clone(), notice.clone(), snap(4, "HP_Pilote_Universel.exe", 40_580_000, 0, true, FileState::Asking, None)], Some(104_857_600)));
+    shot("5b-fichier-propose", &FILES);
+    ui.event(Event::Files(
+        vec![report.clone(), notice.clone(), snap(4, "HP_Pilote_Universel.exe", 40_580_000, 12_163_000, true, FileState::Active, None), snap(3, "Windows11.iso", 6_200_000_000, 0, false, FileState::Refused, Some(Problem::TooBig))],
+        Some(104_857_600),
+    ));
+    shot("5c-fichiers", &FILES);
+    let pilot = snap(4, "HP_Pilote_Universel.exe", 40_580_000, 40_580_000, true, FileState::Done, None);
+    let files = vec![report, notice, pilot];
+    // SAFETY : fermeture de notre fenêtre des fichiers.
+    unsafe {
+        if let Some(f) = hwnd(&FILES) {
+            let _ = PostMessageW(Some(f), WM_CLOSE, WPARAM(0), LPARAM(0));
+        }
+    }
     ui.event(Event::ControlRequested);
     ui.event(Event::Control(false));
     shared().session.lock().unwrap().asking = true;
@@ -1728,7 +2178,7 @@ pub fn demo(dir: &str) {
     ui.event(Event::Paused(false));
     ui.event(Event::Reconnecting(true));
     shot("8-reconnexion", &BAR);
-    ui.ended(&Summary { reason: "Terminée par la personne qui vous aide.".into(), who: "Julien Piperault".into(), duration: Duration::from_secs(18 * 60 + 4), control: true, messages: 3 });
+    ui.ended(&Summary { reason: "Terminée par la personne qui vous aide.".into(), who: "Julien Piperault".into(), duration: Duration::from_secs(18 * 60 + 4), control: true, messages: 3, files });
     shot("9-fin", &MAIN);
     error("Portunia Assistance ne sait pas quel serveur utiliser. Téléchargez-le de nouveau depuis la page donnée par la personne qui vous aide.");
     shot("10-erreur", &MAIN);
@@ -1754,39 +2204,43 @@ impl SendTx {
 #[cfg(feature = "essai")]
 const WM_APP_OPEN_CHAT: u32 = WM_APP + 2;
 
-/// Photographie d'une de nos fenêtres (PrintWindow), en PNG.
+/// Dessine une fenêtre dans une image en mémoire (WIC), en PNG, à 150 %.
 #[cfg(feature = "essai")]
-fn save(h: HWND, path: &str) -> anyhow::Result<()> {
-    use windows::Win32::Graphics::Gdi::{
-        CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, GetDC, GetDIBits, ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-        DIB_RGB_COLORS,
+fn render(items: &[Item], w: f32, h: f32, path: &str) -> anyhow::Result<()> {
+    use windows::Win32::{
+        Graphics::{
+            Direct2D::{Common::D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE},
+            Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM,
+            Imaging::{CLSID_WICImagingFactory, GUID_WICPixelFormat32bppPBGRA, IWICImagingFactory, WICBitmapCacheOnDemand},
+        },
+        System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED},
     };
-    // SAFETY : copie de notre propre fenêtre dans une image en mémoire.
-    let (w, ht, mut buf) = unsafe {
-        let mut rc = RECT::default();
-        GetWindowRect(h, &mut rc)?;
-        let (w, ht) = (rc.right - rc.left, rc.bottom - rc.top);
-        let screen = GetDC(None);
-        let dc = CreateCompatibleDC(Some(screen));
-        let bmp = CreateCompatibleBitmap(screen, w, ht);
-        let old = SelectObject(dc, bmp.into());
-        let _ = windows::Win32::Storage::Xps::PrintWindow(h, dc, windows::Win32::Storage::Xps::PRINT_WINDOW_FLAGS(2));
-        let mut info = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER { biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32, biWidth: w, biHeight: -ht, biPlanes: 1, biBitCount: 32, biCompression: BI_RGB.0, ..Default::default() },
+    let scale = 1.5;
+    let (pw, ph) = ((w * scale).ceil() as u32, (h * scale).ceil() as u32);
+    // SAFETY : image et cible de dessin en mémoire, détruites à la fin.
+    let mut buf = unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let wic: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)?;
+        let bmp = wic.CreateBitmap(pw, ph, &GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnDemand)?;
+        let props = D2D1_RENDER_TARGET_PROPERTIES {
+            pixelFormat: D2D1_PIXEL_FORMAT { format: DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },
+            dpiX: 96.0 * scale,
+            dpiY: 96.0 * scale,
             ..Default::default()
         };
-        let mut buf = vec![0u8; (w * ht * 4) as usize];
-        GetDIBits(dc, bmp, 0, ht as u32, Some(buf.as_mut_ptr().cast()), &mut info, DIB_RGB_COLORS);
-        SelectObject(dc, old);
-        let _ = DeleteObject(bmp.into());
-        let _ = DeleteDC(dc);
-        ReleaseDC(None, screen);
-        (w as u32, ht as u32, buf)
+        let rt = with_gfx(|g| g.d2d.CreateWicBitmapRenderTarget(&bmp, &props))?;
+        rt.BeginDraw();
+        rt.SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        draw(&rt, items, None, None, pal().bg);
+        rt.EndDraw(None, None)?;
+        let mut buf = vec![0u8; (pw * ph * 4) as usize];
+        bmp.CopyPixels(std::ptr::null(), pw * 4, &mut buf)?;
+        buf
     };
     for px in buf.chunks_exact_mut(4) {
         px.swap(0, 2);
         px[3] = 255;
     }
-    xcap::image::RgbaImage::from_raw(w, ht, buf).ok_or_else(|| anyhow::anyhow!("image"))?.save(path)?;
+    xcap::image::RgbaImage::from_raw(pw, ph, buf).ok_or_else(|| anyhow::anyhow!("image"))?.save(path)?;
     Ok(())
 }

@@ -2,8 +2,10 @@
 // La personne ouvre Portunia Assist (téléchargé sur la page de la Gate), lit son code ; vous le
 // tapez ici, elle accepte, et son écran s'ouvre dans un onglet Bureau à distance. Le relais du
 // Gate met en relation ; la liaison est chiffrée de bout en bout à partir du code.
+import { open as pickFiles, save as pickSave } from '@tauri-apps/plugin-dialog';
 import { Gate, gates, Manifest } from './api';
 import { h, icon } from './dom';
+import { formatSize } from './files';
 import { t } from './i18n';
 
 export const ASSIST_EXTENSION: Manifest = {
@@ -112,9 +114,36 @@ export type AssistEvent =
   | { type: 'message'; texte: string }
   | { type: 'reconnexion'; actif: boolean }
   | { type: 'qualite'; ms: number }
+  | { type: 'fichiers'; liste: AssistFile[]; max: number | null }
   | { type: 'fin'; raison: string };
 
-type AssistMessage = { type: 'message'; texte: string } | { type: 'demande_controle' };
+/** Un fichier de la session d'assistance (voir assist-proto/src/transfer.rs). */
+export interface AssistFile {
+  id: number;
+  nom: string;
+  taille: number;
+  fait: number;
+  /** Reçu de la personne (true) ou envoyé (false). */
+  recu: boolean;
+  etat: 'demande' | 'attente' | 'refuse' | 'en_cours' | 'termine' | 'annule' | 'echec';
+  probleme: 'trop_gros' | 'trop_de_demandes' | 'disque' | 'abime' | 'sans_reponse' | null;
+  programme: boolean;
+}
+
+type AssistMessage = { type: 'message'; texte: string } | { type: 'demande_controle' } | { type: 'fichier_annuler'; id: number };
+
+/** Ce que le bandeau demande pour les fichiers. */
+export interface AssistFiles {
+  offer(paths: string[]): Promise<void>;
+  /** Ouvrir (sans `dest`) ou enregistrer un fichier reçu. */
+  file(id: number, dest?: string): Promise<void>;
+}
+
+/** Extension en majuscules, pour la pastille du fichier. */
+const ext = (name: string) => {
+  const m = /\.([A-Za-z0-9]{1,4})$/.exec(name);
+  return m ? m[1].toUpperCase() : t('FILE', 'FICH');
+};
 
 /**
  * Bandeau de l'onglet d'assistance : ce que la personne a accordé (vue seule, contrôle, pause),
@@ -128,6 +157,12 @@ export class AssistPanel {
   private readonly quality = h('span', { class: 'assist-quality muted small' });
   private readonly askBtn = h('button', { type: 'button', class: 'btn small', hidden: true }, icon('pointer', 14), t('Ask for control', 'Demander le contrôle')) as HTMLButtonElement;
   private readonly chatBtn = h('button', { type: 'button', class: 'btn small', hidden: true, 'aria-expanded': 'false' }, icon('chat', 14), t('Chat', 'Discussion')) as HTMLButtonElement;
+  private readonly fileBtn = h('button', { type: 'button', class: 'btn small', hidden: true, title: t('The person accepts each file on their screen. You can also drop files or folders on the screen.', 'La personne accepte chaque fichier sur son écran. Vous pouvez aussi déposer des fichiers ou des dossiers sur l\'écran.') }, icon('upload', 14), t('Send a file', 'Envoyer un fichier')) as HTMLButtonElement;
+  /** Voile affiché pendant qu'on glisse des fichiers sur l'écran. */
+  readonly drop = h('div', { class: 'assist-drop', hidden: true });
+  private readonly cards = new Map<number, HTMLElement>();
+  private known = new Map<number, AssistFile>();
+  private limit: number | null = null;
   private readonly badge = h('span', { class: 'assist-badge', hidden: true });
   private readonly list = h('div', { class: 'assist-messages' });
   private readonly input = h('input', { type: 'text', maxlength: '2000', placeholder: t('Write a message…', 'Écrire un message…'), 'aria-label': t('Message', 'Message') }) as HTMLInputElement;
@@ -138,9 +173,14 @@ export class AssistPanel {
   private features: string[] = [];
   private asked = false;
 
-  constructor(private readonly send: (m: AssistMessage) => Promise<void>, private readonly notify: (m: string, kind?: 'info' | 'error') => void) {
+  constructor(private readonly send: (m: AssistMessage) => Promise<void>, private readonly notify: (m: string, kind?: 'info' | 'error') => void, private readonly files: AssistFiles) {
     this.chatBtn.append(this.badge);
-    this.bar.append(h('span', { class: 'assist-dot' }), this.status, this.quality, h('span', { class: 'spacer' }), this.askBtn, this.chatBtn);
+    this.bar.append(h('span', { class: 'assist-dot' }), this.status, this.quality, h('span', { class: 'spacer' }), this.askBtn, this.fileBtn, this.chatBtn);
+    this.fileBtn.addEventListener('click', async () => {
+      const chosen = await pickFiles({ multiple: true, directory: false, title: t('Files to send to the person', 'Fichiers à envoyer à la personne') });
+      const paths = chosen == null ? [] : Array.isArray(chosen) ? chosen : [chosen];
+      if (paths.length) this.offer(paths);
+    });
     const form = h('form', { class: 'assist-send' }, this.input, h('button', { type: 'submit', class: 'btn primary small', 'aria-label': t('Send', 'Envoyer') }, icon('arrowRight', 14)));
     form.addEventListener('submit', (e) => { e.preventDefault(); this.sendMessage(); });
     this.chat.append(
@@ -179,9 +219,99 @@ export class AssistPanel {
           this.notify(t('New message from the person', 'Nouveau message de la personne'));
         }
         return;
+      case 'fichiers': this.showFiles(e.liste, e.max); return;
       case 'fin': this.ended = e.raison || t('Assistance ended.', 'Assistance terminée.'); this.reconnecting = false; break;
     }
     this.render();
+  }
+
+  /** Des fichiers peuvent-ils être déposés sur l'écran maintenant ? */
+  acceptsFiles() {
+    return !this.ended && this.features.includes('fichiers');
+  }
+
+  setDropping(on: boolean) {
+    const text = this.limit == null
+      ? t('Drop to send to the person. They accept each file.', 'Déposer pour envoyer à la personne. Elle accepte chaque fichier.')
+      : t(`Drop to send to the person. They accept each file · ${formatSize(this.limit)} at most (free edition)`, `Déposer pour envoyer à la personne. Elle accepte chaque fichier · ${formatSize(this.limit)} au plus (offre gratuite)`);
+    this.drop.replaceChildren(h('div', {}, icon('upload', 22), h('span', {}, text)));
+    this.drop.hidden = !on;
+  }
+
+  /** Propose des fichiers (ou dossiers, mis en .zip) à la personne ; la discussion s'ouvre pour suivre l'envoi. */
+  offer(paths: string[]) {
+    this.setDropping(false);
+    if (!this.acceptsFiles() || !paths.length) return;
+    this.toggleChat(true);
+    this.files.offer(paths).catch((e) => this.notify(String(e), 'error'));
+  }
+
+  private showFiles(list: AssistFile[], max: number | null) {
+    this.limit = max;
+    for (const f of list) {
+      const before = this.known.get(f.id);
+      this.known.set(f.id, f);
+      let card = this.cards.get(f.id);
+      if (!card) {
+        card = h('div', { class: `assist-file ${f.recu ? 'theirs' : 'mine'}` });
+        this.cards.set(f.id, card);
+        this.list.append(card);
+        this.list.scrollTop = this.list.scrollHeight;
+      }
+      this.renderCard(card, f);
+      // Fichier reçu de la personne : on le signale.
+      if (f.recu && f.etat === 'termine' && before?.etat !== 'termine') {
+        if (this.chat.hidden) this.badge.hidden = false;
+        this.notify(t(`File received from the person: ${f.nom}`, `Fichier reçu de la personne : ${f.nom}`));
+      }
+    }
+  }
+
+  private fileStatus(f: AssistFile): [string, string] {
+    const size = formatSize(f.taille);
+    switch (f.etat) {
+      case 'attente': return [t('Waiting for the person: they accept or decline on their screen', 'En attente de la personne : elle accepte ou refuse sur son écran'), ''];
+      case 'demande': return [t('Offered', 'Proposé'), ''];
+      case 'en_cours': {
+        if (!f.recu && f.fait >= f.taille) return [t('Checking…', 'Vérification…'), ''];
+        const pct = f.taille ? Math.floor((f.fait * 100) / f.taille) : 100;
+        return [t(`${formatSize(f.fait)} of ${size} · ${pct} %`, `${formatSize(f.fait)} sur ${size} · ${pct} %`), ''];
+      }
+      case 'termine': return [f.recu ? t(`From the person · ${size} · checked`, `De la personne · ${size} · vérifié`) : t(`Accepted and received · ${size}`, `Accepté et reçu · ${size}`), 'ok'];
+      case 'refuse':
+        if (f.probleme === 'trop_gros') {
+          const max = this.limit == null ? '' : formatSize(this.limit);
+          return [t(`Too big for the free edition: ${max} at most per file. Pro: Settings › Licence.`, `Trop gros pour l'offre gratuite : ${max} au plus par fichier. Pro : Paramètres › Licence.`), 'warn'];
+        }
+        if (f.probleme === 'sans_reponse') return [t('No answer from the person', 'Sans réponse de la personne'), 'warn'];
+        if (f.probleme === 'trop_de_demandes') return [t('Declined: too many files waiting', 'Refusé : trop de fichiers en attente'), 'warn'];
+        return [t('Declined by the person', 'Refusé par la personne'), 'warn'];
+      case 'annule': return [t('Cancelled', 'Annulé'), ''];
+      case 'echec': return [f.probleme === 'abime' ? t('Damaged in transit: deleted', 'Abîmé en route : effacé') : t('Cannot read or write the file', 'Lecture ou écriture du fichier impossible'), 'warn'];
+    }
+  }
+
+  private renderCard(card: HTMLElement, f: AssistFile) {
+    const [status, tone] = this.fileStatus(f);
+    const acts = h('div', { class: 'assist-file-acts' });
+    if ((f.etat === 'en_cours' || f.etat === 'attente') && !this.ended) {
+      acts.append(h('button', { type: 'button', class: 'btn small', onclick: () => this.send({ type: 'fichier_annuler', id: f.id }).catch((e) => this.notify(String(e), 'error')) }, t('Cancel', 'Annuler')));
+    }
+    if (f.recu && f.etat === 'termine') {
+      if (!f.programme) acts.append(h('button', { type: 'button', class: 'btn small', onclick: () => this.files.file(f.id).catch((e) => this.notify(String(e), 'error')) }, t('Open', 'Ouvrir')));
+      acts.append(h('button', { type: 'button', class: 'btn primary small', onclick: async () => {
+        const dest = await pickSave({ defaultPath: f.nom, title: t('Save the file from the person', 'Enregistrer le fichier de la personne') });
+        if (dest) this.files.file(f.id, dest).then(() => this.notify(t('File saved', 'Fichier enregistré'))).catch((e) => this.notify(String(e), 'error'));
+      } }, t('Save…', 'Enregistrer…')));
+    }
+    card.replaceChildren(
+      h('div', { class: 'assist-file-top' },
+        h('span', { class: `assist-file-ext${f.programme ? ' program' : ''}` }, ext(f.nom)),
+        h('div', { class: 'assist-file-text' },
+          h('div', { class: 'assist-file-name', title: f.nom }, `${f.recu ? '↓' : '↑'} ${f.nom}`),
+          h('div', { class: `assist-file-status ${tone}` }, status))),
+      ...(f.etat === 'en_cours' ? [h('div', { class: 'assist-file-bar' }, h('i', { style: `width: ${f.taille ? Math.min(100, (f.fait * 100) / f.taille) : 100}%` }))] : []),
+      ...(acts.childElementCount ? [acts] : []));
   }
 
   private render() {
@@ -195,6 +325,7 @@ export class AssistPanel {
     this.askBtn.hidden = !!this.ended || this.control || !this.features.includes('controle');
     this.askBtn.disabled = this.asked || this.paused || this.reconnecting;
     this.chatBtn.hidden = !this.features.includes('discussion');
+    this.fileBtn.hidden = !this.acceptsFiles();
     this.input.disabled = !!this.ended;
     if (this.ended) this.quality.textContent = '';
   }

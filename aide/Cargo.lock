@@ -152,6 +152,7 @@ dependencies = [
  "hkdf 0.12.4",
  "hmac 0.12.1",
  "rand 0.8.8",
+ "serde_json",
  "sha2 0.10.9",
  "spake2",
  "thiserror 1.0.69",
@@ -3157,7 +3158,7 @@ dependencies = [
 
 [[package]]
 name = "portunia-assistance"
-version = "0.81.1"
+version = "0.82.0"
 dependencies = [
  "anyhow",
  "assist-proto",

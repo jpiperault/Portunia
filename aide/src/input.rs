@@ -5,6 +5,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use ironrdp_server::{KeyboardEvent, MouseEvent, RdpServerInputHandler};
 
+/// Marque des clics et touches rejoués pour le dépanneur : nos fenêtres les ignorent (il ne peut
+/// pas accepter à la place de la personne un fichier ou une demande qu'il ne voit pas).
+pub const INJECTED: usize = 0x504f_5254;
+
 /// Contrôle donné au dépanneur (sinon il voit seulement). La personne peut le reprendre à tout moment.
 pub static CONTROL: AtomicBool = AtomicBool::new(false);
 
@@ -115,7 +119,7 @@ mod win {
     fn key(scan: u16, flags: KEYBD_EVENT_FLAGS) {
         send(INPUT {
             r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VIRTUAL_KEY(0), wScan: scan, dwFlags: flags, time: 0, dwExtraInfo: 0 } },
+            Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VIRTUAL_KEY(0), wScan: scan, dwFlags: flags, time: 0, dwExtraInfo: super::INJECTED } },
         });
     }
 
@@ -138,7 +142,7 @@ mod win {
     fn mouse_input(flags: MOUSE_EVENT_FLAGS, dx: i32, dy: i32, data: i32) {
         send(INPUT {
             r#type: INPUT_MOUSE,
-            Anonymous: INPUT_0 { mi: MOUSEINPUT { dx, dy, mouseData: data as u32, dwFlags: flags, time: 0, dwExtraInfo: 0 } },
+            Anonymous: INPUT_0 { mi: MOUSEINPUT { dx, dy, mouseData: data as u32, dwFlags: flags, time: 0, dwExtraInfo: super::INJECTED } },
         });
     }
 

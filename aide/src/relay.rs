@@ -2,16 +2,21 @@
 //! accord de la personne, puis session RDP dans le canal chiffré de bout en bout.
 //!
 //! Pendant la session, des messages de contrôle (JSON chiffré) passent à côté du flux RDP :
-//! accusés de réception (débit), pause, contrôle donné ou repris, discussion, fin.
+//! accusés de réception (débit), pause, contrôle donné ou repris, discussion, fichiers, fin.
+//! Les fichiers passent après l'image : seulement dans la place qu'elle laisse libre.
 //! Avec une Gate et un Portunia récents, une coupure du réseau est reprise sans nouveau code.
 
 use std::{
+    path::PathBuf,
     sync::atomic::Ordering,
     time::{Duration, Instant},
 };
 
 use anyhow::{anyhow, bail, Result};
-use assist_proto::{Code, Handshake, Kind, Link, Role};
+use assist_proto::{
+    transfer::{self, Outgoing, Snapshot, Transfers},
+    Code, Handshake, Kind, Link, Role,
+};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
 use tokio::{
@@ -23,7 +28,7 @@ use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 type Ws = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// Fonctions de ce programme, annoncées au dépanneur avec l'accord.
-const FEATURES: [&str; 5] = ["liaison", "discussion", "pause", "controle", "reprise"];
+const FEATURES: [&str; 6] = ["liaison", "discussion", "pause", "controle", "reprise", "fichiers"];
 /// Durée pendant laquelle une session coupée peut reprendre.
 const RESUME_FOR: Duration = Duration::from_secs(120);
 
@@ -35,6 +40,11 @@ pub enum Command {
     /// Donner (après une demande) ou reprendre le contrôle.
     Control(bool),
     Message(String),
+    /// Envoyer ces fichiers au dépanneur (choisis par la personne).
+    SendFiles(Vec<PathBuf>),
+    /// Accepter ou refuser un fichier proposé par le dépanneur.
+    FileAnswer(u32, bool),
+    FileCancel(u32),
 }
 
 /// Ce qui arrive pendant la session.
@@ -50,6 +60,8 @@ pub enum Event {
     Reconnecting(bool),
     /// Temps d'aller-retour mesuré.
     Quality(Duration),
+    /// Fichiers de la session (tous, dans l'ordre), et taille maximale d'un fichier.
+    Files(Vec<Snapshot>, Option<u64>),
 }
 
 /// Bilan de fin, montré à la personne.
@@ -60,6 +72,7 @@ pub struct Summary {
     pub duration: Duration,
     pub control: bool,
     pub messages: u32,
+    pub files: Vec<Snapshot>,
 }
 
 /// Ce que la fenêtre montre à la personne aidée.
@@ -73,6 +86,10 @@ pub trait Ui: Send {
     fn event(&mut self, event: Event);
     /// Fin de la session, avec son bilan.
     fn ended(&mut self, summary: &Summary);
+    /// Fichiers proposés acceptés d'office (essai seulement).
+    fn auto_accept_files(&self) -> bool {
+        false
+    }
 }
 
 /// Essais de code faux avant de changer de place (contre les tentatives au hasard).
@@ -206,10 +223,25 @@ async fn session(
     let send_control = |link: &mut Link, v: Value| link.seal(Kind::Control, v.to_string().as_bytes());
     // Fin de la session RDP de ce côté : le dépanneur est prévenu, le relais fermé proprement.
     let mut rdp_ended = false;
+    // Fichiers : rangés dans Téléchargements, limite annoncée par Portunia (offre gratuite sinon).
+    let mut files = Transfers::new(Role::Agent, crate::ui::downloads_dir().join("Portunia Assistance"), Some(transfer::FREE_LIMIT), ui.auto_accept_files());
+    let mut waiting_files: Vec<PathBuf> = Vec::new();
+    let mut files_ok = false;
+    let mut out: Vec<Vec<u8>> = Vec::new();
     let reason = 'session: loop {
         // Une coupure : reprise si les deux côtés et la Gate la savent faire, sinon fin.
-        let lost: bool = loop {
+        let lost: bool = 'net: loop {
+            // Messages préparés par le tour précédent (réponses sur les fichiers).
+            for f in out.drain(..) {
+                if tx.send(Message::Binary(f.into())).await.is_err() { break 'net true; }
+            }
+            let changes = files.take_changes();
+            if !changes.is_empty() {
+                ui.event(Event::Files(files.all(), files.limit()));
+            }
+            let paused = crate::display::PAUSED.load(Ordering::Relaxed);
             tokio::select! {
+                biased;
                 n = rd.read(&mut buf), if !link.congested() => match n {
                     Ok(0) | Err(_) => { rdp_ended = true; break 'session crate::t("End of the session.", "Fin de la session.") }
                     Ok(n) => {
@@ -225,6 +257,14 @@ async fn session(
                                 if tx.send(Message::Binary(ack.into())).await.is_err() { break true; }
                             }
                         }
+                        Ok((Kind::File, data)) => {
+                            if let Some(r) = files.on_data(&data) {
+                                out.push(send_control(link, r));
+                            }
+                            if let Some(ack) = link.take_ack() {
+                                out.push(ack);
+                            }
+                        }
                         Ok((Kind::Control, c)) => {
                             let v: Value = serde_json::from_slice(&c).unwrap_or(Value::Null);
                             match v["type"].as_str() {
@@ -232,6 +272,26 @@ async fn session(
                                 Some("fin") => break 'session crate::t("Ended by the person helping you.", "Terminée par la personne qui vous aide."),
                                 Some("fonctions") => {
                                     peer_features = v["liste"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+                                    files_ok = peer_features.iter().any(|f| f == "fichiers");
+                                    // Taille maximale d'un fichier : null = sans limite (Pro, Équipes).
+                                    files.set_limit(match v.get("fichiers_max") {
+                                        Some(Value::Null) => None,
+                                        Some(n) => Some(n.as_u64().unwrap_or(transfer::FREE_LIMIT)),
+                                        None => Some(transfer::FREE_LIMIT),
+                                    });
+                                    if files_ok {
+                                        ui.event(Event::Files(files.all(), files.limit()));
+                                    }
+                                    for p in std::mem::take(&mut waiting_files).into_iter().filter(|_| files_ok) {
+                                        if let Ok(o) = files.offer(&p) {
+                                            out.push(send_control(link, o));
+                                        }
+                                    }
+                                }
+                                Some(t) if t.starts_with("fichier_") && files_ok => {
+                                    if let Some(r) = files.on_control(&v) {
+                                        out.push(send_control(link, r));
+                                    }
                                 }
                                 Some("message") => {
                                     if let Some(t) = v["texte"].as_str() {
@@ -280,6 +340,24 @@ async fn session(
                         let f = send_control(link, json!({ "type": "message", "texte": text }));
                         if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
                     }
+                    Some(Command::SendFiles(paths)) => {
+                        if !files_ok {
+                            // Portunia n'a pas encore dit ce qu'il sait faire.
+                            if peer_features.is_empty() { waiting_files.extend(paths); }
+                        } else {
+                            for p in paths {
+                                if let Ok(o) = files.offer(&p) {
+                                    out.push(send_control(link, o));
+                                }
+                            }
+                        }
+                    }
+                    Some(Command::FileAnswer(id, yes)) => {
+                        if let Some(r) = files.answer(id, yes) { out.push(send_control(link, r)); }
+                    }
+                    Some(Command::FileCancel(id)) => {
+                        if let Some(r) = files.cancel(id) { out.push(send_control(link, r)); }
+                    }
                 },
                 _ = tick.tick() => {
                     if let Some(ack) = link.take_ack() {
@@ -289,10 +367,23 @@ async fn session(
                         last_quality = Instant::now();
                         if let Some(rtt) = link.rtt() { ui.event(Event::Quality(rtt)); }
                     }
+                    for r in files.expire() {
+                        out.push(send_control(link, r));
+                    }
+                }
+                // Fichier : seulement dans la place que l'image laisse libre, et jamais en pause.
+                _ = std::future::ready(()), if files.sending() && !paused && link.flow && link.in_flight() + 64 * 1024 <= link.window() / 2 => {
+                    match files.next() {
+                        Some(Outgoing::Data(d)) => out.push(link.seal(Kind::File, &d)),
+                        Some(Outgoing::Control(c)) => out.push(send_control(link, c)),
+                        None => {}
+                    }
                 }
             }
         };
         debug_assert!(lost);
+        // Ce qui n'est pas parti est gardé par la liaison et renvoyé à la reprise.
+        out.clear();
         // Reprise possible ?
         let resumable = link.flow && peer_features.iter().any(|f| f == "reprise");
         let Some(token) = resume_token.as_deref().filter(|_| resumable) else {
@@ -308,6 +399,8 @@ async fn session(
             Err(_) => break crate::t("Connection lost.", "Connexion perdue."),
         }
     };
+    files.close();
+    summary.files = files.all();
     if rdp_ended {
         let fin = send_control(link, json!({ "type": "fin" }));
         let _ = tx.send(Message::Binary(fin.into())).await;

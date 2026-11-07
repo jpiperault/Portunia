@@ -56,10 +56,12 @@ pub enum Feature {
     Proxmox,
     /// Mise à jour d'une Gate depuis Portunia (en un clic, programmée, avec retour en arrière).
     GateUpdate,
+    /// Fichiers sans limite de taille dans Portunia Assistance (100 Mo par fichier sinon).
+    AssistLargeFiles,
 }
 
 impl Feature {
-    pub const ALL: [Feature; 13] = [
+    pub const ALL: [Feature; 14] = [
         Feature::SessionRecording,
         Feature::MonitoringAlerts,
         Feature::Sync,
@@ -73,6 +75,7 @@ impl Feature {
         Feature::GateAdmin,
         Feature::Proxmox,
         Feature::GateUpdate,
+        Feature::AssistLargeFiles,
     ];
 
     /// Édition minimale qui débloque la fonctionnalité.
@@ -98,6 +101,7 @@ impl Feature {
             Feature::FileSync => t!("Compare and synchronise folders", "Comparer et synchroniser des dossiers"),
             Feature::Proxmox => t!("Proxmox VE servers", "Serveurs Proxmox VE"),
             Feature::GateUpdate => t!("Gate update from Portunia", "Mise à jour des Gates depuis Portunia"),
+            Feature::AssistLargeFiles => t!("Files of any size in remote assistance", "Fichiers de toute taille dans l'assistance à distance"),
         }
     }
 }

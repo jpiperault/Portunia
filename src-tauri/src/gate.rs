@@ -967,12 +967,85 @@ fn assists() -> &'static Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSende
 }
 
 /// Fonctions de Portunia annoncées au programme de la personne aidée.
-const ASSIST_FEATURES: [&str; 5] = ["liaison", "discussion", "pause", "controle", "reprise"];
+const ASSIST_FEATURES: [&str; 6] = ["liaison", "discussion", "pause", "controle", "reprise", "fichiers"];
 
-/// Message de l'onglet vers la personne aidée : `{type: "message", texte}` ou `{type: "demande_controle"}`.
+/// Fichiers reçus pendant les assistances (« assistance:numéro » → fichier), pour Ouvrir et
+/// Enregistrer, même après la fin de la session.
+fn assist_files() -> &'static Mutex<HashMap<String, std::path::PathBuf>> {
+    static F: std::sync::OnceLock<Mutex<HashMap<String, std::path::PathBuf>>> = std::sync::OnceLock::new();
+    F.get_or_init(Default::default)
+}
+
+/// Dossier de travail des assistances (fichiers reçus, dossiers mis en .zip).
+fn assist_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("portunia-assistance")
+}
+
+/// Met un dossier en .zip (pour l'envoyer à la personne aidée) ; les liens sont ignorés.
+fn zip_folder(dir: &std::path::Path) -> Result<std::path::PathBuf> {
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
+    let name = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "dossier".into());
+    let out_dir = assist_dir().join("envois").join(uuid::Uuid::new_v4().simple().to_string());
+    std::fs::create_dir_all(&out_dir)?;
+    let target = out_dir.join(format!("{}.zip", assist_proto::transfer::safe_name(&name)));
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(&target)?);
+    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated).large_file(true);
+    let mut stack = vec![(dir.to_path_buf(), name.clone())];
+    while let Some((path, inside)) = stack.pop() {
+        zip.add_directory(format!("{inside}/"), opts)?;
+        for entry in std::fs::read_dir(&path)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            let child = format!("{inside}/{}", entry.file_name().to_string_lossy());
+            if kind.is_dir() {
+                stack.push((entry.path(), child));
+            } else if kind.is_file() {
+                zip.start_file(child, opts)?;
+                let mut f = std::fs::File::open(entry.path())?;
+                std::io::copy(&mut f, &mut zip)?;
+            }
+        }
+    }
+    zip.finish()?.flush()?;
+    Ok(target)
+}
+
+/// Fichiers ou dossiers déposés dans l'onglet d'assistance : proposés à la personne aidée
+/// (un dossier part en .zip). Elle accepte chacun sur son écran.
+#[tauri::command]
+pub async fn gate_assist_offer(assist: String, paths: Vec<String>) -> CmdResult<()> {
+    let ended = || t!("Assistance ended", "Assistance terminée").to_string();
+    for p in paths {
+        let path = std::path::PathBuf::from(&p);
+        let path = if path.is_dir() { tauri::async_runtime::spawn_blocking(move || zip_folder(&path)).await.map_err(err)?.map_err(full)? } else { path };
+        let tx = assists().lock().unwrap().get(&assist).cloned().ok_or_else(ended)?;
+        tx.send(json!({ "type": "fichier_envoyer", "chemin": path })).map_err(|_| ended())?;
+    }
+    Ok(())
+}
+
+/// Fichier reçu de la personne aidée : l'ouvrir (`dest` absent) ou l'enregistrer à `dest`.
+#[tauri::command]
+pub fn gate_assist_file(app: AppHandle, assist: String, id: u32, dest: Option<String>) -> CmdResult<()> {
+    let src = assist_files().lock().unwrap().get(&format!("{assist}:{id}")).cloned().ok_or_else(|| t!("File no longer available", "Fichier plus disponible").to_string())?;
+    match dest {
+        Some(d) => {
+            std::fs::copy(&src, &d).map_err(err)?;
+        }
+        None => {
+            use tauri_plugin_opener::OpenerExt;
+            app.opener().open_path(src.to_string_lossy(), None::<&str>).map_err(err)?;
+        }
+    }
+    Ok(())
+}
+
+/// Message de l'onglet vers la personne aidée : `{type: "message", texte}`, `{type: "demande_controle"}`
+/// ou `{type: "fichier_annuler", id}`.
 #[tauri::command]
 pub fn gate_assist_send(assist: String, message: Value) -> CmdResult<()> {
-    let allowed = matches!(message["type"].as_str(), Some("message" | "demande_controle"));
+    let allowed = matches!(message["type"].as_str(), Some("message" | "demande_controle" | "fichier_annuler"));
     if !allowed {
         return Err(t!("Unknown message", "Message inconnu").into());
     }
@@ -1066,12 +1139,17 @@ pub async fn gate_assist(
     on_event: Channel,
     on_assist: Channel<Value>,
 ) -> CmdResult<ConnectResponse> {
-    use assist_proto::{Code, Handshake, Kind, Link, Role};
+    use assist_proto::{
+        transfer::{self, Outgoing, Transfers},
+        Code, Handshake, Kind, Link, Role,
+    };
     use futures_util::{SinkExt, StreamExt};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio_tungstenite::tungstenite::Message;
 
     state.unlocked()?;
+    // Offre gratuite : 100 Mo par fichier dans l'assistance ; Pro et Équipes : sans limite.
+    let files_limit = if state.license.lock().unwrap().allows(crate::license::Feature::AssistLargeFiles) { None } else { Some(transfer::FREE_LIMIT) };
     let code = Code::parse(&code).map_err(|_| t!("Invalid code: 9 digits expected", "Code invalide : 9 chiffres attendus").to_string())?;
     let b = find(&state.data_dir, &id).map_err(full)?;
     let jeton = token(&b).map_err(full)?;
@@ -1133,7 +1211,7 @@ pub async fn gate_assist(
     };
     // Programme récent : il saura lire nos accusés et nos messages.
     if !features.is_empty() {
-        let f = link.seal(Kind::Control, json!({ "type": "fonctions", "liste": ASSIST_FEATURES }).to_string().as_bytes());
+        let f = link.seal(Kind::Control, json!({ "type": "fonctions", "liste": ASSIST_FEATURES, "fichiers_max": files_limit }).to_string().as_bytes());
         ws.send(Message::Binary(f.into())).await.map_err(err)?;
     }
     let notify = move |v: Value| {
@@ -1151,7 +1229,11 @@ pub async fn gate_assist(
     let fingerprint = b.api_fingerprint.clone();
     let (rhost, rjeton) = (host.clone(), jeton.clone());
     let resumable = features.iter().any(|f| f == "reprise");
+    let files_ok = features.iter().any(|f| f == "fichiers");
     let assist_id = assist.clone();
+    let assist_key = assist.clone().unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
+    // Fichiers envoyés par la personne : acceptés d'office (elle les a choisis), rangés à part.
+    let mut files = Transfers::new(Role::Helper, assist_dir().join(&assist_key), files_limit, true);
     tauri::async_runtime::spawn(async move {
         let Ok(Ok((socket, _))) = tokio::time::timeout(std::time::Duration::from_secs(60), listener.accept()).await else { return };
         let _ = socket.set_nodelay(true);
@@ -1160,9 +1242,35 @@ pub async fn gate_assist(
         let mut buf = vec![0u8; 64 * 1024];
         let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
         let mut last_quality = std::time::Instant::now();
+        let mut out: Vec<Vec<u8>> = Vec::new();
+        let mut paused = false;
+        let mut noted: Vec<u32> = Vec::new();
         let reason: String = 'session: loop {
-            let lost = loop {
+            let lost = 'net: loop {
+                // Messages préparés au tour précédent (fichiers), dans l'ordre du chiffrement.
+                for f in out.drain(..) {
+                    if tx.send(Message::Binary(f.into())).await.is_err() { break 'net true; }
+                }
+                let changes = files.take_changes();
+                if !changes.is_empty() {
+                    for c in &changes {
+                        if !c.state.finished() || noted.contains(&c.id) {
+                            continue;
+                        }
+                        noted.push(c.id);
+                        if c.incoming && c.state == transfer::State::Done {
+                            if let Some(p) = &c.path {
+                                assist_files().lock().unwrap().insert(format!("{assist_key}:{}", c.id), p.clone());
+                            }
+                        }
+                        // Journal de la Gate (0.44 et suivantes) : sens, taille, issue ; ni nom ni contenu.
+                        let note = json!({ "type": "journal", "evenement": "fichier", "sens": if c.incoming { "recu" } else { "envoye" }, "taille": c.size, "etat": c.state.id() });
+                        let _ = tx.send(Message::Text(note.to_string().into())).await;
+                    }
+                    notify(json!({ "type": "fichiers", "liste": files.all().iter().map(|f| f.to_json()).collect::<Vec<_>>(), "max": files.limit() }));
+                }
                 tokio::select! {
+                    biased;
                     n = rd.read(&mut buf) => match n {
                         Ok(0) | Err(_) => {
                             // Onglet fermé : on prévient la personne aidée.
@@ -1184,13 +1292,29 @@ pub async fn gate_assist(
                                     if tx.send(Message::Binary(ack.into())).await.is_err() { break true; }
                                 }
                             }
+                            Ok((Kind::File, data)) => {
+                                if let Some(r) = files.on_data(&data) {
+                                    out.push(link.seal(Kind::Control, r.to_string().as_bytes()));
+                                }
+                                if let Some(ack) = link.take_ack() {
+                                    out.push(ack);
+                                }
+                            }
                             Ok((Kind::Control, c)) => {
                                 let v: Value = serde_json::from_slice(&c).unwrap_or(Value::Null);
                                 match v["type"].as_str() {
                                     Some("recu") => link.acked(v["n"].as_u64().unwrap_or(0)),
                                     Some("fin") => break 'session t!("The person stopped the assistance.", "La personne a arrêté l'assistance.").to_string(),
                                     Some("message") => notify(json!({ "type": "message", "texte": v["texte"].as_str().unwrap_or_default().chars().take(4000).collect::<String>() })),
-                                    Some("pause") => notify(json!({ "type": "pause", "actif": v["actif"].as_bool().unwrap_or(false) })),
+                                    Some(t) if t.starts_with("fichier_") && files_ok => {
+                                        if let Some(r) = files.on_control(&v) {
+                                            out.push(link.seal(Kind::Control, r.to_string().as_bytes()));
+                                        }
+                                    }
+                                    Some("pause") => {
+                                        paused = v["actif"].as_bool().unwrap_or(false);
+                                        notify(json!({ "type": "pause", "actif": paused }));
+                                    }
                                     Some("controle") => notify(json!({ "type": "controle", "actif": v["actif"].as_bool().unwrap_or(false) })),
                                     _ => {}
                                 }
@@ -1202,8 +1326,24 @@ pub async fn gate_assist(
                         _ => {}
                     },
                     m = from_tab.recv() => if let Some(v) = m {
-                        let f = link.seal(Kind::Control, v.to_string().as_bytes());
-                        if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                        match v["type"].as_str() {
+                            Some("fichier_envoyer") => {
+                                if let Some(p) = v["chemin"].as_str().filter(|_| files_ok) {
+                                    if let Ok(o) = files.offer(std::path::Path::new(p)) {
+                                        out.push(link.seal(Kind::Control, o.to_string().as_bytes()));
+                                    }
+                                }
+                            }
+                            Some("fichier_annuler") => {
+                                if let Some(r) = v["id"].as_u64().and_then(|i| files.cancel(i as u32)) {
+                                    out.push(link.seal(Kind::Control, r.to_string().as_bytes()));
+                                }
+                            }
+                            _ => {
+                                let f = link.seal(Kind::Control, v.to_string().as_bytes());
+                                if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                            }
+                        }
                     },
                     _ = tick.tick() => {
                         if let Some(ack) = link.take_ack() {
@@ -1214,9 +1354,19 @@ pub async fn gate_assist(
                             if let Some(rtt) = link.rtt() { notify(json!({ "type": "qualite", "ms": rtt.as_millis() as u64 })); }
                         }
                     }
+                    // Fichier : seulement dans la place que l'image laisse libre, et pas pendant la pause.
+                    _ = std::future::ready(()), if files.sending() && !paused && link.flow && link.in_flight() + 64 * 1024 <= link.window() / 2 => {
+                        match files.next() {
+                            Some(Outgoing::Data(d)) => out.push(link.seal(Kind::File, &d)),
+                            Some(Outgoing::Control(c)) => out.push(link.seal(Kind::Control, c.to_string().as_bytes())),
+                            None => {}
+                        }
+                    }
                 }
             };
             debug_assert!(lost);
+            // Ce qui n'est pas parti est gardé par la liaison et renvoyé à la reprise.
+            out.clear();
             // Coupure : reprise si la Gate et le programme la savent faire.
             let Some(token) = resume_token.as_deref().filter(|_| resumable && link.flow) else {
                 break t!("Connection lost.", "Connexion perdue.").to_string();
@@ -1230,6 +1380,8 @@ pub async fn gate_assist(
                 None => break t!("Connection lost.", "Connexion perdue.").to_string(),
             }
         };
+        files.close();
+        notify(json!({ "type": "fichiers", "liste": files.all().iter().map(|f| f.to_json()).collect::<Vec<_>>(), "max": files.limit() }));
         notify(json!({ "type": "fin", "raison": reason }));
         if let Some(a) = &assist_id {
             assists().lock().unwrap().remove(a);

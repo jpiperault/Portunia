@@ -1123,4 +1123,21 @@ body.detached #relecture { height: 100vh; }
 .assist-msg.theirs { align-self: flex-start; background: var(--hover); }
 .assist-msg.mine { align-self: flex-end; background: var(--accent); color: #fff; }
 .assist-send { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
+.assist-file { max-width: 92%; display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); font-size: 12.5px; }
+.assist-file.mine { align-self: flex-end; }
+.assist-file.theirs { align-self: flex-start; }
+.assist-file-top { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.assist-file-ext { flex: none; width: 30px; height: 36px; border-radius: 5px; display: grid; place-items: center; font-size: 9.5px; font-weight: 700; background: var(--accent-soft); color: var(--accent); }
+.assist-file-ext.program { background: rgb(208 138 44 / .18); color: #d08a2c; }
+.assist-file-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.assist-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assist-file-status { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.assist-file-status.ok { color: #1d8a57; }
+.assist-file-status.warn { color: #d08a2c; }
+.assist-file-bar { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.assist-file-bar i { display: block; height: 100%; background: var(--accent); transition: width .15s linear; }
+.assist-file-acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.assist-drop { position: absolute; inset: 44px 8px 8px; z-index: 6; border: 2px dashed var(--accent); border-radius: 10px; background: rgb(91 155 255 / .16); display: grid; place-items: center; pointer-events: none; }
+.assist-drop[hidden] { display: none; }
+.assist-drop > div { display: flex; align-items: center; gap: 10px; max-width: min(460px, 90%); padding: 14px 18px; border-radius: 10px; background: var(--bg); color: var(--text); font-size: 13px; box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
 .assist-send input { flex: 1; min-width: 0; }

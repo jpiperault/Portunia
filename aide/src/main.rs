@@ -63,6 +63,8 @@ fn server(opts: &Options, addr: SocketAddr) -> Result<RdpServer> {
 #[cfg(feature = "essai")]
 struct Console {
     auto: bool,
+    /// Fichier à envoyer au dépanneur dès la mise en relation.
+    send: Option<(tokio::sync::mpsc::UnboundedSender<relay::Command>, std::path::PathBuf)>,
 }
 
 #[cfg(feature = "essai")]
@@ -83,12 +85,24 @@ impl relay::Ui for Console {
     }
     fn connected(&mut self, who: &str, control: bool) {
         eprintln!("{who} {} votre écran", if control { "voit et contrôle" } else { "voit" });
+        if let Some((tx, path)) = self.send.take() {
+            let _ = tx.send(relay::Command::SendFiles(vec![path]));
+        }
     }
     fn event(&mut self, event: relay::Event) {
-        eprintln!("ÉVÉNEMENT {event:?}");
+        match event {
+            relay::Event::Files(list, _) => {
+                let line: Vec<String> = list.iter().map(|f| format!("{} {} {}/{} {:?}{}", f.id, f.name, f.done, f.size, f.state, f.problem.map(|p| format!(" ({p:?})")).unwrap_or_default())).collect();
+                eprintln!("FICHIERS {}", line.join(" | "));
+            }
+            e => eprintln!("ÉVÉNEMENT {e:?}"),
+        }
     }
     fn ended(&mut self, summary: &relay::Summary) {
-        eprintln!("FIN {} ({} s, {} messages)", summary.reason, summary.duration.as_secs(), summary.messages);
+        eprintln!("FIN {} ({} s, {} messages, {} fichiers)", summary.reason, summary.duration.as_secs(), summary.messages, summary.files.len());
+    }
+    fn auto_accept_files(&self) -> bool {
+        self.auto
     }
 }
 
@@ -156,8 +170,8 @@ fn main() -> Result<()> {
     #[cfg(feature = "essai")]
     if flag("--console") {
         let url = value("--relais").context("--relais attendu")?;
-        let mut ui = Console { auto: flag("--accord-auto") };
-        let (_commands_tx, commands) = tokio::sync::mpsc::unbounded_channel();
+        let (commands_tx, commands) = tokio::sync::mpsc::unbounded_channel();
+        let mut ui = Console { auto: flag("--accord-auto"), send: value("--envoyer").map(|p| (commands_tx.clone(), p.into())) };
         let local = tokio::task::LocalSet::new();
         return runtime()?.block_on(local.run_until(relay::run(&url, None, &mut ui, || server(&opts, any).expect("serveur RDP"), commands)));
     }

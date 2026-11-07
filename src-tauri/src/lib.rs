@@ -137,6 +137,8 @@ pub fn run() {
             gate::gate_rdp_replay,
             gate::gate_assist,
             gate::gate_assist_send,
+            gate::gate_assist_offer,
+            gate::gate_assist_file,
             gate::gate_assist_status,
             gate::gate_rdp_replay_seek,
             gate::gate_rdp_replay_more,

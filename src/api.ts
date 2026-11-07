@@ -439,9 +439,19 @@ export function connectAssist(id: string, code: string, assist: string, cols: nu
   return invoke<ConnectResponse>('gate_assist', { id, code, assist, cols, rows, onEvent: channel, onAssist: side });
 }
 
-/** Message de l'onglet d'assistance vers la personne aidée (discussion, demande de contrôle). */
-export function assistSend(assist: string, message: { type: 'message'; texte: string } | { type: 'demande_controle' }) {
+/** Message de l'onglet d'assistance vers la personne aidée (discussion, demande de contrôle, annulation d'un fichier). */
+export function assistSend(assist: string, message: { type: 'message'; texte: string } | { type: 'demande_controle' } | { type: 'fichier_annuler'; id: number }) {
   return invoke<void>('gate_assist_send', { assist, message });
+}
+
+/** Fichiers ou dossiers proposés à la personne aidée (un dossier part en .zip). */
+export function assistOffer(assist: string, paths: string[]) {
+  return invoke<void>('gate_assist_offer', { assist, paths });
+}
+
+/** Fichier reçu de la personne aidée : l'ouvrir, ou l'enregistrer à `dest`. */
+export function assistFile(assist: string, id: number, dest?: string) {
+  return invoke<void>('gate_assist_file', { assist, id, dest: dest ?? null });
 }
 
 export function connectGate(id: string, server: string, extra: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
