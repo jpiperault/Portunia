@@ -9,6 +9,9 @@
 //! - **Chiffrement** ChaCha20-Poly1305, une clé par sens, nonce = compteur de messages.
 //!   Chaque message porte une sorte : contrôle (JSON) ou données (flux RDP).
 
+pub mod link;
+pub use link::Link;
+
 use chacha20poly1305::{aead::Aead, ChaCha20Poly1305, KeyInit, Nonce};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};

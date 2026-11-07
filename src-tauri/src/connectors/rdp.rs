@@ -233,6 +233,8 @@ fn connect_embedded(ctx: &ConnectContext) -> Result<Outcome> {
     // où le mot de passe serait envoyé au serveur lui-même.
     settings["nlaOnly"] = json!(!ctx.bool("allowNoNla"));
     settings["quality"] = json!(ctx.str("quality").unwrap_or_default());
+    // Assistance : pointeur de l'autre côté dessiné dans l'image.
+    settings["remotePointer"] = json!(ctx.bool("remotePointer"));
     // Copie de fichiers par le presse-papiers ; une Gate dit si la règle la permet.
     settings["files"] = json!(ctx.values.get("files").and_then(Value::as_bool).unwrap_or(true));
     // Gate, mode enregistré : passage RDCleanPath avec un jeton à usage unique.

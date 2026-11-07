@@ -103,3 +103,121 @@ export async function openAssistDialog(host: AssistHost) {
   document.body.append(dialog);
   dialog.showModal();
 }
+
+/** Ce que le pont d'assistance dit de la session, à côté de l'image. */
+export type AssistEvent =
+  | { type: 'debut'; controle: boolean; fonctions: string[] }
+  | { type: 'controle'; actif: boolean }
+  | { type: 'pause'; actif: boolean }
+  | { type: 'message'; texte: string }
+  | { type: 'reconnexion'; actif: boolean }
+  | { type: 'qualite'; ms: number }
+  | { type: 'fin'; raison: string };
+
+type AssistMessage = { type: 'message'; texte: string } | { type: 'demande_controle' };
+
+/**
+ * Bandeau de l'onglet d'assistance : ce que la personne a accordé (vue seule, contrôle, pause),
+ * qualité de la liaison, demande de contrôle et discussion. Les messages ne sont gardés que
+ * pendant l'assistance.
+ */
+export class AssistPanel {
+  readonly bar = h('div', { class: 'assist-strip', role: 'status' });
+  readonly chat = h('aside', { class: 'assist-chat', hidden: true, 'aria-label': t('Chat', 'Discussion') });
+  private readonly status = h('span', { class: 'assist-status' });
+  private readonly quality = h('span', { class: 'assist-quality muted small' });
+  private readonly askBtn = h('button', { type: 'button', class: 'btn small', hidden: true }, icon('pointer', 14), t('Ask for control', 'Demander le contrôle')) as HTMLButtonElement;
+  private readonly chatBtn = h('button', { type: 'button', class: 'btn small', hidden: true, 'aria-expanded': 'false' }, icon('chat', 14), t('Chat', 'Discussion')) as HTMLButtonElement;
+  private readonly badge = h('span', { class: 'assist-badge', hidden: true });
+  private readonly list = h('div', { class: 'assist-messages' });
+  private readonly input = h('input', { type: 'text', maxlength: '2000', placeholder: t('Write a message…', 'Écrire un message…'), 'aria-label': t('Message', 'Message') }) as HTMLInputElement;
+  private control = false;
+  private paused = false;
+  private reconnecting = false;
+  private ended = '';
+  private features: string[] = [];
+  private asked = false;
+
+  constructor(private readonly send: (m: AssistMessage) => Promise<void>, private readonly notify: (m: string, kind?: 'info' | 'error') => void) {
+    this.chatBtn.append(this.badge);
+    this.bar.append(h('span', { class: 'assist-dot' }), this.status, this.quality, h('span', { class: 'spacer' }), this.askBtn, this.chatBtn);
+    const form = h('form', { class: 'assist-send' }, this.input, h('button', { type: 'submit', class: 'btn primary small', 'aria-label': t('Send', 'Envoyer') }, icon('arrowRight', 14)));
+    form.addEventListener('submit', (e) => { e.preventDefault(); this.sendMessage(); });
+    this.chat.append(
+      h('header', {}, h('b', {}, t('Chat', 'Discussion')), h('button', { type: 'button', class: 'icon-btn', 'aria-label': t('Close', 'Fermer'), onclick: () => this.toggleChat(false) }, icon('close', 14))),
+      this.list, form);
+    this.askBtn.addEventListener('click', () => {
+      this.asked = true;
+      this.render();
+      this.send({ type: 'demande_controle' })
+        .then(() => this.notify(t('Request sent: the person accepts or declines on their screen.', 'Demande envoyée : la personne accepte ou refuse sur son écran.')))
+        .catch((e) => { this.asked = false; this.render(); this.notify(String(e), 'error'); });
+    });
+    this.chatBtn.addEventListener('click', () => this.toggleChat(this.chat.hidden));
+    this.render();
+  }
+
+  handle(e: AssistEvent) {
+    switch (e.type) {
+      case 'debut': this.control = e.controle; this.features = e.fonctions; break;
+      case 'controle':
+        if (this.asked && !e.actif) this.notify(t('The person declined to give control.', 'La personne a refusé de donner le contrôle.'));
+        else if (e.actif !== this.control) this.notify(e.actif ? t('The person gave you control.', 'La personne vous a donné le contrôle.') : t('The person took back control: view only.', 'La personne a repris la main : vue seule.'));
+        this.control = e.actif;
+        this.asked = false;
+        break;
+      case 'pause': this.paused = e.actif; break;
+      case 'reconnexion': this.reconnecting = e.actif; break;
+      case 'qualite':
+        this.quality.textContent = `${e.ms} ms`;
+        this.quality.title = t('Round trip to the person\'s PC', 'Aller-retour jusqu\'au PC de la personne');
+        return;
+      case 'message':
+        this.addMessage(false, e.texte);
+        if (this.chat.hidden) {
+          this.badge.hidden = false;
+          this.notify(t('New message from the person', 'Nouveau message de la personne'));
+        }
+        return;
+      case 'fin': this.ended = e.raison || t('Assistance ended.', 'Assistance terminée.'); this.reconnecting = false; break;
+    }
+    this.render();
+  }
+
+  private render() {
+    const [text, state] = this.ended ? [this.ended, 'off']
+      : this.reconnecting ? [t('Network cut: reconnecting…', 'Réseau coupé : reconnexion…'), 'warn']
+      : this.paused ? [t('The person paused the session: frozen image, no control', 'La personne a mis la session en pause : image figée, aucun contrôle'), 'warn']
+      : this.control ? [t('You see and control the screen', 'Vous voyez et contrôlez l\'écran'), 'on']
+      : [t('View only', 'Vue seule'), 'view'];
+    this.status.textContent = text;
+    this.bar.dataset.state = state;
+    this.askBtn.hidden = !!this.ended || this.control || !this.features.includes('controle');
+    this.askBtn.disabled = this.asked || this.paused || this.reconnecting;
+    this.chatBtn.hidden = !this.features.includes('discussion');
+    this.input.disabled = !!this.ended;
+    if (this.ended) this.quality.textContent = '';
+  }
+
+  private toggleChat(open: boolean) {
+    this.chat.hidden = !open;
+    this.chatBtn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      this.badge.hidden = true;
+      setTimeout(() => this.input.focus(), 0);
+    }
+  }
+
+  private addMessage(mine: boolean, text: string) {
+    this.list.append(h('div', { class: `assist-msg ${mine ? 'mine' : 'theirs'}` }, text));
+    this.list.scrollTop = this.list.scrollHeight;
+  }
+
+  private sendMessage() {
+    const text = this.input.value.trim();
+    if (!text || this.ended) return;
+    this.input.value = '';
+    this.addMessage(true, text);
+    this.send({ type: 'message', texte: text }).catch((e) => this.notify(String(e), 'error'));
+  }
+}

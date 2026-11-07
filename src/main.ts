@@ -1,9 +1,9 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
+import { api, assistSend, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
 import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
 import { ProxmoxPanel, PROXMOX_EXTENSION } from './proxmox';
-import { ASSIST_EXTENSION, openAssistDialog } from './assist';
+import { ASSIST_EXTENSION, AssistPanel, openAssistDialog } from './assist';
 import { openKeyManager } from './keys';
 import { NotesPanel } from './notes';
 import { ServerPanel } from './dashboard';
@@ -331,16 +331,25 @@ function openAssist(b: Gate, code: string) {
     id: '', name: tr(`Assistance · ${code}`, `Assistance · ${code}`), folder: '', protocol: 'rdp', tags: [], secretKeys: [],
     values: { host: b.host, port: b.apiPort, username: '', client: 'tab' },
   };
+  // Bandeau de l'onglet : contrôle, pause, qualité, discussion.
+  const assist = crypto.randomUUID();
+  const panel = new AssistPanel((m) => assistSend(assist, m), toast);
+  const onAssist = (e: any) => panel.handle(e);
   const connect = async (_t: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => {
     try {
-      return await connectAssist(b.id, code, cols, rows, onEvent);
+      return await connectAssist(b.id, code, assist, cols, rows, onEvent, onAssist);
     } catch (e) {
       if (errorText(e) !== 'SESSION_EXPIREE') throw e;
-      if (await gatePanel.reconnect(b.id)) return connectAssist(b.id, code, cols, rows, onEvent);
+      if (await gatePanel.reconnect(b.id)) return connectAssist(b.id, code, assist, cols, rows, onEvent, onAssist);
       throw new Error(tr('Gate session expired: sign in again (Gates section).', 'Session de la Gate expirée : reconnectez-vous (section Gates).'));
     }
   };
-  return openSession(session, undefined, { connect, typing: false });
+  const decorate = (view: HTMLElement, screen: HTMLElement) => {
+    view.classList.add('assist-pane');
+    view.insertBefore(panel.bar, screen);
+    view.append(panel.chat);
+  };
+  return openSession(session, undefined, { connect, typing: false, decorate });
 }
 
 // ---------- Extension Proxmox VE ----------
@@ -1287,6 +1296,8 @@ async function filesLogin(session: Session, typed: Record<string, unknown>, conn
 interface CustomOpen {
   connect: (typed: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) => Promise<ConnectResponse>;
   typing: boolean;
+  /** Ajouts à l'onglet (assistance : bandeau et discussion), avant la connexion. */
+  decorate?: (view: HTMLElement, screen: HTMLElement) => void;
 }
 
 async function openSession(session: Session, quick?: QuickTarget, custom?: CustomOpen) {
@@ -1340,6 +1351,7 @@ async function openSession(session: Session, quick?: QuickTarget, custom?: Custo
   const paneHead = h('div', { class: 'pane-head', hidden: true });
   const view = h('div', { class: 'pane' }, paneHead, termEl);
   views.append(view);
+  custom?.decorate?.(view, termEl);
   const tab: Tab = {
     id: crypto.randomUUID(), kind: 'session', title: session.name, sessionId: quick || custom ? undefined : session.id, protocol: session.protocol,
     quick, view, paneHead, state: 'connecting', receive: true,

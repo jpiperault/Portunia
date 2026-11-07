@@ -960,36 +960,41 @@ pub async fn gate_assist_status(state: State<'_, AppState>, id: String) -> CmdRe
     authed(&state.data_dir, &mut b, reqwest::Method::GET, "/assistance", None).await.map_err(full)
 }
 
-/// Rejoint la personne aidée par le relais de la Gate, avec le code qu'elle a lu : échange de
-/// clés authentifié par le code (le relais ne peut ni lire ni se faire passer pour l'un des deux),
-/// attente de son accord, puis Bureau à distance dans le canal chiffré, dans un onglet.
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub async fn gate_assist(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-    code: String,
-    cols: u16,
-    rows: u16,
-    on_event: Channel,
-) -> CmdResult<ConnectResponse> {
-    use assist_proto::{Code, Handshake, Kind, Role};
-    use futures_util::{SinkExt, StreamExt};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
+/// Assistances en cours : messages de l'onglet (discussion, demande de contrôle) vers le pont.
+fn assists() -> &'static Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<Value>>> {
+    static A: std::sync::OnceLock<Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<Value>>>> = std::sync::OnceLock::new();
+    A.get_or_init(Default::default)
+}
 
-    state.unlocked()?;
-    let code = Code::parse(&code).map_err(|_| t!("Invalid code: 9 digits expected", "Code invalide : 9 chiffres attendus").to_string())?;
-    let b = find(&state.data_dir, &id).map_err(full)?;
-    let jeton = token(&b).map_err(full)?;
-    let (host, port) = api_at(&state.data_dir, &b).await?;
-    let tls = pinned_tls(&host, port, &b.api_fingerprint).await.map_err(full)?;
-    let mut request = format!("wss://{host}:{port}/api/v1/assistance/{}", code.nameplate).into_client_request().map_err(err)?;
+/// Fonctions de Portunia annoncées au programme de la personne aidée.
+const ASSIST_FEATURES: [&str; 5] = ["liaison", "discussion", "pause", "controle", "reprise"];
+
+/// Message de l'onglet vers la personne aidée : `{type: "message", texte}` ou `{type: "demande_controle"}`.
+#[tauri::command]
+pub fn gate_assist_send(assist: String, message: Value) -> CmdResult<()> {
+    let allowed = matches!(message["type"].as_str(), Some("message" | "demande_controle"));
+    if !allowed {
+        return Err(t!("Unknown message", "Message inconnu").into());
+    }
+    let tx = assists().lock().unwrap().get(&assist).cloned().ok_or_else(|| t!("Assistance ended", "Assistance terminée").to_string())?;
+    tx.send(message).map_err(|_| t!("Assistance ended", "Assistance terminée").to_string())
+}
+
+type AssistWs = tokio_tungstenite::WebSocketStream<tokio_rustls::client::TlsStream<tokio::net::TcpStream>>;
+
+/// WebSocket du relais d'assistance de la Gate (place, et jeton de reprise après une coupure).
+async fn assist_socket(host: &str, port: u16, fingerprint: &str, jeton: &str, place: &str, resume: Option<&str>) -> Result<AssistWs, String> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let tls = pinned_tls(host, port, fingerprint).await.map_err(full)?;
+    let url = match resume {
+        Some(r) => format!("wss://{host}:{port}/api/v1/assistance/{place}?reprise={r}"),
+        None => format!("wss://{host}:{port}/api/v1/assistance/{place}"),
+    };
+    let mut request = url.into_client_request().map_err(err)?;
     let h = request.headers_mut();
     h.insert("authorization", format!("Bearer {jeton}").parse().map_err(err)?);
     h.insert("accept-language", crate::lang::code().parse().map_err(err)?);
-    let (mut ws, _) = tokio_tungstenite::client_async(request, tls).await.map_err(|e| match e {
+    let (ws, _) = tokio_tungstenite::client_async(request, tls).await.map_err(|e| match e {
         tokio_tungstenite::tungstenite::Error::Http(r) if r.status() == 401 => "SESSION_EXPIREE".to_string(),
         tokio_tungstenite::tungstenite::Error::Http(r) => {
             let body = r.body().as_deref().map(String::from_utf8_lossy).unwrap_or_default();
@@ -997,14 +1002,89 @@ pub async fn gate_assist(
         }
         e => e.to_string(),
     })?;
+    Ok(ws)
+}
+
+/// Reprise après une coupure : même place, puis chacun renvoie ce que l'autre n'a pas reçu.
+async fn assist_resume(host: &str, port: u16, fingerprint: &str, jeton: &str, place: &str, token: &str, link: &mut assist_proto::Link) -> Option<AssistWs> {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::Message;
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    while std::time::Instant::now() < until {
+        let attempt = async {
+            let mut ws = assist_socket(host, port, fingerprint, jeton, place, Some(token)).await.ok()?;
+            loop {
+                match ws.next().await? {
+                    Ok(Message::Text(t)) => {
+                        let v: Value = serde_json::from_str(&t).ok()?;
+                        match v["type"].as_str() {
+                            Some("repris") => break,
+                            Some("erreur") => return None,
+                            _ => {}
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) => return None,
+                }
+            }
+            ws.send(Message::Text(json!({ "type": "reprise", "recu": link.opened() }).to_string().into())).await.ok()?;
+            let n = loop {
+                if let Ok(Message::Text(t)) = ws.next().await? {
+                    let v: Value = serde_json::from_str(&t).ok()?;
+                    if v["type"] == "reprise" {
+                        break v["recu"].as_u64().unwrap_or(0);
+                    }
+                }
+            };
+            for f in link.resend_from(n)? {
+                ws.send(Message::Binary(f.into())).await.ok()?;
+            }
+            Some(ws)
+        };
+        if let Some(ws) = attempt.await {
+            return Some(ws);
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+    None
+}
+
+/// Rejoint la personne aidée par le relais de la Gate, avec le code qu'elle a lu : échange de
+/// clés authentifié par le code (le relais ne peut ni lire ni se faire passer pour l'un des deux),
+/// attente de son accord, puis Bureau à distance dans le canal chiffré, dans un onglet.
+/// `on_assist` reçoit ce qui se passe à côté de l'image (contrôle, pause, messages, reconnexion).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn gate_assist(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    code: String,
+    assist: Option<String>,
+    cols: u16,
+    rows: u16,
+    on_event: Channel,
+    on_assist: Channel<Value>,
+) -> CmdResult<ConnectResponse> {
+    use assist_proto::{Code, Handshake, Kind, Link, Role};
+    use futures_util::{SinkExt, StreamExt};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio_tungstenite::tungstenite::Message;
+
+    state.unlocked()?;
+    let code = Code::parse(&code).map_err(|_| t!("Invalid code: 9 digits expected", "Code invalide : 9 chiffres attendus").to_string())?;
+    let b = find(&state.data_dir, &id).map_err(full)?;
+    let jeton = token(&b).map_err(full)?;
+    let (host, port) = api_at(&state.data_dir, &b).await?;
+    let mut ws = assist_socket(&host, port, &b.api_fingerprint, &jeton, &code.nameplate, None).await?;
     let fail = |m: &str| m.to_string();
-    // Relais : la place existe-t-elle encore ?
-    loop {
+    // Relais : la place existe-t-elle encore ? (et jeton de reprise, Gate 0.43 et suivantes)
+    let resume_token = loop {
         match ws.next().await {
             Some(Ok(Message::Text(t))) => {
                 let v: Value = serde_json::from_str(&t).unwrap_or(Value::Null);
                 match v["type"].as_str() {
-                    Some("relie") => break,
+                    Some("relie") => break v["reprise"].as_str().map(String::from),
                     Some("erreur") => return Err(v["message"].as_str().unwrap_or("?").to_string()),
                     _ => {}
                 }
@@ -1012,7 +1092,7 @@ pub async fn gate_assist(
             Some(Ok(_)) => {}
             _ => return Err(fail(t!("The relay closed the connection", "Le relais a fermé la connexion"))),
         }
-    }
+    };
     async fn binary<S: StreamExt<Item = Result<Message, tokio_tungstenite::tungstenite::Error>> + Unpin>(ws: &mut S) -> Option<Vec<u8>> {
         loop {
             match ws.next().await? {
@@ -1030,70 +1110,150 @@ pub async fn gate_assist(
     let (pending, confirm) = hs.finish(&peer).map_err(err)?;
     ws.send(Message::Binary(confirm.into())).await.map_err(err)?;
     let peer_confirm = binary(&mut ws).await.ok_or_else(|| t!("Wrong code: check the 9 digits with the person", "Code faux : vérifiez les 9 chiffres avec la personne").to_string())?;
-    let (mut sealer, mut opener) = pending
+    let (sealer, opener) = pending
         .confirm(&peer_confirm)
         .map_err(|_| t!("Wrong code: check the 9 digits with the person", "Code faux : vérifiez les 9 chiffres avec la personne").to_string())?;
+    let mut link = Link::new(sealer, opener);
     // Accord de la personne (elle voit le nom du compte qui se connecte).
-    let control = loop {
+    let (control, features) = loop {
         let frame = binary(&mut ws).await.ok_or_else(gone)?;
-        let (kind, payload) = opener.open(&frame).map_err(err)?;
+        let (kind, payload) = link.open(&frame).map_err(err)?;
         if kind != Kind::Control {
             continue;
         }
         let v: Value = serde_json::from_slice(&payload).unwrap_or(Value::Null);
         match v["type"].as_str() {
-            Some("accord") => break v["controle"].as_bool().unwrap_or(false),
+            Some("accord") => {
+                let features: Vec<String> = v["fonctions"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+                break (v["controle"].as_bool().unwrap_or(false), features);
+            }
             Some("refus") => return Err(t!("The person declined", "La personne a refusé").into()),
             _ => {}
         }
     };
+    // Programme récent : il saura lire nos accusés et nos messages.
+    if !features.is_empty() {
+        let f = link.seal(Kind::Control, json!({ "type": "fonctions", "liste": ASSIST_FEATURES }).to_string().as_bytes());
+        ws.send(Message::Binary(f.into())).await.map_err(err)?;
+    }
+    let notify = move |v: Value| {
+        let _ = on_assist.send(v);
+    };
+    notify(json!({ "type": "debut", "controle": control, "fonctions": features }));
+    let (to_peer, mut from_tab) = tokio::sync::mpsc::unbounded_channel::<Value>();
+    if let Some(a) = &assist {
+        assists().lock().unwrap().insert(a.clone(), to_peer);
+    }
     // Le moteur RDP se connecte en local ; ce pont chiffre et déchiffre vers la personne aidée.
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).await.map_err(err)?;
-    let port = listener.local_addr().map_err(err)?.port();
+    let local_port = listener.local_addr().map_err(err)?.port();
+    let place = code.nameplate.clone();
+    let fingerprint = b.api_fingerprint.clone();
+    let (rhost, rjeton) = (host.clone(), jeton.clone());
+    let resumable = features.iter().any(|f| f == "reprise");
+    let assist_id = assist.clone();
     tauri::async_runtime::spawn(async move {
         let Ok(Ok((socket, _))) = tokio::time::timeout(std::time::Duration::from_secs(60), listener.accept()).await else { return };
         let _ = socket.set_nodelay(true);
         let (mut rd, mut wr) = socket.into_split();
         let (mut tx, mut rx) = ws.split();
         let mut buf = vec![0u8; 64 * 1024];
-        loop {
-            tokio::select! {
-                n = rd.read(&mut buf) => match n {
-                    Ok(0) | Err(_) => {
-                        // Onglet fermé : on prévient la personne aidée.
-                        let fin = sealer.seal(Kind::Control, json!({ "type": "fin" }).to_string().as_bytes());
-                        let _ = tx.send(Message::Binary(fin.into())).await;
-                        break;
-                    }
-                    Ok(n) => {
-                        let frame = sealer.seal(Kind::Data, &buf[..n]);
-                        if tx.send(Message::Binary(frame.into())).await.is_err() { break; }
-                    }
-                },
-                m = rx.next() => match m {
-                    Some(Ok(Message::Binary(b))) => match opener.open(&b) {
-                        Ok((Kind::Data, data)) => { if wr.write_all(&data).await.is_err() { break; } }
-                        Ok((Kind::Control, _)) => {}
-                        Err(_) => break,
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(100));
+        let mut last_quality = std::time::Instant::now();
+        let reason: String = 'session: loop {
+            let lost = loop {
+                tokio::select! {
+                    n = rd.read(&mut buf) => match n {
+                        Ok(0) | Err(_) => {
+                            // Onglet fermé : on prévient la personne aidée.
+                            let fin = link.seal(Kind::Control, json!({ "type": "fin" }).to_string().as_bytes());
+                            let _ = tx.send(Message::Binary(fin.into())).await;
+                            let _ = tx.close().await;
+                            break 'session String::new();
+                        }
+                        Ok(n) => {
+                            let frame = link.seal(Kind::Data, &buf[..n]);
+                            if tx.send(Message::Binary(frame.into())).await.is_err() { break true; }
+                        }
                     },
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
-                    _ => {}
-                },
+                    m = rx.next() => match m {
+                        Some(Ok(Message::Binary(b))) => match link.open(&b) {
+                            Ok((Kind::Data, data)) => {
+                                if wr.write_all(&data).await.is_err() { break 'session String::new(); }
+                                if let Some(ack) = link.take_ack() {
+                                    if tx.send(Message::Binary(ack.into())).await.is_err() { break true; }
+                                }
+                            }
+                            Ok((Kind::Control, c)) => {
+                                let v: Value = serde_json::from_slice(&c).unwrap_or(Value::Null);
+                                match v["type"].as_str() {
+                                    Some("recu") => link.acked(v["n"].as_u64().unwrap_or(0)),
+                                    Some("fin") => break 'session t!("The person stopped the assistance.", "La personne a arrêté l'assistance.").to_string(),
+                                    Some("message") => notify(json!({ "type": "message", "texte": v["texte"].as_str().unwrap_or_default().chars().take(4000).collect::<String>() })),
+                                    Some("pause") => notify(json!({ "type": "pause", "actif": v["actif"].as_bool().unwrap_or(false) })),
+                                    Some("controle") => notify(json!({ "type": "controle", "actif": v["actif"].as_bool().unwrap_or(false) })),
+                                    _ => {}
+                                }
+                            }
+                            Err(_) => break 'session t!("Altered message: connection cut for safety.", "Message altéré : connexion coupée par sécurité.").to_string(),
+                        },
+                        Some(Ok(Message::Close(_))) => break 'session t!("The relay closed the connection.", "Le relais a fermé la connexion.").to_string(),
+                        None | Some(Err(_)) => break true,
+                        _ => {}
+                    },
+                    m = from_tab.recv() => if let Some(v) = m {
+                        let f = link.seal(Kind::Control, v.to_string().as_bytes());
+                        if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                    },
+                    _ = tick.tick() => {
+                        if let Some(ack) = link.take_ack() {
+                            if tx.send(Message::Binary(ack.into())).await.is_err() { break true; }
+                        }
+                        if last_quality.elapsed() >= std::time::Duration::from_secs(1) {
+                            last_quality = std::time::Instant::now();
+                            if let Some(rtt) = link.rtt() { notify(json!({ "type": "qualite", "ms": rtt.as_millis() as u64 })); }
+                        }
+                    }
+                }
+            };
+            debug_assert!(lost);
+            // Coupure : reprise si la Gate et le programme la savent faire.
+            let Some(token) = resume_token.as_deref().filter(|_| resumable && link.flow) else {
+                break t!("Connection lost.", "Connexion perdue.").to_string();
+            };
+            notify(json!({ "type": "reconnexion", "actif": true }));
+            match assist_resume(&rhost, port, &fingerprint, &rjeton, &place, token, &mut link).await {
+                Some(ws) => {
+                    (tx, rx) = ws.split();
+                    notify(json!({ "type": "reconnexion", "actif": false }));
+                }
+                None => break t!("Connection lost.", "Connexion perdue.").to_string(),
             }
+        };
+        notify(json!({ "type": "fin", "raison": reason }));
+        if let Some(a) = &assist_id {
+            assists().lock().unwrap().remove(a);
         }
-        let _ = tx.close().await;
     });
     let mut values: HashMap<String, Value> = HashMap::new();
     values.insert("host".into(), json!("127.0.0.1"));
-    values.insert("port".into(), json!(port));
+    values.insert("port".into(), json!(local_port));
     values.insert("client".into(), json!("tab"));
     // Assistance : pont local chiffré de bout en bout, sans mot de passe ; le programme de la
     // personne aidée ne propose pas NLA.
     values.insert("allowNoNla".into(), json!(true));
+    // Le pointeur de la personne aidée est dessiné dans l'image (on la voit bouger la souris).
+    values.insert("remotePointer".into(), json!(true));
     let name = if control {
         t!(format!("Assistance · {}", code.display()), format!("Assistance · {}", code.display()))
     } else {
         t!(format!("Assistance (view only) · {}", code.display()), format!("Assistance (vue seule) · {}", code.display()))
     };
-    start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await
+    let result = start_connection(&app, &state, "rdp", name, values, cols, rows, on_event).await;
+    if result.is_err() {
+        if let Some(a) = &assist {
+            assists().lock().unwrap().remove(a);
+        }
+    }
+    result
 }

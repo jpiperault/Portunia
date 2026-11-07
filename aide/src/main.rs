@@ -50,11 +50,12 @@ struct Options {
     noted: bool,
 }
 
-/// Serveur RDP de l'écran ; sans contrôle accordé, la souris et le clavier sont ignorés.
-fn server(opts: &Options, addr: SocketAddr, control: bool) -> Result<RdpServer> {
+/// Serveur RDP de l'écran ; sans contrôle accordé (voir `input::CONTROL`), la souris et le
+/// clavier sont ignorés.
+fn server(opts: &Options, addr: SocketAddr) -> Result<RdpServer> {
     let display = display::Display::new(opts.source)?;
     let (width, height) = display.desktop();
-    let input = input::Input { dry_run: opts.noted, ignore: !control, width, height, log: Vec::new() };
+    let input = input::Input { dry_run: opts.noted, width, height, log: Vec::new() };
     Ok(RdpServer::builder().with_addr(addr).with_tls(tls()?).with_input_handler(input).with_display_handler(display).build())
 }
 
@@ -66,10 +67,11 @@ struct Console {
 
 #[cfg(feature = "essai")]
 impl relay::Ui for Console {
-    fn code(&mut self, code: &str) {
+    fn code(&mut self, code: &str, _valid: Option<std::time::Duration>) {
         eprintln!("CODE {code}");
     }
-    fn consent(&mut self, who: &str) -> Option<bool> {
+    fn consent(&mut self, who: &str, server: &str) -> Option<bool> {
+        let who = format!("{who} ({server})");
         if self.auto {
             eprintln!("accord donné à {who} (essai)");
             return Some(true);
@@ -82,8 +84,11 @@ impl relay::Ui for Console {
     fn connected(&mut self, who: &str, control: bool) {
         eprintln!("{who} {} votre écran", if control { "voit et contrôle" } else { "voit" });
     }
-    fn ended(&mut self, reason: &str) {
-        eprintln!("FIN {reason}");
+    fn event(&mut self, event: relay::Event) {
+        eprintln!("ÉVÉNEMENT {event:?}");
+    }
+    fn ended(&mut self, summary: &relay::Summary) {
+        eprintln!("FIN {} ({} s, {} messages)", summary.reason, summary.duration.as_secs(), summary.messages);
     }
 }
 
@@ -94,6 +99,13 @@ pub fn t(en: &'static str, fr: &'static str) -> &'static str {
     } else {
         en
     }
+}
+
+/// Nom du serveur d'assistance, montré à la personne (« acces.exemple.fr »).
+static RELAY_HOST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub fn relay_host() -> String {
+    RELAY_HOST.get().cloned().unwrap_or_default()
 }
 
 /// Adresse du relais : donnée en option, sinon lue dans le nom du fichier téléchargé
@@ -137,28 +149,33 @@ fn main() -> Result<()> {
     if let Some(addr) = value("--ecoute") {
         let addr: SocketAddr = addr.parse().context("adresse d'écoute")?;
         eprintln!("Portunia Assistance : serveur RDP d'essai sur {addr}");
-        return runtime()?.block_on(async { server(&opts, addr, true)?.run().await });
+        input::CONTROL.store(true, std::sync::atomic::Ordering::Relaxed);
+        return runtime()?.block_on(async { server(&opts, addr)?.run().await });
     }
     // Essai en ligne de commande, sans fenêtre.
     #[cfg(feature = "essai")]
     if flag("--console") {
         let url = value("--relais").context("--relais attendu")?;
         let mut ui = Console { auto: flag("--accord-auto") };
-        let (_stop_tx, stop) = tokio::sync::watch::channel(false);
+        let (_commands_tx, commands) = tokio::sync::mpsc::unbounded_channel();
         let local = tokio::task::LocalSet::new();
-        return runtime()?.block_on(local.run_until(relay::run(&url, None, &mut ui, |control| server(&opts, any, control).expect("serveur RDP"), stop)));
+        return runtime()?.block_on(local.run_until(relay::run(&url, None, &mut ui, || server(&opts, any).expect("serveur RDP"), commands)));
     }
     // Démonstration : les écrans à la suite, chacun photographié (fenêtre seule) dans le dossier donné.
     #[cfg(feature = "essai")]
     if let Some(dir) = value("--demo") {
-        let (stop_tx, _stop) = tokio::sync::watch::channel(false);
+        let (commands_tx, _commands) = tokio::sync::mpsc::unbounded_channel();
+        let _ = RELAY_HOST.set("acces.acme.fr".into());
         std::thread::spawn(move || ui::demo(&dir));
-        ui::run(stop_tx);
+        ui::run(commands_tx);
         return Ok(());
     }
     // Fenêtre : la session tourne sur un fil à part, la fenêtre sur le fil principal.
-    let (stop_tx, stop) = tokio::sync::watch::channel(false);
+    let (commands_tx, commands) = tokio::sync::mpsc::unbounded_channel();
     let url = relay_url(value("--relais"));
+    if let Some(u) = &url {
+        let _ = RELAY_HOST.set(relay::server_host(u).to_string());
+    }
     std::thread::spawn(move || {
         let Some(url) = url else {
             ui::error(t(
@@ -169,12 +186,12 @@ fn main() -> Result<()> {
         };
         let result = runtime().map_err(anyhow::Error::from).and_then(|rt| {
             let local = tokio::task::LocalSet::new();
-            rt.block_on(local.run_until(relay::run(&url, None, &mut ui::WindowUi, |control| server(&opts, any, control).expect("serveur RDP"), stop)))
+            rt.block_on(local.run_until(relay::run(&url, None, &mut ui::WindowUi, || server(&opts, any).expect("serveur RDP"), commands)))
         });
         if let Err(e) = result {
             ui::error(&format!("{e:#}"));
         }
     });
-    ui::run(stop_tx);
+    ui::run(commands_tx);
     Ok(())
 }

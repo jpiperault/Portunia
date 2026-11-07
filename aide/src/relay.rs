@@ -1,48 +1,109 @@
 //! Liaison avec le dépanneur par le relais de la Gate : place et code, échange de clés,
 //! accord de la personne, puis session RDP dans le canal chiffré de bout en bout.
+//!
+//! Pendant la session, des messages de contrôle (JSON chiffré) passent à côté du flux RDP :
+//! accusés de réception (débit), pause, contrôle donné ou repris, discussion, fin.
+//! Avec une Gate et un Portunia récents, une coupure du réseau est reprise sans nouveau code.
+
+use std::{
+    sync::atomic::Ordering,
+    time::{Duration, Instant},
+};
 
 use anyhow::{anyhow, bail, Result};
-use assist_proto::{Code, Handshake, Kind, Role};
+use assist_proto::{Code, Handshake, Kind, Link, Role};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_tungstenite::tungstenite::Message;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::mpsc::UnboundedReceiver,
+};
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
+
+type Ws = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// Fonctions de ce programme, annoncées au dépanneur avec l'accord.
+const FEATURES: [&str; 5] = ["liaison", "discussion", "pause", "controle", "reprise"];
+/// Durée pendant laquelle une session coupée peut reprendre.
+const RESUME_FOR: Duration = Duration::from_secs(120);
+
+/// Ce que la personne demande depuis la fenêtre.
+#[derive(Debug)]
+pub enum Command {
+    Stop,
+    Pause(bool),
+    /// Donner (après une demande) ou reprendre le contrôle.
+    Control(bool),
+    Message(String),
+}
+
+/// Ce qui arrive pendant la session.
+#[derive(Debug, Clone)]
+pub enum Event {
+    /// Message du dépanneur.
+    Message(String),
+    /// Le dépanneur demande le contrôle.
+    ControlRequested,
+    Control(bool),
+    Paused(bool),
+    /// Réseau coupé, reprise en cours (true) ou reprise faite (false).
+    Reconnecting(bool),
+    /// Temps d'aller-retour mesuré.
+    Quality(Duration),
+}
+
+/// Bilan de fin, montré à la personne.
+#[derive(Debug, Clone, Default)]
+pub struct Summary {
+    pub reason: String,
+    pub who: String,
+    pub duration: Duration,
+    pub control: bool,
+    pub messages: u32,
+}
 
 /// Ce que la fenêtre montre à la personne aidée.
 pub trait Ui: Send {
-    /// Code à dicter au dépanneur.
-    fn code(&mut self, code: &str);
+    /// Code à dicter au dépanneur, et combien de temps il reste valable.
+    fn code(&mut self, code: &str, valid: Option<Duration>);
     /// Le dépanneur `who` demande l'accès : `Some(contrôle autorisé)` si elle accepte, `None` sinon.
-    fn consent(&mut self, who: &str) -> Option<bool>;
-    /// Session en cours (bandeau « Arrêter »).
+    fn consent(&mut self, who: &str, server: &str) -> Option<bool>;
+    /// Session en cours (barre de session).
     fn connected(&mut self, who: &str, control: bool);
-    /// Fin de la session, avec la raison.
-    fn ended(&mut self, reason: &str);
+    fn event(&mut self, event: Event);
+    /// Fin de la session, avec son bilan.
+    fn ended(&mut self, summary: &Summary);
 }
 
 /// Essais de code faux avant de changer de place (contre les tentatives au hasard).
 const TRIES: u32 = 3;
 
-/// Une assistance : se met en attente sur le relais, puis sert l'écran au dépanneur.
 /// Nom du serveur d'assistance, tiré de son adresse (wss://acces.exemple.fr/assistance/relais).
-fn server_host(url: &str) -> &str {
+pub fn server_host(url: &str) -> &str {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
     let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
     host.rsplit_once('@').map_or(host, |(_, h)| h)
 }
 
-pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl Fn(bool) -> crate::Server, mut stop: tokio::sync::watch::Receiver<bool>) -> Result<()> {
+fn ended(reason: &str) -> Summary {
+    Summary { reason: reason.into(), ..Default::default() }
+}
+
+/// Une assistance : se met en attente sur le relais, puis sert l'écran au dépanneur.
+pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl Fn() -> crate::Server, mut commands: UnboundedReceiver<Command>) -> Result<()> {
     let mut failures = 0;
     loop {
         let (mut ws, _) = tokio_tungstenite::connect_async(url).await.map_err(|e| anyhow!("{} {e}", crate::t("Assistance server unreachable:", "Serveur d'assistance injoignable :")))?;
         // Place donnée par le relais.
-        let place = loop {
-            let m = tokio::select! { m = ws.next() => m, _ = stop.changed() => return Ok(()) };
+        let (place, valid) = loop {
+            let m = tokio::select! { m = ws.next() => m, c = commands.recv() => { if matches!(c, Some(Command::Stop) | None) { return Ok(()) } continue } };
             match m {
                 Some(Ok(Message::Text(t))) => {
                     let v: Value = serde_json::from_str(&t)?;
                     match v["type"].as_str() {
-                        Some("place") => break v["place"].as_str().unwrap_or_default().to_string(),
+                        Some("place") => {
+                            break (v["place"].as_str().unwrap_or_default().to_string(), v["attente_s"].as_u64().map(Duration::from_secs));
+                        }
                         Some("erreur") => bail!("{}", v["message"].as_str().unwrap_or("?")),
                         _ => {}
                     }
@@ -55,15 +116,15 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
             Some(c) => Code { nameplate: place.clone(), secret: c.secret.clone() },
             None => Code::new(&place),
         };
-        ui.code(&code.display());
+        ui.code(&code.display(), valid);
         // Attente du dépanneur.
-        let who = loop {
-            let m = tokio::select! { m = ws.next() => m, _ = stop.changed() => return Ok(()) };
+        let (who, resume_token) = loop {
+            let m = tokio::select! { m = ws.next() => m, c = commands.recv() => { if matches!(c, Some(Command::Stop) | None) { return Ok(()) } continue } };
             match m {
                 Some(Ok(Message::Text(t))) => {
                     let v: Value = serde_json::from_str(&t)?;
                     if v["type"] == "relie" {
-                        break v["depanneur"].as_str().unwrap_or("?").to_string();
+                        break (v["depanneur"].as_str().unwrap_or("?").to_string(), v["reprise"].as_str().map(String::from));
                     }
                 }
                 Some(Ok(_)) => {}
@@ -77,7 +138,7 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
         let (pending, confirm) = hs.finish(&peer)?;
         ws.send(Message::Binary(confirm.into())).await?;
         let peer_confirm = next_binary(&mut ws).await?;
-        let (mut sealer, mut opener) = match pending.confirm(&peer_confirm) {
+        let (sealer, opener) = match pending.confirm(&peer_confirm) {
             Ok(c) => c,
             Err(_) => {
                 failures += 1;
@@ -89,61 +150,225 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
                 continue;
             }
         };
+        let mut link = Link::new(sealer, opener);
         // Accord de la personne. Le nom vient du relais : l'adresse du serveur, elle, ne peut pas
         // être choisie par un escroc qui n'a pas ce nom de domaine.
-        let asking = format!("{who}\n{} {}", crate::t("through the server", "par le serveur"), server_host(url));
-        let Some(control) = ui.consent(&asking) else {
-            let msg = sealer.seal(Kind::Control, json!({ "type": "refus" }).to_string().as_bytes());
+        let Some(control) = ui.consent(&who, server_host(url)) else {
+            let msg = link.seal(Kind::Control, json!({ "type": "refus" }).to_string().as_bytes());
             ws.send(Message::Binary(msg.into())).await?;
             let _ = ws.close(None).await;
-            ui.ended(crate::t("You declined.", "Vous avez refusé."));
+            ui.ended(&ended(crate::t("You declined.", "Vous avez refusé.")));
             return Ok(());
         };
-        let msg = sealer.seal(Kind::Control, json!({ "type": "accord", "controle": control }).to_string().as_bytes());
+        crate::input::CONTROL.store(control, Ordering::Relaxed);
+        crate::display::PAUSED.store(false, Ordering::Relaxed);
+        let msg = link.seal(Kind::Control, json!({ "type": "accord", "controle": control, "fonctions": FEATURES }).to_string().as_bytes());
         ws.send(Message::Binary(msg.into())).await?;
         ui.connected(&who, control);
 
-        // Session RDP dans le canal chiffré : le serveur RDP lit et écrit dans un tuyau en mémoire.
-        let (local, remote) = tokio::io::duplex(256 * 1024);
-        let mut server = serve(control);
-        // Le serveur RDP d'IronRDP ne passe pas d'un fil à l'autre : tâche locale (voir main).
-        let rdp = tokio::task::spawn_local(async move { server.run_connection(remote).await });
-        let (mut rd, mut wr) = tokio::io::split(local);
-        let (mut tx, mut rx) = ws.split();
-        let mut buf = vec![0u8; 64 * 1024];
-        let reason = loop {
+        let mut summary = Summary { who: who.clone(), control, ..Default::default() };
+        let started = Instant::now();
+        summary.reason = session(url, ws, &mut link, resume_token, ui, &serve, &mut commands, &mut summary).await.to_string();
+        crate::input::CONTROL.store(false, Ordering::Relaxed);
+        crate::input::release_all();
+        crate::display::PAUSED.store(false, Ordering::Relaxed);
+        summary.duration = started.elapsed();
+        ui.ended(&summary);
+        return Ok(());
+    }
+}
+
+/// Session RDP dans le canal chiffré : le serveur RDP lit et écrit dans un tuyau en mémoire, qui
+/// survit aux coupures du réseau. Rend la raison de la fin.
+#[allow(clippy::too_many_arguments)]
+async fn session(
+    url: &str,
+    ws: Ws,
+    link: &mut Link,
+    resume_token: Option<String>,
+    ui: &mut dyn Ui,
+    serve: &impl Fn() -> crate::Server,
+    commands: &mut UnboundedReceiver<Command>,
+    summary: &mut Summary,
+) -> &'static str {
+    // Petit tuyau : quand le réseau est lent, l'image attend dans la capture (où seule la plus
+    // récente compte) et non dans un tampon.
+    let (local, remote) = tokio::io::duplex(64 * 1024);
+    let mut server = serve();
+    // Le serveur RDP d'IronRDP ne passe pas d'un fil à l'autre : tâche locale (voir main).
+    let rdp = tokio::task::spawn_local(async move { server.run_connection(remote).await });
+    let (mut rd, mut wr) = tokio::io::split(local);
+    let (mut tx, mut rx) = ws.split();
+    let mut buf = vec![0u8; 64 * 1024];
+    let mut tick = tokio::time::interval(Duration::from_millis(100));
+    let mut peer_features: Vec<String> = Vec::new();
+    let mut last_quality = Instant::now();
+    let send_control = |link: &mut Link, v: Value| link.seal(Kind::Control, v.to_string().as_bytes());
+    // Fin de la session RDP de ce côté : le dépanneur est prévenu, le relais fermé proprement.
+    let mut rdp_ended = false;
+    let reason = 'session: loop {
+        // Une coupure : reprise si les deux côtés et la Gate la savent faire, sinon fin.
+        let lost: bool = loop {
             tokio::select! {
-                n = rd.read(&mut buf) => match n {
-                    Ok(0) | Err(_) => break crate::t("End of the session.", "Fin de la session."),
+                n = rd.read(&mut buf), if !link.congested() => match n {
+                    Ok(0) | Err(_) => { rdp_ended = true; break 'session crate::t("End of the session.", "Fin de la session.") }
                     Ok(n) => {
-                        let frame = sealer.seal(Kind::Data, &buf[..n]);
-                        if tx.send(Message::Binary(frame.into())).await.is_err() { break crate::t("Connection lost.", "Connexion perdue."); }
+                        let frame = link.seal(Kind::Data, &buf[..n]);
+                        if tx.send(Message::Binary(frame.into())).await.is_err() { break true; }
                     }
                 },
                 m = rx.next() => match m {
-                    Some(Ok(Message::Binary(b))) => match opener.open(&b) {
-                        Ok((Kind::Data, data)) => { if wr.write_all(&data).await.is_err() { break crate::t("End of the session.", "Fin de la session."); } }
+                    Some(Ok(Message::Binary(b))) => match link.open(&b) {
+                        Ok((Kind::Data, data)) => {
+                            if wr.write_all(&data).await.is_err() { rdp_ended = true; break 'session crate::t("End of the session.", "Fin de la session."); }
+                            if let Some(ack) = link.take_ack() {
+                                if tx.send(Message::Binary(ack.into())).await.is_err() { break true; }
+                            }
+                        }
                         Ok((Kind::Control, c)) => {
                             let v: Value = serde_json::from_slice(&c).unwrap_or(Value::Null);
-                            if v["type"] == "fin" { break crate::t("Ended by the person helping you.", "Terminée par la personne qui vous aide."); }
+                            match v["type"].as_str() {
+                                Some("recu") => link.acked(v["n"].as_u64().unwrap_or(0)),
+                                Some("fin") => break 'session crate::t("Ended by the person helping you.", "Terminée par la personne qui vous aide."),
+                                Some("fonctions") => {
+                                    peer_features = v["liste"].as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
+                                }
+                                Some("message") => {
+                                    if let Some(t) = v["texte"].as_str() {
+                                        summary.messages += 1;
+                                        ui.event(Event::Message(t.chars().take(4000).collect()));
+                                    }
+                                }
+                                Some("demande_controle") => {
+                                    if !crate::input::CONTROL.load(Ordering::Relaxed) {
+                                        ui.event(Event::ControlRequested);
+                                    }
+                                }
+                                _ => {}
+                            }
                         }
-                        Err(_) => break crate::t("Altered message: connection cut for safety.", "Message altéré : connexion coupée par sécurité."),
+                        Err(_) => break 'session crate::t("Altered message: connection cut for safety.", "Message altéré : connexion coupée par sécurité."),
                     },
-                    Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break crate::t("Connection lost.", "Connexion perdue."),
+                    Some(Ok(Message::Close(_))) => break 'session crate::t("Connection closed by the server.", "Connexion fermée par le serveur."),
+                    None | Some(Err(_)) => break true,
                     _ => {}
                 },
-                _ = stop.changed() => {
-                    let fin = sealer.seal(Kind::Control, json!({ "type": "fin" }).to_string().as_bytes());
-                    let _ = tx.send(Message::Binary(fin.into())).await;
-                    break crate::t("You stopped it.", "Vous l'avez arrêtée.");
+                c = commands.recv() => match c {
+                    None | Some(Command::Stop) => {
+                        let fin = send_control(link, json!({ "type": "fin" }));
+                        let _ = tx.send(Message::Binary(fin.into())).await;
+                        let _ = tx.close().await;
+                        break 'session crate::t("You stopped it.", "Vous l'avez arrêtée.");
+                    }
+                    Some(Command::Pause(on)) => {
+                        crate::display::PAUSED.store(on, Ordering::Relaxed);
+                        if on { crate::input::release_all(); }
+                        let f = send_control(link, json!({ "type": "pause", "actif": on }));
+                        ui.event(Event::Paused(on));
+                        if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                    }
+                    Some(Command::Control(on)) => {
+                        crate::input::CONTROL.store(on, Ordering::Relaxed);
+                        if !on { crate::input::release_all(); }
+                        summary.control |= on;
+                        let f = send_control(link, json!({ "type": "controle", "actif": on }));
+                        ui.event(Event::Control(on));
+                        if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                    }
+                    Some(Command::Message(text)) => {
+                        summary.messages += 1;
+                        let f = send_control(link, json!({ "type": "message", "texte": text }));
+                        if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                    }
+                },
+                _ = tick.tick() => {
+                    if let Some(ack) = link.take_ack() {
+                        if tx.send(Message::Binary(ack.into())).await.is_err() { break true; }
+                    }
+                    if last_quality.elapsed() >= Duration::from_secs(1) {
+                        last_quality = Instant::now();
+                        if let Some(rtt) = link.rtt() { ui.event(Event::Quality(rtt)); }
+                    }
                 }
             }
         };
-        rdp.abort();
+        debug_assert!(lost);
+        // Reprise possible ?
+        let resumable = link.flow && peer_features.iter().any(|f| f == "reprise");
+        let Some(token) = resume_token.as_deref().filter(|_| resumable) else {
+            break crate::t("Connection lost.", "Connexion perdue.");
+        };
+        ui.event(Event::Reconnecting(true));
+        match resume(url, token, link, commands).await {
+            Ok(Some(ws)) => {
+                (tx, rx) = ws.split();
+                ui.event(Event::Reconnecting(false));
+            }
+            Ok(None) => break crate::t("You stopped it.", "Vous l'avez arrêtée."),
+            Err(_) => break crate::t("Connection lost.", "Connexion perdue."),
+        }
+    };
+    if rdp_ended {
+        let fin = send_control(link, json!({ "type": "fin" }));
+        let _ = tx.send(Message::Binary(fin.into())).await;
         let _ = tx.close().await;
-        ui.ended(reason);
-        return Ok(());
     }
+    rdp.abort();
+    reason
+}
+
+/// Reprend la session après une coupure : même place sur le relais, puis chacun renvoie ce que
+/// l'autre n'a pas reçu. `None` : la personne a arrêté pendant l'attente.
+async fn resume(url: &str, token: &str, link: &mut Link, commands: &mut UnboundedReceiver<Command>) -> Result<Option<Ws>> {
+    let until = Instant::now() + RESUME_FOR;
+    let target = format!("{url}?reprise={token}");
+    while Instant::now() < until {
+        let attempt = async {
+            let (mut ws, _) = tokio_tungstenite::connect_async(&target).await?;
+            // Le relais remet en relation, puis chacun dit ce qu'il a reçu.
+            loop {
+                match ws.next().await {
+                    Some(Ok(Message::Text(t))) => {
+                        let v: Value = serde_json::from_str(&t)?;
+                        match v["type"].as_str() {
+                            Some("repris") => break,
+                            Some("erreur") => bail!("{}", v["message"].as_str().unwrap_or("?")),
+                            _ => {}
+                        }
+                    }
+                    Some(Ok(_)) => {}
+                    _ => bail!("relais fermé"),
+                }
+            }
+            ws.send(Message::Text(json!({ "type": "reprise", "recu": link.opened() }).to_string().into())).await?;
+            let n = loop {
+                match ws.next().await {
+                    Some(Ok(Message::Text(t))) => {
+                        let v: Value = serde_json::from_str(&t)?;
+                        if v["type"] == "reprise" {
+                            break v["recu"].as_u64().unwrap_or(0);
+                        }
+                    }
+                    Some(Ok(_)) => {}
+                    _ => bail!("relais fermé"),
+                }
+            };
+            let frames = link.resend_from(n).ok_or_else(|| anyhow!("reprise impossible"))?;
+            for f in frames {
+                ws.send(Message::Binary(f.into())).await?;
+            }
+            Ok::<_, anyhow::Error>(ws)
+        };
+        tokio::select! {
+            r = attempt => match r {
+                Ok(ws) => return Ok(Some(ws)),
+                Err(e) if e.to_string().contains("reprise impossible") => return Err(e),
+                Err(_) => tokio::time::sleep(Duration::from_secs(2)).await,
+            },
+            c = commands.recv() => if matches!(c, None | Some(Command::Stop)) { return Ok(None) },
+        }
+    }
+    bail!("reprise trop longue")
 }
 
 async fn next_binary<S>(ws: &mut S) -> Result<Vec<u8>>

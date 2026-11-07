@@ -431,10 +431,17 @@ export const gates = {
 };
 
 /** Assistance à distance : rejoint la personne aidée avec son code (onglet Bureau à distance). */
-export function connectAssist(id: string, code: string, cols: number, rows: number, onEvent: (e: TermEvent) => void) {
+export function connectAssist(id: string, code: string, assist: string, cols: number, rows: number, onEvent: (e: TermEvent) => void, onAssist: (e: any) => void) {
   const channel = new Channel<TermEvent>();
   channel.onmessage = onEvent;
-  return invoke<ConnectResponse>('gate_assist', { id, code, cols, rows, onEvent: channel });
+  const side = new Channel<any>();
+  side.onmessage = onAssist;
+  return invoke<ConnectResponse>('gate_assist', { id, code, assist, cols, rows, onEvent: channel, onAssist: side });
+}
+
+/** Message de l'onglet d'assistance vers la personne aidée (discussion, demande de contrôle). */
+export function assistSend(assist: string, message: { type: 'message'; texte: string } | { type: 'demande_controle' }) {
+  return invoke<void>('gate_assist_send', { assist, message });
 }
 
 export function connectGate(id: string, server: string, extra: Record<string, unknown>, cols: number, rows: number, onEvent: (e: TermEvent) => void) {

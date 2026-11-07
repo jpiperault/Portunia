@@ -1,0 +1,343 @@
+<title>Portunia Assist Windows</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Maquette : nouvelle version du programme Windows de la personne aidée (Portunia Assist),
+   fenêtres, barre de session, fonctions en plus, et plan d'optimisation de la prise en main. */
+:root {
+  --bg: #f1f2f5; --panel: #ffffff; --hover: #eceef2;
+  --line: #dde0e5; --line-strong: #c6cad2; --text: #1c1f24; --text-2: #3a3f47; --muted: #5d6470;
+  --ok: #1d8a57; --ok-soft: #dcf3e7; --warn: #a85c0c; --warn-soft: #fbead6; --danger: #c23b3b; --danger-soft: #f8dfdf;
+  --chip-bg: #eceef2;
+  --desk-1: #2f6fb3; --desk-2: #173f70;
+  --mica: #f3f4f6; --mica-2: #fbfbfc; --card: #ffffff; --card-line: #e3e5e9; --win-ink: #1b1b1b;
+  --assist: #0f8f7a; --assist-strong: #0b7564; --assist-soft: #d6f1ec; --assist-ink: #ffffff;
+  --shadow: rgb(20 30 50 / .20);
+  --ui: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'Cascadia Mono', Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #16171b; --panel: #1e1f24; --hover: #23252b;
+  --line: #2a2c33; --line-strong: #3a3d45; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33;
+  --mica: #202226; --mica-2: #26282d; --card: #2c2e33; --card-line: #383a40; --win-ink: #f0f0f0;
+  --assist: #3cc9b1; --assist-strong: #5dd8c3; --assist-soft: #133a33; --assist-ink: #06221d;
+  --shadow: rgb(0 0 0 / .5); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #16171b; --panel: #1e1f24; --hover: #23252b;
+  --line: #2a2c33; --line-strong: #3a3d45; --text: #e8e9ec; --text-2: #c4c7ce; --muted: #a3a7b0;
+  --ok: #4cc38a; --ok-soft: #173327; --warn: #f0a35b; --warn-soft: #3a2a14; --danger: #ff7b7b; --danger-soft: #3d1c1e;
+  --chip-bg: #2b2d33;
+  --mica: #202226; --mica-2: #26282d; --card: #2c2e33; --card-line: #383a40; --win-ink: #f0f0f0;
+  --assist: #3cc9b1; --assist-strong: #5dd8c3; --assist-soft: #133a33; --assist-ink: #06221d;
+  --shadow: rgb(0 0 0 / .5); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--ui); }
+.page { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 40px; }
+h1 { font-size: 26px; margin: 0; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0 0 4px; text-wrap: balance; }
+h3 { font-size: 15px; margin: 0; }
+p { margin: 0; }
+.lead { color: var(--text-2); max-width: 70ch; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.eyebrow { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--assist); font-weight: 600; }
+section { display: grid; gap: 16px; }
+.head { display: grid; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; padding: 2px 9px; border-radius: 99px; background: var(--chip-bg); color: var(--text-2); }
+.chip.free { background: var(--ok-soft); color: var(--ok); }
+.chip.pro { background: var(--assist-soft); color: var(--assist-strong); }
+.chip.later { background: var(--warn-soft); color: var(--warn); }
+
+/* --- Choix de l'écran montré --- */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { font: inherit; font-size: 13px; border: 1px solid var(--line-strong); background: var(--panel); color: var(--text);
+  padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--assist); border-color: var(--assist); color: var(--assist-ink); }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 20px; align-items: start; }
+@media (max-width: 860px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+.note { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 10px; }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--text-2); }
+
+/* --- Bureau Windows simulé --- */
+.desk { position: relative; border-radius: 12px; overflow: hidden; min-height: 520px;
+  background: radial-gradient(120% 90% at 20% 0%, var(--desk-1), var(--desk-2)); display: grid; place-items: center; padding: 48px 16px 64px; }
+.desk.live { box-shadow: inset 0 0 0 5px var(--assist); }
+.taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 40px; background: rgb(32 32 32 / .85);
+  display: flex; align-items: center; justify-content: center; gap: 8px; }
+.taskbar i { width: 22px; height: 22px; border-radius: 5px; background: rgb(255 255 255 / .18); display: block; }
+.taskbar i.on { background: var(--assist); }
+
+/* Fenêtre Windows 11 : fond Mica, coins arrondis, barre de titre intégrée. */
+.win { width: min(440px, 100%); background: linear-gradient(180deg, var(--mica-2), var(--mica)); color: var(--win-ink);
+  border-radius: 10px; box-shadow: 0 18px 50px var(--shadow), 0 0 0 1px rgb(0 0 0 / .08); overflow: hidden; }
+.titlebar { display: flex; align-items: center; gap: 8px; height: 38px; padding-left: 14px; font-size: 12px; }
+.titlebar .logo { width: 16px; height: 16px; border-radius: 4px; background: var(--assist); display: grid; place-items: center; }
+.titlebar .logo::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+.titlebar .sp { flex: 1; }
+.titlebar .ctl { width: 44px; height: 38px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.wbody { padding: 6px 24px 22px; display: grid; gap: 16px; }
+.wtitle { font-size: 20px; font-weight: 600; line-height: 1.25; text-wrap: balance; }
+.wsub { color: var(--muted); font-size: 13px; }
+.card { background: var(--card); border: 1px solid var(--card-line); border-radius: 8px; padding: 14px 16px; }
+.codebox { display: flex; justify-content: center; gap: 14px; padding: 18px 8px; }
+.codebox .grp { display: flex; gap: 4px; }
+.codebox .d { width: 30px; height: 44px; border-radius: 6px; background: var(--assist-soft); color: var(--assist-strong);
+  font: 600 26px/44px var(--mono); text-align: center; }
+.row { display: flex; align-items: center; gap: 10px; }
+.row.sb { justify-content: space-between; }
+.wait { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--assist); animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+.server { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.lock { width: 14px; height: 14px; display: inline-block; color: var(--ok); }
+.btns { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.b { font: inherit; font-size: 13px; padding: 6px 16px; border-radius: 6px; border: 1px solid var(--card-line); background: var(--card);
+  color: var(--win-ink); min-width: 96px; text-align: center; }
+.b.primary { background: var(--assist); border-color: var(--assist); color: var(--assist-ink); font-weight: 600; }
+.b.danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 600; }
+.b.ghost { background: transparent; border-color: transparent; color: var(--assist-strong); min-width: 0; padding-inline: 8px; }
+.who { display: flex; gap: 12px; align-items: center; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--assist); color: var(--assist-ink);
+  display: grid; place-items: center; font-weight: 700; font-size: 16px; flex: none; }
+.who b { display: block; font-size: 15px; }
+.choices { display: grid; gap: 8px; }
+.choice { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 8px; border: 1px solid var(--card-line); background: var(--card); }
+.choice.sel { border-color: var(--assist); box-shadow: 0 0 0 1px var(--assist); }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line-strong); margin-top: 2px; flex: none; }
+.choice.sel .radio { border: 5px solid var(--assist); }
+.choice b { display: block; font-size: 13.5px; }
+.choice span { font-size: 12.5px; color: var(--muted); }
+.warnbox { display: flex; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
+.warnbox b { color: inherit; }
+.count { font-size: 12px; color: var(--muted); }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--card); border: 1px solid var(--card-line); border-radius: 8px; padding: 10px; display: grid; gap: 2px; }
+.stat b { font-size: 16px; }
+.stat span { font-size: 11.5px; color: var(--muted); }
+.list { display: grid; gap: 6px; font-size: 13px; }
+.list div { display: flex; justify-content: space-between; gap: 10px; }
+
+/* Barre de session : flottante en haut, absente de l'image envoyée. */
+.bar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px;
+  background: var(--mica-2); color: var(--win-ink); border-radius: 12px; padding: 5px 6px 5px 12px;
+  box-shadow: 0 10px 30px var(--shadow), 0 0 0 1px rgb(0 0 0 / .08); font-size: 12.5px; white-space: nowrap; max-width: calc(100% - 20px); overflow-x: auto; }
+.bar .live { display: flex; align-items: center; gap: 8px; padding-right: 8px; border-right: 1px solid var(--card-line); }
+.bar .tool { display: grid; place-items: center; min-width: 34px; height: 30px; padding: 0 8px; border-radius: 7px; color: var(--text-2); position: relative; }
+.bar .tool.on { background: var(--assist-soft); color: var(--assist-strong); }
+.bar .tool .badge { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+.bar .stop { background: var(--danger); color: #fff; font-weight: 600; border-radius: 7px; padding: 5px 12px; margin-left: 4px; }
+.sig { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
+.sig i { width: 3px; background: var(--ok); border-radius: 1px; display: block; }
+.ico { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Panneaux qui s'ouvrent sous la barre. */
+.pop { position: absolute; top: 58px; width: min(330px, calc(100% - 20px)); background: var(--mica-2); color: var(--win-ink);
+  border-radius: 12px; box-shadow: 0 16px 40px var(--shadow), 0 0 0 1px rgb(0 0 0 / .08); padding: 14px; display: grid; gap: 10px; }
+.pop.right { right: 14px; }
+.pop.center { left: 50%; transform: translateX(-50%); }
+.msg { max-width: 85%; padding: 7px 10px; border-radius: 10px; font-size: 13px; }
+.msg.them { background: var(--card); border: 1px solid var(--card-line); }
+.msg.me { background: var(--assist); color: var(--assist-ink); justify-self: end; }
+.input { border: 1px solid var(--card-line); background: var(--card); border-radius: 7px; padding: 7px 10px; font-size: 13px; color: var(--muted); }
+.file { display: flex; gap: 10px; align-items: center; }
+.file .fi { width: 34px; height: 40px; border-radius: 5px; background: var(--assist-soft); color: var(--assist-strong); display: grid; place-items: center; font-size: 10px; font-weight: 700; }
+.progress { height: 6px; border-radius: 3px; background: var(--card-line); overflow: hidden; }
+.progress i { display: block; height: 100%; width: 62%; background: var(--assist); }
+.paused { position: absolute; inset: 0; display: grid; place-items: center; }
+.paused div { background: rgb(0 0 0 / .55); color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px; }
+
+/* --- Tableaux --- */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+table { border-collapse: collapse; width: 100%; min-width: 680px; font-size: 13.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+td.n { white-space: nowrap; font-variant-numeric: tabular-nums; }
+td b { font-weight: 600; }
+
+/* --- Chaîne de l'image --- */
+.pipe { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 760px) { .pipe { grid-template-columns: minmax(0, 1fr); } }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 6px; align-content: start; }
+.step .k { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.step .old { color: var(--danger); font-size: 12.5px; text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--danger) 50%, transparent); }
+.step .new { color: var(--ok); font-size: 13px; font-weight: 600; }
+.step p { font-size: 12.5px; color: var(--text-2); }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 8px; }
+.box ul, .box ol { margin: 0; padding-left: 18px; display: grid; gap: 5px; color: var(--text-2); }
+</style>
+
+<div class="page">
+  <header class="head">
+    <span class="eyebrow">Maquette · 7 novembre 2026</span>
+    <h1>Portunia Assist pour Windows : plus beau, plus complet, plus fluide</h1>
+    <p class="lead">Le programme que la personne aidée lance depuis ses Téléchargements. Rien à installer et toujours un seul fichier. Il suit la langue de Windows ; la maquette est en français.</p>
+    <div class="chips"><span class="chip">Version actuelle : 0.62 (fenêtre grise, 10 images/s)</span><span class="chip free">Gratuit</span><span class="chip pro">Pro</span><span class="chip later">Plus tard</span></div>
+  </header>
+
+  <!-- ============ 1. Les fenêtres ============ -->
+  <section>
+    <div class="head">
+      <h2>1. Les fenêtres</h2>
+      <p class="lead">Fenêtre Windows 11 : fond Mica, coins arrondis, mode sombre suivi, dessin net à toutes les tailles d'écran (Direct2D). Pendant la session, la fenêtre se replie en une barre flottante en haut de l'écran.</p>
+    </div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="stage">
+      <div class="desk" id="desk"></div>
+      <aside class="note" id="note"></aside>
+    </div>
+  </section>
+
+  <!-- ============ 2. Fonctions ============ -->
+  <section>
+    <div class="head">
+      <h2>2. Fonctions en plus</h2>
+      <p class="lead">Ce qui existe déjà : code à 9 chiffres, accord « voir » ou « voir et contrôler », cadre de couleur, bouton Arrêter, Échap trois fois.</p>
+    </div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Fonction</th><th>Ce que voit la personne aidée</th><th>Offre</th><th>Lot</th></tr></thead>
+      <tbody>
+        <tr><td><b>Reprendre la main</b></td><td>Bouton dans la barre : le dépanneur passe en vue seule, puis peut redemander le contrôle (la personne accepte à nouveau).</td><td><span class="chip free">Gratuit</span></td><td class="n">A</td></tr>
+        <tr><td><b>Pause</b></td><td>L'image est figée côté dépanneur le temps de taper un mot de passe ou de lire un message privé. Souris et clavier du dépanneur bloqués pendant la pause.</td><td><span class="chip free">Gratuit</span></td><td class="n">A</td></tr>
+        <tr><td><b>Discussion</b></td><td>Petit fil de messages sous la barre, pastille rouge à l'arrivée d'un message. Utile quand le téléphone est raccroché.</td><td><span class="chip free">Gratuit</span></td><td class="n">A</td></tr>
+        <tr><td><b>Presse-papiers partagé</b> (texte)</td><td>Copier d'un côté, coller de l'autre. Coupé pendant la pause et en vue seule.</td><td><span class="chip free">Gratuit</span></td><td class="n">A</td></tr>
+        <tr><td><b>Recevoir un fichier</b></td><td>« julien veut vous envoyer pilote.exe (4,2 Mo) » : Accepter / Refuser. Rangé dans Téléchargements, jamais ouvert tout seul.</td><td><span class="chip free">Gratuit</span></td><td class="n">B</td></tr>
+        <tr><td><b>Envoyer un fichier</b></td><td>La personne choisit un fichier ; le dépanneur ne peut jamais en prendre un lui-même.</td><td><span class="chip free">Gratuit</span></td><td class="n">B</td></tr>
+        <tr><td><b>Plusieurs écrans</b></td><td>Le dépanneur passe d'un écran à l'autre ; le cadre de couleur suit l'écran montré.</td><td><span class="chip free">Gratuit</span></td><td class="n">B</td></tr>
+        <tr><td><b>Informations du PC</b></td><td>« Envoyer les informations du PC ? » : version de Windows, processeur, mémoire, disque, réseau. La personne voit la liste avant l'envoi.</td><td><span class="chip free">Gratuit</span></td><td class="n">B</td></tr>
+        <tr><td><b>Reconnexion automatique</b></td><td>Wi-Fi coupé quelques secondes : « Reconnexion… », puis la session reprend sans nouveau code (2 minutes au plus).</td><td><span class="chip free">Gratuit</span></td><td class="n">A</td></tr>
+        <tr><td><b>Résumé de fin</b></td><td>Durée, contrôle donné ou non, fichiers échangés. Le même résumé part dans l'historique du dépanneur.</td><td><span class="chip free">Gratuit</span></td><td class="n">A</td></tr>
+        <tr><td><b>Logo et nom de l'entreprise</b></td><td>« Assistance ACME » avec le logo du client à la place de Portunia, réglés sur la Gate.</td><td><span class="chip pro">Pro</span></td><td class="n">B</td></tr>
+        <tr><td><b>Demander l'administration</b></td><td>Le dépanneur demande ; la personne voit l'invite Windows (UAC) et choisit. Le programme repart en administrateur sans couper la session.</td><td><span class="chip pro">Pro</span></td><td class="n">C</td></tr>
+        <tr><td><b>Écran de connexion et UAC visibles</b></td><td>Il faut un petit service Windows, donc une installation : réservé au « sans surveillance ».</td><td><span class="chip later">Plus tard</span></td><td class="n">—</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted">Lot A : avec l'optimisation, dans une même version. Lot B : la version suivante. Lot C : à part, il touche aux droits Windows. Les fonctions qui touchent au PC (fichier, presse-papiers, administration) demandent toujours l'accord de la personne, et chacune est notée au journal de la Gate.</p>
+  </section>
+
+  <!-- ============ 3. Fluidité ============ -->
+  <section>
+    <div class="head">
+      <h2>3. Une prise en main fluide</h2>
+      <p class="lead">Aujourd'hui, chaque image capture tout l'écran par l'ancienne méthode de Windows (GDI), dix fois par seconde au plus. Toutes les images sont envoyées dans l'ordre : quand le réseau ralentit, elles s'accumulent et le retard grandit. La souris fait partie de l'image, si bien qu'elle saccade avec elle.</p>
+    </div>
+    <div class="pipe">
+      <div class="step"><span class="k">1 · Capture</span><span class="old">GDI, tout l'écran, liste des écrans relue à chaque image</span><span class="new">Duplication du bureau (DXGI)</span><p>La carte graphique copie l'image, et Windows donne lui-même les zones changées et les fenêtres déplacées. Si la duplication n'est pas possible (bureau à distance, vieux pilote), GDI reste en secours.</p></div>
+      <div class="step"><span class="k">2 · Cadence</span><span class="old">10 images/s fixes</span><span class="new">2 à 30 images/s selon l'écran</span><p>30 images/s quand ça bouge, presque rien quand l'écran est calme : moins de processeur et de réseau pour la personne aidée.</p></div>
+      <div class="step"><span class="k">3 · Découpe</span><span class="old">un envoi par carré de 64 px</span><span class="new">zones fusionnées en rectangles</span><p>Une fenêtre qu'on déplace devient un seul rectangle au lieu de centaines de carrés.</p></div>
+      <div class="step"><span class="k">4 · File d'envoi</span><span class="old">toutes les images, dans l'ordre</span><span class="new">la plus récente gagne</span><p>Réseau lent : les images intermédiaires sont sautées au lieu d'attendre. Le retard ne s'accumule plus.</p></div>
+      <div class="step"><span class="k">5 · Souris</span><span class="old">dessinée dans l'image</span><span class="new">position et forme envoyées à part</span><p>Le pointeur bouge tout de suite chez le dépanneur, avec sa vraie forme (texte, main, attente).</p></div>
+    </div>
+    <div class="grid2">
+      <div class="box">
+        <h3>Compression et réseau</h3>
+        <ul>
+          <li>Vérifier quel format d'image est vraiment négocié avec Portunia (RemoteFX ou QOIZ), puis choisir selon le contenu : sans perte pour le texte, avec perte pour une photo ou une vidéo.</li>
+          <li>Messages regroupés vers le relais (moins de petits paquets) et Nagle coupé des deux côtés.</li>
+          <li>Indicateur de qualité dans la barre : temps d'aller-retour mesuré (déjà prévu par le protocole RDP).</li>
+          <li>Plus tard : vidéo H.264 (canal graphique EGFX) par le codeur matériel de Windows, pour les écrans 4K et les vidéos.</li>
+        </ul>
+      </div>
+      <div class="box">
+        <h3>Mesures sur le banc</h3>
+        <ol>
+          <li>VM Windows du banc (192.168.91.240), écran de test animé, jamais le vrai écran de votre PC.</li>
+          <li>Mesuré avant et après : images par seconde reçues, délai entre un clic et son effet à l'écran, processeur de la VM, débit par le relais de la Gate.</li>
+          <li>Les mêmes mesures avec un réseau ralenti (100 ms, 5 Mbit/s).</li>
+          <li>Résultats dans le compte rendu de version. Aucun chiffre n'est promis avant la mesure.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const SVG = {
+  lock: '<svg class="ico lock" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>',
+  hand: '<svg class="ico" viewBox="0 0 16 16"><path d="M5 8V3.5a1 1 0 0 1 2 0V7M7 7V2.5a1 1 0 0 1 2 0V7M9 7V3.5a1 1 0 0 1 2 0V9M11 6.5a1 1 0 0 1 2 0V10a4.5 4.5 0 0 1-8.3 2.4L3 9.6a1 1 0 0 1 1.7-1L5 9"/></svg>',
+  pause: '<svg class="ico" viewBox="0 0 16 16"><path d="M6 3.5v9M10 3.5v9"/></svg>',
+  chat: '<svg class="ico" viewBox="0 0 16 16"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg>',
+  file: '<svg class="ico" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4z M9 2v3h3"/></svg>',
+  screen: '<svg class="ico" viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="8.5" rx="1"/><path d="M6 14h4"/></svg>',
+};
+const sig = '<span class="sig"><i style="height:4px"></i><i style="height:7px"></i><i style="height:10px"></i><i style="height:12px"></i></span>';
+const win = (body) => `<div class="win"><div class="titlebar"><span class="logo"></span><span>Portunia Assistance</span><span class="sp"></span><span class="ctl">—</span><span class="ctl">✕</span></div><div class="wbody">${body}</div></div>`;
+const code = '<div class="card codebox">' + ['483', '216', '907'].map(g => '<div class="grp">' + [...g].map(d => `<span class="d">${d}</span>`).join('') + '</div>').join('') + '</div>';
+const bar = (opts = {}) => `<div class="bar"><span class="live"><span class="avatar" style="width:24px;height:24px;font-size:11px">JP</span><span><b>julien</b> contrôle · 12:04</span>${sig}</span>
+  <span class="tool ${opts.paused ? 'on' : ''}" title="Pause">${SVG.pause}</span>
+  <span class="tool on" title="Contrôle donné">${SVG.hand}</span>
+  <span class="tool ${opts.chat ? 'on' : ''}" title="Discussion">${SVG.chat}${opts.badge ? '<span class="badge"></span>' : ''}</span>
+  <span class="tool ${opts.file ? 'on' : ''}" title="Fichiers">${SVG.file}</span>
+  <span class="tool" title="Écran 1">${SVG.screen}<span style="font-size:10px;margin-left:2px">1</span></span>
+  <span class="stop">Arrêter</span></div>`;
+
+const SCREENS = [
+  { id: 'code', label: '1 · Code', live: false,
+    html: () => win(`<div><div class="wtitle">Lisez ces chiffres à la personne qui vous aide</div><div class="wsub">Personne ne voit votre écran tant que vous n'avez pas accepté.</div></div>
+      ${code}
+      <div class="row sb"><span class="wait"><span class="dot"></span>En attente de la personne qui vous aide…</span><span class="b ghost">Copier</span></div>
+      <div class="row sb"><span class="server">${SVG.lock} acces.acme.fr</span><span class="count">Nouveau code dans 9 min</span></div>`),
+    note: ['Code en grands chiffres séparés, lisible au téléphone même par une personne qui voit mal.', 'Le serveur est affiché tout de suite, avec son cadenas : c\'est lui qu\'un escroc ne peut pas imiter.', 'Le code change tout seul au bout de 10 minutes sans connexion.', 'Bouton Copier pour l\'envoyer par message.'] },
+  { id: 'accord', label: '2 · Accord', live: false,
+    html: () => win(`<div class="who"><span class="avatar">JP</span><div><b>Julien Piperault</b><span class="wsub">veut vous aider · ${SVG.lock} acces.acme.fr</span></div></div>
+      <div class="choices">
+        <div class="choice"><span class="radio"></span><div><b>Voir seulement</b><span>Il voit votre écran, vous gardez la souris et le clavier.</span></div></div>
+        <div class="choice sel"><span class="radio"></span><div><b>Voir et contrôler</b><span>Il peut utiliser la souris et le clavier. Vous pouvez reprendre la main à tout moment.</span></div></div>
+      </div>
+      <div class="warnbox"><span>⚠</span><span><b>Vous ne connaissez pas cette personne ?</b> Refusez. Ni Microsoft, ni votre banque, ni les impôts ne vous demanderont jamais cela.</span></div>
+      <div class="row sb"><span class="count">Refus automatique dans 0:52</span><span class="btns"><span class="b">Refuser</span><span class="b primary">Accepter</span></span></div>`),
+    note: ['Deux grands choix au lieu d\'une case à cocher : le choix est plus clair.', 'Nom complet et initiales du compte Portunia vérifié par la Gate.', 'Mise en garde contre les arnaques bien visible.', 'Sans réponse en 60 secondes : refus automatique.'] },
+  { id: 'session', label: '3 · Session', live: true,
+    html: () => bar(),
+    note: ['La fenêtre se replie en une barre en haut de l\'écran, qu\'on peut déplacer. Elle est absente de l\'image envoyée.', 'De gauche à droite : qui, depuis quand, qualité du réseau, Pause, Contrôle (cliquer pour le reprendre), Discussion, Fichiers, Écran montré, Arrêter.', 'Le cadre de couleur reste autour de l\'écran montré.', 'Échap trois fois arrête toujours tout.'] },
+  { id: 'chat', label: '4 · Discussion', live: true,
+    html: () => bar({ chat: true }) + `<div class="pop right"><div class="row sb"><b>Discussion</b><span class="muted small">julien</span></div>
+      <div class="msg them">Je regarde les pilotes de l'imprimante, ne touchez à rien 🙂</div>
+      <div class="msg me">D'accord, merci !</div>
+      <div class="msg them">C'est installé. Vous pouvez essayer d'imprimer ?</div>
+      <div class="input">Écrire un message…</div></div>`,
+    note: ['S\'ouvre sous la barre, à droite, et ne cache pas le milieu de l\'écran.', 'Les messages restent sur le PC le temps de la session, puis sont effacés.', 'Aussi dans le résumé de fin, si la Gate garde l\'historique.'] },
+  { id: 'fichier', label: '5 · Fichier reçu', live: true,
+    html: () => bar({ file: true }) + `<div class="pop center"><b>julien veut vous envoyer un fichier</b>
+      <div class="file"><span class="fi">EXE</span><div><div>HP_Pilote_Universel.exe</div><div class="muted small">4,2 Mo · sera rangé dans Téléchargements</div></div></div>
+      <div class="progress"><i></i></div>
+      <div class="btns"><span class="b">Refuser</span><span class="b primary">Accepter</span></div></div>`,
+    note: ['Toujours une question avant de recevoir un fichier.', 'Le fichier n\'est jamais ouvert automatiquement : la personne (ou le dépanneur, s\'il a le contrôle) l\'ouvre elle-même.', 'Le transfert passe dans le même canal chiffré de bout en bout que l\'écran.'] },
+  { id: 'pause', label: '6 · Pause', live: true,
+    html: () => bar({ paused: true }) + '<div class="paused"><div>Pause : julien voit une image figée et ne peut plus rien faire.<br>Cliquez sur ⏸ pour reprendre.</div></div>',
+    note: ['Pour taper un mot de passe ou lire un message privé sans arrêter la session.', 'Le dépanneur voit « La personne a mis la session en pause ».', 'Presse-papiers et fichiers coupés pendant la pause.'] },
+  { id: 'fin', label: '7 · Fin', live: false,
+    html: () => win(`<div><div class="wtitle">L'assistance est terminée</div><div class="wsub">Terminée par Julien Piperault · personne ne voit plus votre écran.</div></div>
+      <div class="stats"><div class="stat"><b>18 min</b><span>Durée</span></div><div class="stat"><b>Oui</b><span>Contrôle donné</span></div><div class="stat"><b>1</b><span>Fichier reçu</span></div></div>
+      <div class="card list"><div><span>HP_Pilote_Universel.exe</span><span class="muted">Téléchargements</span></div></div>
+      <div class="row sb"><span class="server">Vous pouvez supprimer ce programme.</span><span class="btns"><span class="b primary">Fermer</span></span></div>`),
+    note: ['Dit clairement que plus personne ne voit l\'écran.', 'Résumé : durée, contrôle, fichiers et où ils sont.', 'Rappelle que le programme peut être supprimé : rien n\'est resté installé.'] },
+];
+
+const tabs = document.getElementById('tabs'), desk = document.getElementById('desk'), note = document.getElementById('note');
+function show(id) {
+  const s = SCREENS.find(x => x.id === id) || SCREENS[0];
+  for (const b of tabs.children) b.setAttribute('aria-selected', String(b.dataset.id === s.id));
+  desk.className = 'desk' + (s.live ? ' live' : '');
+  desk.innerHTML = s.html() + '<div class="taskbar"><i></i><i></i><i class="on"></i><i></i></div>';
+  note.innerHTML = `<h3>${s.label.replace(/^\d+ · /, '')}</h3><ul>${s.note.map(n => `<li>${n}</li>`).join('')}</ul>`;
+  try { localStorage.setItem('assist-tab', s.id); } catch {}
+}
+for (const s of SCREENS) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.role = 'tab'; b.dataset.id = s.id; b.textContent = s.label;
+  b.addEventListener('click', () => show(s.id));
+  tabs.append(b);
+}
+let first = 'code';
+try { first = localStorage.getItem('assist-tab') || 'code'; } catch {}
+show(first);
+</script>

@@ -1104,3 +1104,23 @@ body.detached #relecture { height: 100vh; }
 .gs-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line-soft); font-size: 13px; }
 .gs-row:last-child { border-bottom: 0; }
 .gs-val { color: var(--muted); text-align: right; min-width: 0; overflow-wrap: anywhere; }
+/* Onglet d'assistance : bandeau (contrôle, pause, qualité) et discussion à droite. */
+.assist-pane { position: relative; }
+.assist-strip { flex: none; display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 3px 8px 3px 12px; background: var(--pane-head); border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.assist-strip .spacer { flex: 1; }
+.assist-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.assist-strip[data-state="on"] .assist-dot { background: #1d8a57; }
+.assist-strip[data-state="view"] .assist-dot { background: var(--accent); }
+.assist-strip[data-state="warn"] .assist-dot { background: #d08a2c; }
+.assist-strip[data-state="warn"] .assist-status { color: #d08a2c; }
+.assist-strip .btn { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.assist-badge { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: #d64545; }
+.assist-chat { position: absolute; right: 12px; top: 78px; bottom: 12px; width: min(320px, calc(100% - 24px)); display: flex; flex-direction: column; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 12px 32px rgb(0 0 0 / .35); z-index: 5; }
+.assist-chat[hidden] { display: none; }
+.assist-chat header { display: flex; align-items: center; justify-content: space-between; padding: 8px 8px 8px 14px; border-bottom: 1px solid var(--line); }
+.assist-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 12px; }
+.assist-msg { max-width: 85%; padding: 7px 10px; border-radius: 10px; font-size: 13px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.assist-msg.theirs { align-self: flex-start; background: var(--hover); }
+.assist-msg.mine { align-self: flex-end; background: var(--accent); color: #fff; }
+.assist-send { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line); }
+.assist-send input { flex: 1; min-width: 0; }

@@ -3157,21 +3157,24 @@ dependencies = [
 
 [[package]]
 name = "portunia-assistance"
-version = "0.62.0"
+version = "0.81.0"
 dependencies = [
  "anyhow",
  "assist-proto",
  "async-trait",
  "bytes",
  "futures-util",
+ "ironrdp-pdu",
  "ironrdp-server",
  "rcgen",
  "serde_json",
  "tokio",
  "tokio-rustls",
  "tokio-tungstenite",
+ "tracing",
  "tracing-subscriber",
  "windows",
+ "windows-numerics",
  "xcap",
 ]
 

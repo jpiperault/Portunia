@@ -14,7 +14,7 @@ rand = "0.8"
 thiserror = "1"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "time", "sync"] }
 tokio-tungstenite = { version = "0.26", features = ["rustls-tls-webpki-roots"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }

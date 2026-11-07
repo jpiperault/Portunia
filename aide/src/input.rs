@@ -1,13 +1,21 @@
 //! Souris et clavier du dépanneur, rejoués sur ce PC (SendInput), ou seulement notés
 //! (essais : rien n'est tapé ni cliqué).
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use ironrdp_server::{KeyboardEvent, MouseEvent, RdpServerInputHandler};
+
+/// Contrôle donné au dépanneur (sinon il voit seulement). La personne peut le reprendre à tout moment.
+pub static CONTROL: AtomicBool = AtomicBool::new(false);
+
+/// Souris et clavier du dépanneur acceptés maintenant ? (contrôle donné et pas de pause)
+fn allowed() -> bool {
+    CONTROL.load(Ordering::Relaxed) && !crate::display::PAUSED.load(Ordering::Relaxed)
+}
 
 pub struct Input {
     /// Essais : noter les événements au lieu de les rejouer.
     pub dry_run: bool,
-    /// Vue seule (contrôle non accordé) : tout est ignoré.
-    pub ignore: bool,
     /// Taille de l'écran envoyé, pour convertir la position de la souris.
     pub width: u16,
     pub height: u16,
@@ -16,7 +24,7 @@ pub struct Input {
 
 impl RdpServerInputHandler for Input {
     fn keyboard(&mut self, event: KeyboardEvent) {
-        if self.ignore {
+        if !allowed() {
             return;
         }
         if self.dry_run {
@@ -28,7 +36,7 @@ impl RdpServerInputHandler for Input {
     }
 
     fn mouse(&mut self, event: MouseEvent) {
-        if self.ignore {
+        if !allowed() {
             return;
         }
         if self.dry_run {
@@ -41,6 +49,12 @@ impl RdpServerInputHandler for Input {
         #[cfg(windows)]
         win::mouse(&event, self.width, self.height);
     }
+}
+
+/// Contrôle repris ou pause : les touches et boutons encore enfoncés par le dépanneur sont relâchés.
+pub fn release_all() {
+    #[cfg(windows)]
+    win::release_all();
 }
 
 impl Input {
@@ -60,6 +74,37 @@ mod win {
         MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, MOUSEINPUT, MOUSE_EVENT_FLAGS, VIRTUAL_KEY,
     };
 
+    use std::sync::Mutex;
+
+    /// Touches (code, étendue) et boutons de souris enfoncés par le dépanneur.
+    static KEYS: Mutex<Vec<(u16, bool)>> = Mutex::new(Vec::new());
+    static BUTTONS: Mutex<Vec<MOUSE_EVENT_FLAGS>> = Mutex::new(Vec::new());
+
+    pub fn release_all() {
+        for (code, extended) in std::mem::take(&mut *KEYS.lock().unwrap()) {
+            key(code, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP | if extended { KEYEVENTF_EXTENDEDKEY } else { KEYBD_EVENT_FLAGS(0) });
+        }
+        for up in std::mem::take(&mut *BUTTONS.lock().unwrap()) {
+            mouse_input(up, 0, 0, 0);
+        }
+    }
+
+    fn pressed(code: u16, extended: bool, down: bool) {
+        let mut k = KEYS.lock().unwrap();
+        k.retain(|x| *x != (code, extended));
+        if down {
+            k.push((code, extended));
+        }
+    }
+
+    fn button(up: MOUSE_EVENT_FLAGS, down: bool) {
+        let mut b = BUTTONS.lock().unwrap();
+        b.retain(|x| *x != up);
+        if down {
+            b.push(up);
+        }
+    }
+
     fn send(input: INPUT) {
         // SAFETY : un seul INPUT bien formé, taille passée par l'appel.
         unsafe {
@@ -77,12 +122,13 @@ mod win {
     pub fn keyboard(event: &KeyboardEvent) {
         match *event {
             KeyboardEvent::Pressed { code, extended } => {
+                pressed(code as u16, extended, true);
                 key(code as u16, KEYEVENTF_SCANCODE | if extended { KEYEVENTF_EXTENDEDKEY } else { KEYBD_EVENT_FLAGS(0) })
             }
-            KeyboardEvent::Released { code, extended } => key(
-                code as u16,
-                KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP | if extended { KEYEVENTF_EXTENDEDKEY } else { KEYBD_EVENT_FLAGS(0) },
-            ),
+            KeyboardEvent::Released { code, extended } => {
+                pressed(code as u16, extended, false);
+                key(code as u16, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP | if extended { KEYEVENTF_EXTENDEDKEY } else { KEYBD_EVENT_FLAGS(0) })
+            }
             KeyboardEvent::UnicodePressed(u) => key(u, KEYEVENTF_UNICODE),
             KeyboardEvent::UnicodeReleased(u) => key(u, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP),
             KeyboardEvent::Synchronize(_) => {}
@@ -104,12 +150,30 @@ mod win {
                 let ay = (y as i32 * 65535) / (height.max(2) as i32 - 1);
                 mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, ax, ay, 0);
             }
-            MouseEvent::LeftPressed => mouse_input(MOUSEEVENTF_LEFTDOWN, 0, 0, 0),
-            MouseEvent::LeftReleased => mouse_input(MOUSEEVENTF_LEFTUP, 0, 0, 0),
-            MouseEvent::RightPressed => mouse_input(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0),
-            MouseEvent::RightReleased => mouse_input(MOUSEEVENTF_RIGHTUP, 0, 0, 0),
-            MouseEvent::MiddlePressed => mouse_input(MOUSEEVENTF_MIDDLEDOWN, 0, 0, 0),
-            MouseEvent::MiddleReleased => mouse_input(MOUSEEVENTF_MIDDLEUP, 0, 0, 0),
+            MouseEvent::LeftPressed => {
+                button(MOUSEEVENTF_LEFTUP, true);
+                mouse_input(MOUSEEVENTF_LEFTDOWN, 0, 0, 0)
+            }
+            MouseEvent::LeftReleased => {
+                button(MOUSEEVENTF_LEFTUP, false);
+                mouse_input(MOUSEEVENTF_LEFTUP, 0, 0, 0)
+            }
+            MouseEvent::RightPressed => {
+                button(MOUSEEVENTF_RIGHTUP, true);
+                mouse_input(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0)
+            }
+            MouseEvent::RightReleased => {
+                button(MOUSEEVENTF_RIGHTUP, false);
+                mouse_input(MOUSEEVENTF_RIGHTUP, 0, 0, 0)
+            }
+            MouseEvent::MiddlePressed => {
+                button(MOUSEEVENTF_MIDDLEUP, true);
+                mouse_input(MOUSEEVENTF_MIDDLEDOWN, 0, 0, 0)
+            }
+            MouseEvent::MiddleReleased => {
+                button(MOUSEEVENTF_MIDDLEUP, false);
+                mouse_input(MOUSEEVENTF_MIDDLEUP, 0, 0, 0)
+            }
             MouseEvent::Button4Pressed => mouse_input(MOUSEEVENTF_XDOWN, 0, 0, 1),
             MouseEvent::Button4Released => mouse_input(MOUSEEVENTF_XUP, 0, 0, 1),
             MouseEvent::Button5Pressed => mouse_input(MOUSEEVENTF_XDOWN, 0, 0, 2),

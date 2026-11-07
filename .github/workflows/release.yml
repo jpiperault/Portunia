@@ -65,8 +65,12 @@ jobs:
       # depuis « latest/download » du dépôt public, avec son empreinte SHA-256 pour le vérifier.
       - name: Portunia Assistance
         shell: bash
+        # Runtime C intégré : le programme se lance sur un PC sans le « Visual C++ Redistributable ».
+        env:
+          RUSTFLAGS: -C target-feature=+crt-static
         run: |
           cargo build --release --manifest-path aide/Cargo.toml
+          if grep -a -q -i "vcruntime140.dll" aide/target/release/portunia-assistance.exe; then echo "portunia-assistance.exe dépend encore de vcruntime140.dll"; exit 1; fi
           mkdir -p assist
           # Les modes d'essai (fonctionnalité « essai ») ne doivent jamais être publiés.
           if grep -a -q -e "--accord-auto" -e "--ecoute" aide/target/release/portunia-assistance.exe; then echo "Modes d'essai présents dans portunia-assistance.exe"; exit 1; fi

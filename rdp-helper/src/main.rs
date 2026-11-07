@@ -73,6 +73,9 @@ struct Settings {
     files: bool,
     #[serde(default, rename = "fixedSize")]
     fixed_size: bool,
+    /// Pointeur du serveur dessiné dans l'image (assistance : on voit la personne bouger la souris).
+    #[serde(default, rename = "remotePointer")]
+    remote_pointer: bool,
 }
 
 #[derive(Deserialize)]
@@ -188,7 +191,7 @@ async fn run() -> Result<()> {
         .with_desktop_width(s.width.max(640))
         .with_desktop_height(s.height.max(480))
         .with_server_pointer(true)
-        .with_pointer_software_rendering(false)
+        .with_pointer_software_rendering(s.remote_pointer)
         .with_client_name("Portunia")
         // Identité du client annoncée au serveur (valeurs habituelles d'un client Windows).
         .with_client_build(0)
