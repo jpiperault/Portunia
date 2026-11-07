@@ -1715,7 +1715,7 @@ fn exec_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteExe
 struct StateHost<'a> {
     state: &'a AppState,
     app: AppHandle,
-    events: Option<Channel<Value>>,
+    events: Option<Channel>,
 }
 
 /// Session SSH enregistrée, valeurs résolues : une connexion dédiée par commande.
@@ -1756,8 +1756,8 @@ impl crate::extension::Host for StateHost<'_> {
 
     fn events(&self) -> anyhow::Result<crate::extension::Emit> {
         let channel = self.events.clone().ok_or_else(|| anyhow::anyhow!(t!("This call needs an event channel", "Cet appel demande un canal d'évènements")))?;
-        Ok(Arc::new(move |v| {
-            let _ = channel.send(v);
+        Ok(Arc::new(move |v: Value| {
+            let _ = channel.send(InvokeResponseBody::Json(v.to_string()));
         }))
     }
 
@@ -1771,6 +1771,18 @@ impl crate::extension::Host for StateHost<'_> {
 
     fn spawn(&self, task: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>) {
         tauri::async_runtime::spawn(task);
+    }
+
+    fn data_dir(&self) -> PathBuf {
+        self.state.data_dir.clone()
+    }
+
+    fn open_connection<'a>(&'a self, protocol: &'a str, name: String, values: HashMap<String, Value>, cols: u16, rows: u16) -> crate::connector::BoxFuture<'a, Value> {
+        Box::pin(async move {
+            let channel = self.events.clone().ok_or_else(|| anyhow::anyhow!(t!("This call needs an event channel", "Cet appel demande un canal d'évènements")))?;
+            let response = start_connection(&self.app, self.state, protocol, name, values, cols, rows, channel).await.map_err(|e| anyhow::anyhow!(e))?;
+            Ok(serde_json::to_value(response)?)
+        })
     }
 }
 
@@ -1800,11 +1812,11 @@ pub async fn ext_call(
     extension: String,
     method: String,
     args: Value,
-    on_event: Channel<Value>,
+    on_event: Channel,
 ) -> CmdResult<Value> {
     state.unlocked()?;
     let ext = state.extensions.get(&extension).ok_or_else(|| t!(format!("Unknown extension: {extension}"), format!("Extension inconnue : {extension}")))?;
-    if let Some(feature) = ext.manifest().feature {
+    if let Some(feature) = ext.manifest().needs(&method) {
         state.license.lock().unwrap().require(feature).map_err(full)?;
     }
     // Le canal est toujours fourni ; seules les méthodes qui en ont besoin s'en servent.

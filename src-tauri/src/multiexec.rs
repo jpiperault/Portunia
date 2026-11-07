@@ -36,7 +36,7 @@ pub struct MultiExec;
 
 impl Extension for MultiExec {
     fn manifest(&self) -> ExtManifest {
-        ExtManifest { id: "multiexec", name: t!("Command on several servers", "Commande sur plusieurs serveurs").into(), feature: Some(Feature::MultiExec) }
+        ExtManifest { id: "multiexec", name: t!("Command on several servers", "Commande sur plusieurs serveurs").into(), feature: Some(Feature::MultiExec), free: &[] }
     }
 
     fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {

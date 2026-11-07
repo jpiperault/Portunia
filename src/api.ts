@@ -520,36 +520,30 @@ export interface PveResource {
 }
 
 export const proxmox = {
-  list: () => invoke<Pve[]>('pve_list'),
-  probe: (address: string) => invoke<{ host: string; port: number; fingerprint: string }>('pve_probe', { address }),
-  save: (request: PveSave) => invoke<Pve>('pve_save', { request }),
-  remove: (id: string) => invoke<void>('pve_remove', { id }),
+  list: () => extCall<Pve[]>('proxmox', 'list'),
+  probe: (address: string) => extCall<{ host: string; port: number; fingerprint: string }>('proxmox', 'probe', { address }),
+  save: (request: PveSave) => extCall<Pve>('proxmox', 'save', { request }),
+  remove: (id: string) => extCall<void>('proxmox', 'remove', { id }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  api: <T = any>(id: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, params?: Record<string, unknown>) => invoke<T>('pve_api', { id, method, path, params: params ?? null }),
+  api: <T = any>(id: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE', path: string, params?: Record<string, unknown>) => extCall<T>('proxmox', 'api', { id, method, path, params: params ?? null }),
   /** Lecture avec les champs hors « data » (réseau : « changes » en attente). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  apiFull: <T = any>(id: string, path: string) => invoke<{ data: T; changes: string | null }>('pve_api_full', { id, path }),
+  apiFull: <T = any>(id: string, path: string) => extCall<{ data: T; changes: string | null }>('proxmox', 'apiFull', { id, path }),
 };
 
 /** Console d'une machine virtuelle, d'un conteneur ou d'un nœud (onglet VNC). */
 export function connectProxmox(id: string, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, cols: number, rows: number, onEvent: (e: TermEvent) => void, upgrade = false) {
-  const channel = new Channel<TermEvent>();
-  channel.onmessage = onEvent;
-  return invoke<ConnectResponse>('pve_console', { id, node, kind, vmid, upgrade, cols, rows, onEvent: channel });
+  return extCall<ConnectResponse>('proxmox', 'console', { id, node, kind, vmid, upgrade, cols, rows }, onEvent);
 }
 
 /** Terminal texte de Proxmox (conteneur, nœud, console série d'une VM) dans un onglet terminal. */
 export function connectProxmoxTerminal(id: string, node: string, kind: 'qemu' | 'lxc' | 'node', vmid: number | null, cols: number, rows: number, onEvent: (e: TermEvent) => void, cmd?: 'upgrade') {
-  const channel = new Channel<TermEvent>();
-  channel.onmessage = onEvent;
-  return invoke<ConnectResponse>('pve_terminal', { id, node, kind, vmid, cmd: cmd ?? null, cols, rows, onEvent: channel });
+  return extCall<ConnectResponse>('proxmox', 'terminal', { id, node, kind, vmid, cmd: cmd ?? null, cols, rows }, onEvent);
 }
 
 /** Envoie un fichier du PC vers un stockage Proxmox (ISO, modèle) ; rend la tâche (UPID). */
 export function proxmoxUpload(id: string, node: string, storage: string, content: 'iso' | 'vztmpl', path: string, onProgress: (sent: number, total: number) => void) {
-  const channel = new Channel<{ envoye: number; total: number }>();
-  channel.onmessage = (m) => onProgress(m.envoye, m.total);
-  return invoke<string | null>('pve_upload', { id, node, storage, content, path, onProgress: channel });
+  return extCall<string | null>('proxmox', 'upload', { id, node, storage, content, path }, (m: { envoye: number; total: number }) => onProgress(m.envoye, m.total));
 }
 
 // ---------- Clés SSH ----------

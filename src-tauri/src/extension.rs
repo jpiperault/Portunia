@@ -10,7 +10,9 @@
 //! Une extension ne vérifie donc jamais la licence elle-même.
 
 use std::{
+    collections::HashMap,
     future::Future,
+    path::PathBuf,
     pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -34,6 +36,16 @@ pub struct ExtManifest {
     pub name: String,
     /// Fonctionnalité de la licence qui la débloque (aucune : gratuite).
     pub feature: Option<Feature>,
+    /// Méthodes permises sans licence (voir et retirer ce qu'on avait ajouté, par exemple).
+    #[serde(skip)]
+    pub free: &'static [&'static str],
+}
+
+impl ExtManifest {
+    /// La licence est-elle demandée pour cette méthode ?
+    pub fn needs(&self, method: &str) -> Option<Feature> {
+        self.feature.filter(|_| !self.free.contains(&method))
+    }
 }
 
 /// Ce que le cœur met à la disposition d'une extension. Tout passe par ici : une extension
@@ -50,6 +62,11 @@ pub trait Host: Send + Sync {
     fn job(&self) -> Arc<Job>;
     /// Lance une tâche de fond, qui peut durer après la réponse.
     fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>);
+    /// Dossier des données de Portunia (une extension n'y lit et n'écrit que ses propres fichiers).
+    fn data_dir(&self) -> PathBuf;
+    /// Ouvre un onglet avec un protocole de Portunia (VNC, Telnet…) ; ses évènements partent
+    /// dans le canal de l'appel. Rend la réponse de connexion (identifiant, vue…).
+    fn open_connection<'a>(&'a self, protocol: &'a str, name: String, values: HashMap<String, Value>, cols: u16, rows: u16) -> BoxFuture<'a, Value>;
 }
 
 /// Session enregistrée qui lance des commandes.
@@ -104,6 +121,7 @@ impl Extensions {
                 Arc::new(crate::serverstats::Dashboard),
                 Arc::new(crate::containers::Containers),
                 Arc::new(crate::multiexec::MultiExec),
+                Arc::new(crate::proxmox::Proxmox),
             ],
         }
     }
@@ -169,6 +187,12 @@ mod tests {
         fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) {
             tauri::async_runtime::block_on(task)
         }
+        fn data_dir(&self) -> PathBuf {
+            std::env::temp_dir().join(format!("portunia-ext-{}", std::process::id()))
+        }
+        fn open_connection<'a>(&'a self, _: &'a str, _: String, _: HashMap<String, Value>, _: u16, _: u16) -> BoxFuture<'a, Value> {
+            Box::pin(async { anyhow::bail!("pas d'onglet") })
+        }
     }
 
     fn call(host: &dyn Host, ext: &str, method: &str, args: Value) -> Result<Value> {
@@ -184,6 +208,12 @@ mod tests {
         assert!(m.iter().any(|m| m.id == "dashboard" && m.feature == Some(Feature::ServerDashboard)));
         assert!(m.iter().any(|m| m.id == "containers" && m.feature == Some(Feature::Containers)));
         assert!(m.iter().any(|m| m.id == "multiexec" && m.feature == Some(Feature::MultiExec)));
+        // Proxmox : voir et retirer ses serveurs reste permis sans licence.
+        let pve = m.iter().find(|m| m.id == "proxmox").unwrap();
+        assert_eq!(pve.needs("list"), None);
+        assert_eq!(pve.needs("remove"), None);
+        assert_eq!(pve.needs("api"), Some(Feature::Proxmox));
+        assert_eq!(pve.needs("console"), Some(Feature::Proxmox));
         assert!(exts.get("inconnue").is_none());
     }
 
@@ -199,6 +229,10 @@ mod tests {
         assert!(call(&host, "containers", "list", json!({})).is_err());
         assert!(call(&host, "dashboard", "effacer", json!({})).is_err());
         assert!(call(&host, "containers", "command", json!({ "kind": "docker", "what": "shell", "id": "x; rm -rf /" })).is_err());
+        // Proxmox : serveur inconnu, nœud invalide, envoi aux paramètres faux.
+        assert!(call(&host, "proxmox", "api", json!({ "id": "absent", "method": "GET", "path": "/version" })).is_err());
+        assert!(call(&host, "proxmox", "list", json!({})).unwrap().as_array().is_some());
+        assert!(call(&host, "proxmox", "detruire", json!({})).is_err());
         // Commande sur plusieurs serveurs : sans canal d'évènements, refusée.
         assert!(call(&host, "multiexec", "run", json!({ "sessionIds": ["s1"], "command": "uptime" })).is_err());
         assert!(call(&host, "multiexec", "run", json!({ "sessionIds": ["s1"], "command": "  " })).is_err());

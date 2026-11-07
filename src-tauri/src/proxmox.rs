@@ -3,7 +3,8 @@
 //! L'API de Proxmox (HTTPS, port 8006, certificat épinglé par son empreinte comme pour une
 //! Gate) s'utilise avec un jeton d'API (`utilisateur@domaine!jeton`) ou un mot de passe ; le
 //! secret reste dans le Gestionnaire d'identifiants Windows, le ticket de session aussi.
-//! L'interface appelle l'API à travers `pve_api` (inventaire, actions, instantanés,
+//! C'est une extension de fonction (voir extension.rs) : l'interface passe par
+//! `ext_call("proxmox", …)`, qui vérifie la licence. Elle appelle l'API par la méthode `api` (inventaire, actions, instantanés,
 //! sauvegardes, clonage, migration, tâches, stockages).
 //!
 //! Consoles : machines virtuelles, conteneurs et shell d'un nœud passent par la console VNC de
@@ -28,13 +29,16 @@ use anyhow::{anyhow, bail, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{ipc::Channel, AppHandle, State};
+
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::{client::IntoClientRequest, Message};
 
 use crate::{
-    commands::{full, start_connection, AppState, CmdResult, ConnectResponse},
+    commands::{full, CmdResult},
+    connector::BoxFuture,
+    extension::{self, ExtManifest, Extension, Host},
     gate::{client, pinned_config, root_cause, urlencode},
+    license::Feature,
 };
 
 const FILE: &str = "proxmox.json";
@@ -259,20 +263,113 @@ fn view(p: Pve) -> PveView {
     PveView { has_secret, has_console, pve: p }
 }
 
-fn require(state: &AppState) -> CmdResult<()> {
-    state.unlocked()?;
-    state.license.lock().unwrap().require(crate::license::Feature::Proxmox).map_err(full)
+/// Extension « Proxmox VE » (Pro). Voir et retirer ses serveurs restent permis sans licence.
+pub struct Proxmox;
+
+#[derive(Deserialize)]
+struct IdArgs {
+    id: String,
 }
 
-#[tauri::command]
-pub fn pve_list(state: State<'_, AppState>) -> CmdResult<Vec<PveView>> {
-    state.unlocked()?;
-    Ok(load(&state.data_dir).into_iter().map(view).collect())
+#[derive(Deserialize)]
+struct ProbeArgs {
+    address: String,
+}
+
+#[derive(Deserialize)]
+struct SaveArgs {
+    request: SaveRequest,
+}
+
+#[derive(Deserialize)]
+struct ApiArgs {
+    id: String,
+    method: String,
+    path: String,
+    params: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct PathArgs {
+    id: String,
+    path: String,
+}
+
+#[derive(Deserialize)]
+struct ConsoleArgs {
+    id: String,
+    node: String,
+    kind: String,
+    vmid: Option<u32>,
+    upgrade: Option<bool>,
+    cmd: Option<String>,
+    cols: u16,
+    rows: u16,
+}
+
+#[derive(Deserialize)]
+struct UploadArgs {
+    id: String,
+    node: String,
+    storage: String,
+    content: String,
+    path: String,
+}
+
+impl Extension for Proxmox {
+    fn manifest(&self) -> ExtManifest {
+        ExtManifest { id: "proxmox", name: "Proxmox VE".into(), feature: Some(Feature::Proxmox), free: &["list", "remove"] }
+    }
+
+    fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {
+        Box::pin(async move {
+            let e = |e: String| anyhow!(e);
+            match method {
+                "list" => extension::reply(pve_list(host)),
+                "probe" => {
+                    let a: ProbeArgs = extension::args(args)?;
+                    pve_probe(a.address).await.map_err(e)
+                }
+                "save" => {
+                    let a: SaveArgs = extension::args(args)?;
+                    extension::reply(pve_save(host, a.request).await.map_err(e)?)
+                }
+                "remove" => {
+                    let a: IdArgs = extension::args(args)?;
+                    extension::reply(pve_remove(host, a.id).map_err(e)?)
+                }
+                "api" => {
+                    let a: ApiArgs = extension::args(args)?;
+                    pve_api(host, a.id, a.method, a.path, a.params).await.map_err(e)
+                }
+                "apiFull" => {
+                    let a: PathArgs = extension::args(args)?;
+                    pve_api_full(host, a.id, a.path).await.map_err(e)
+                }
+                "console" => {
+                    let a: ConsoleArgs = extension::args(args)?;
+                    pve_console(host, a).await
+                }
+                "terminal" => {
+                    let a: ConsoleArgs = extension::args(args)?;
+                    pve_terminal(host, a).await
+                }
+                "upload" => {
+                    let a: UploadArgs = extension::args(args)?;
+                    pve_upload(host, a).await.map_err(e)
+                }
+                _ => Err(extension::unknown("proxmox", method)),
+            }
+        })
+    }
+}
+
+fn pve_list(host: &dyn Host) -> Vec<PveView> {
+    load(&host.data_dir()).into_iter().map(view).collect()
 }
 
 /// Premier contact : empreinte du certificat présenté, à faire vérifier par l'utilisateur.
-#[tauri::command]
-pub async fn pve_probe(address: String) -> CmdResult<Value> {
+async fn pve_probe(address: String) -> CmdResult<Value> {
     let (host, port) = split_address(&address).map_err(full)?;
     let (http, seen) = client(None).map_err(full)?;
     let resp = http
@@ -307,9 +404,7 @@ pub struct SaveRequest {
 }
 
 /// Ajout ou modification : vérifie l'accès (version de Proxmox) avant d'enregistrer.
-#[tauri::command]
-pub async fn pve_save(state: State<'_, AppState>, request: SaveRequest) -> CmdResult<PveView> {
-    require(&state)?;
+async fn pve_save(host: &dyn Host, request: SaveRequest) -> CmdResult<PveView> {
     let r = request;
     if r.user.trim().is_empty() || !r.user.contains('@') {
         return Err(t!("User: user@realm (root@pam, admin@pve…)", "Utilisateur : utilisateur@domaine (root@pam, admin@pve…)").into());
@@ -348,43 +443,37 @@ pub async fn pve_save(state: State<'_, AppState>, request: SaveRequest) -> CmdRe
     if !p.uses_token() {
         let _ = crate::secrets::delete(&p.secret_id(), "console");
     }
-    let mut list = load(&state.data_dir);
+    let mut list = load(&host.data_dir());
     match list.iter_mut().find(|x| x.id == p.id) {
         Some(x) => *x = p.clone(),
         None => list.push(p.clone()),
     }
-    save(&state.data_dir, &list).map_err(full)?;
+    save(&host.data_dir(), &list).map_err(full)?;
     Ok(view(p))
 }
 
-#[tauri::command]
-pub fn pve_remove(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    state.unlocked()?;
-    let mut list = load(&state.data_dir);
+fn pve_remove(host: &dyn Host, id: String) -> CmdResult<()> {
+    let mut list = load(&host.data_dir());
     if let Some(p) = list.iter().find(|p| p.id == id) {
         for key in ["secret", "ticket", "csrf", "console"] {
             let _ = crate::secrets::delete(&p.secret_id(), key);
         }
     }
     list.retain(|p| p.id != id);
-    save(&state.data_dir, &list).map_err(full)
+    save(&host.data_dir(), &list).map_err(full)
 }
 
 /// Appel de l'API Proxmox (« GET », « POST », « PUT », « DELETE ») ; renvoie « data ».
-#[tauri::command]
-pub async fn pve_api(state: State<'_, AppState>, id: String, method: String, path: String, params: Option<Value>) -> CmdResult<Value> {
-    require(&state)?;
-    let p = find(&state.data_dir, &id).map_err(full)?;
+async fn pve_api(host: &dyn Host, id: String, method: String, path: String, params: Option<Value>) -> CmdResult<Value> {
+    let p = find(&host.data_dir(), &id).map_err(full)?;
     let method = reqwest::Method::from_bytes(method.to_uppercase().as_bytes()).map_err(|_| "méthode invalide".to_string())?;
     api(&p, method, &path, params.as_ref()).await.map_err(full)
 }
 
 /// Lecture qui rend toute la réponse de l'API, pas seulement « data » (réseau d'un nœud :
 /// « changes » = changements en attente d'application).
-#[tauri::command]
-pub async fn pve_api_full(state: State<'_, AppState>, id: String, path: String) -> CmdResult<Value> {
-    require(&state)?;
-    let p = find(&state.data_dir, &id).map_err(full)?;
+async fn pve_api_full(host: &dyn Host, id: String, path: String) -> CmdResult<Value> {
+    let p = find(&host.data_dir(), &id).map_err(full)?;
     let data = api(&p, reqwest::Method::GET, &path, None).await.map_err(full)?;
     // « changes » n'est pas dans data : seconde lecture brute.
     let changes = raw_get(&p, &path).await.ok().and_then(|v| v.get("changes").cloned()).unwrap_or(Value::Null);
@@ -404,18 +493,16 @@ async fn raw_get(p: &Pve, path: &str) -> Result<Value> {
 
 /// Console d'une machine virtuelle (`qemu`), d'un conteneur (`lxc`) ou shell d'un nœud
 /// (`node`) : la console VNC de Proxmox, relayée sur un port local, ouverte par le moteur VNC.
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub async fn pve_console(app: AppHandle, state: State<'_, AppState>, id: String, node: String, kind: String, vmid: Option<u32>, upgrade: Option<bool>, cols: u16, rows: u16, on_event: Channel) -> CmdResult<ConnectResponse> {
-    require(&state)?;
-    let p = find(&state.data_dir, &id).map_err(full)?;
+async fn pve_console(host: &dyn Host, a: ConsoleArgs) -> Result<Value> {
+    let ConsoleArgs { id, node, kind, vmid, upgrade, cols, rows, .. } = a;
+    let p = find(&host.data_dir(), &id)?;
     if node.is_empty() || !node.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') {
-        return Err("nœud invalide".into());
+        bail!("nœud invalide");
     }
     let (base, name) = match (kind.as_str(), vmid) {
         ("qemu" | "lxc", Some(vmid)) => (format!("/nodes/{node}/{kind}/{vmid}"), format!("{vmid} · {}", p.name)),
         ("node", _) => (format!("/nodes/{node}"), format!("{node} · {}", p.name)),
-        _ => return Err("console inconnue".into()),
+        _ => bail!("console inconnue"),
     };
     let (start, params) = match kind.as_str() {
         // « upgrade » : le shell lance la mise à jour des paquets (apt dist-upgrade), comme dans Proxmox.
@@ -425,14 +512,14 @@ pub async fn pve_console(app: AppHandle, state: State<'_, AppState>, id: String,
         "qemu" => (format!("{base}/vncproxy"), json!({ "websocket": true, "generate-password": true })),
         _ => (format!("{base}/vncproxy"), json!({ "websocket": true })),
     };
-    let a = console_auth(&p).await.map_err(full)?;
-    let console = api_as(&p, Some(&a), reqwest::Method::POST, &start, Some(&params)).await.map_err(full)?;
-    let port = console["port"].as_u64().or_else(|| console["port"].as_str().and_then(|s| s.parse().ok())).ok_or("Proxmox n'a pas donné de port de console")?;
-    let ticket = console["ticket"].as_str().ok_or("Proxmox n'a pas donné de ticket de console")?.to_string();
+    let a = console_auth(&p).await?;
+    let console = api_as(&p, Some(&a), reqwest::Method::POST, &start, Some(&params)).await?;
+    let port = console["port"].as_u64().or_else(|| console["port"].as_str().and_then(|s| s.parse().ok())).ok_or_else(|| anyhow!("Proxmox n'a pas donné de port de console"))?;
+    let ticket = console["ticket"].as_str().ok_or_else(|| anyhow!("Proxmox n'a pas donné de ticket de console"))?.to_string();
     let password = console["password"].as_str().map(str::to_string).unwrap_or_else(|| ticket.clone());
-    let local = bridge(&p, &a, &format!("{base}/vncwebsocket?port={port}&vncticket={}", urlencode(&ticket))).await.map_err(full)?;
+    let local = bridge(&p, &a, &format!("{base}/vncwebsocket?port={port}&vncticket={}", urlencode(&ticket))).await?;
     let values: HashMap<String, Value> = [("host".to_string(), json!("127.0.0.1")), ("port".to_string(), json!(local)), ("password".to_string(), json!(password))].into_iter().collect();
-    start_connection(&app, &state, "vnc", name, values, cols, rows, on_event).await
+    host.open_connection("vnc", name, values, cols, rows).await
 }
 
 /// Authentification des consoles. Proxmox lie le ticket VNC à un utilisateur et refuse les jetons
@@ -672,18 +759,16 @@ async fn term_bridge(p: &Pve, a: &Auth, path: &str, user: &str, ticket: &str) ->
 
 /// Terminal texte d'un conteneur (`lxc`), du nœud (`node`, `cmd` = « upgrade » pour la mise à
 /// jour) ou console série d'une VM (`qemu`, si elle a un port série) dans un onglet terminal.
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub async fn pve_terminal(app: AppHandle, state: State<'_, AppState>, id: String, node: String, kind: String, vmid: Option<u32>, cmd: Option<String>, cols: u16, rows: u16, on_event: Channel) -> CmdResult<ConnectResponse> {
-    require(&state)?;
-    let p = find(&state.data_dir, &id).map_err(full)?;
+async fn pve_terminal(host: &dyn Host, a: ConsoleArgs) -> Result<Value> {
+    let ConsoleArgs { id, node, kind, vmid, cmd, cols, rows, .. } = a;
+    let p = find(&host.data_dir(), &id)?;
     if node.is_empty() || !node.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.') {
-        return Err("nœud invalide".into());
+        bail!("nœud invalide");
     }
     let (base, name) = match (kind.as_str(), vmid) {
         ("qemu" | "lxc", Some(vmid)) => (format!("/nodes/{node}/{kind}/{vmid}"), format!("{vmid} · {}", p.name)),
         ("node", _) => (format!("/nodes/{node}"), format!("{node} · {}", p.name)),
-        _ => return Err("terminal inconnu".into()),
+        _ => bail!("terminal inconnu"),
     };
     let mut params = json!({});
     if kind == "node" && cmd.as_deref() == Some("upgrade") {
@@ -691,25 +776,27 @@ pub async fn pve_terminal(app: AppHandle, state: State<'_, AppState>, id: String
     } else if kind == "qemu" {
         params["serial"] = json!("serial0");
     }
-    let a = console_auth(&p).await.map_err(full)?;
+    let a = console_auth(&p).await?;
     let term = api_as(&p, Some(&a), reqwest::Method::POST, &format!("{base}/termproxy"), Some(&params)).await.map_err(|e| {
         let e = full(e);
         if kind == "qemu" {
-            t!(
-                format!("{e}. The text console needs a serial port on the VM (Hardware › Add › Serial port) and a console on it in the guest system."),
-                format!("{e}. La console texte demande un port série sur la VM (Matériel › Ajouter › Port série) et une console dessus dans le système invité.")
+            anyhow!(
+                "{}",
+                t!(
+                    format!("{e}. The text console needs a serial port on the VM (Hardware › Add › Serial port) and a console on it in the guest system."),
+                    format!("{e}. La console texte demande un port série sur la VM (Matériel › Ajouter › Port série) et une console dessus dans le système invité.")
+                )
             )
-            .to_string()
         } else {
-            e
+            anyhow!(e)
         }
     })?;
-    let port = term["port"].as_u64().or_else(|| term["port"].as_str().and_then(|s| s.parse().ok())).ok_or("Proxmox n'a pas donné de port de terminal")?;
-    let ticket = term["ticket"].as_str().ok_or("Proxmox n'a pas donné de ticket de terminal")?.to_string();
+    let port = term["port"].as_u64().or_else(|| term["port"].as_str().and_then(|s| s.parse().ok())).ok_or_else(|| anyhow!("Proxmox n'a pas donné de port de terminal"))?;
+    let ticket = term["ticket"].as_str().ok_or_else(|| anyhow!("Proxmox n'a pas donné de ticket de terminal"))?.to_string();
     let user = term["user"].as_str().map(str::to_string).unwrap_or_else(|| p.user.clone());
-    let local = term_bridge(&p, &a, &format!("{base}/vncwebsocket?port={port}&vncticket={}", urlencode(&ticket)), &user, &ticket).await.map_err(full)?;
+    let local = term_bridge(&p, &a, &format!("{base}/vncwebsocket?port={port}&vncticket={}", urlencode(&ticket)), &user, &ticket).await?;
     let values: HashMap<String, Value> = [("host".to_string(), json!("127.0.0.1")), ("port".to_string(), json!(local))].into_iter().collect();
-    start_connection(&app, &state, "telnet", name, values, cols, rows, on_event).await
+    host.open_connection("telnet", name, values, cols, rows).await
 }
 
 /// Nom de fichier accepté par Proxmox pour un envoi (lettres, chiffres, « - _ . »).
@@ -724,12 +811,11 @@ fn upload_name(path: &str) -> String {
 }
 
 /// Envoie un fichier du PC vers un stockage du nœud (image ISO, modèle de conteneur) ; la
-/// progression part dans `on_progress` ({envoye, total}). Rend la tâche Proxmox (UPID).
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub async fn pve_upload(state: State<'_, AppState>, id: String, node: String, storage: String, content: String, path: String, on_progress: Channel<Value>) -> CmdResult<Value> {
-    require(&state)?;
-    let p = find(&state.data_dir, &id).map_err(full)?;
+/// progression part dans le canal de l'appel ({envoye, total}). Rend la tâche Proxmox (UPID).
+async fn pve_upload(host: &dyn Host, a: UploadArgs) -> CmdResult<Value> {
+    let UploadArgs { id, node, storage, content, path } = a;
+    let on_progress = host.events().map_err(full)?;
+    let p = find(&host.data_dir(), &id).map_err(full)?;
     let valid = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
     if !valid(&node) || !valid(&storage) || !["iso", "vztmpl", "import"].contains(&content.as_str()) {
         return Err("paramètres d'envoi invalides".into());
@@ -756,7 +842,7 @@ pub async fn pve_upload(state: State<'_, AppState>, id: String, node: String, st
                     buf.truncate(n);
                     let sent = sent + n as u64;
                     let last = if last.elapsed() >= std::time::Duration::from_millis(300) {
-                        let _ = progress.send(json!({ "envoye": sent, "total": total }));
+                        progress(json!({ "envoye": sent, "total": total }));
                         std::time::Instant::now()
                     } else {
                         last
@@ -783,7 +869,7 @@ pub async fn pve_upload(state: State<'_, AppState>, id: String, node: String, st
         let message = value["message"].as_str().map(str::trim).filter(|m| !m.is_empty()).map(str::to_string).unwrap_or_else(|| status.to_string());
         return Err(format!("Proxmox {} : {message}", status.as_u16()));
     }
-    let _ = on_progress.send(json!({ "envoye": total, "total": total }));
+    on_progress(json!({ "envoye": total, "total": total }));
     Ok(value["data"].clone())
 }
 
@@ -802,6 +888,28 @@ mod tests {
         assert!(t.feed(&[255, 250, 31, 0]).is_empty());
         let rest: Vec<Vec<u8>> = t.feed(&[80, 0, 24, 255, 240]).iter().map(term_message).collect();
         assert_eq!(rest, vec![b"1:80:24:".to_vec()]);
+    }
+
+    /// Essai réel : PVE_ADDR=hôte:8006 cargo test sonde_reelle -- --ignored
+    #[test]
+    #[ignore]
+    fn sonde_reelle() {
+        let address = std::env::var("PVE_ADDR").expect("PVE_ADDR");
+        let v = tauri::async_runtime::block_on(Proxmox.call(&NoHost, "probe", json!({ "address": address }))).unwrap();
+        assert_eq!(v["fingerprint"].as_str().unwrap().len(), 95, "{v}");
+    }
+
+    /// Hôte vide : la sonde n'en a pas besoin.
+    struct NoHost;
+
+    impl Host for NoHost {
+        fn exec(&self, _: &str) -> Result<Arc<dyn crate::connector::RemoteExec>> { bail!("non") }
+        fn ssh_session(&self, _: &str) -> Result<Arc<dyn extension::SessionExec>> { bail!("non") }
+        fn events(&self) -> Result<extension::Emit> { bail!("non") }
+        fn job(&self) -> Arc<extension::Job> { unreachable!() }
+        fn spawn(&self, _: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>) {}
+        fn data_dir(&self) -> PathBuf { std::env::temp_dir() }
+        fn open_connection<'a>(&'a self, _: &'a str, _: String, _: HashMap<String, Value>, _: u16, _: u16) -> BoxFuture<'a, Value> { Box::pin(async { bail!("non") }) }
     }
 
     #[test]

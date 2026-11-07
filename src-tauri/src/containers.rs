@@ -220,7 +220,7 @@ struct CommandArgs {
 
 impl Extension for Containers {
     fn manifest(&self) -> ExtManifest {
-        ExtManifest { id: "containers", name: t!("Docker and Kubernetes containers", "Conteneurs Docker et Kubernetes").into(), feature: Some(Feature::Containers) }
+        ExtManifest { id: "containers", name: t!("Docker and Kubernetes containers", "Conteneurs Docker et Kubernetes").into(), feature: Some(Feature::Containers), free: &[] }
     }
 
     fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {

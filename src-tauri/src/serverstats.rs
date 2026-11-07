@@ -169,7 +169,7 @@ struct OnConnection {
 
 impl Extension for Dashboard {
     fn manifest(&self) -> ExtManifest {
-        ExtManifest { id: "dashboard", name: t!("Server dashboard", "Tableau de bord du serveur").into(), feature: Some(Feature::ServerDashboard) }
+        ExtManifest { id: "dashboard", name: t!("Server dashboard", "Tableau de bord du serveur").into(), feature: Some(Feature::ServerDashboard), free: &[] }
     }
 
     fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {
