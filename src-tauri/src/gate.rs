@@ -754,6 +754,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn dossier_en_zip() {
+        let dir = std::env::temp_dir().join(format!("portunia-zip-{}", std::process::id())).join("Rapports");
+        std::fs::create_dir_all(dir.join("logs")).unwrap();
+        std::fs::write(dir.join("a.txt"), b"bonjour").unwrap();
+        std::fs::write(dir.join("logs").join("b.log"), vec![7u8; 100_000]).unwrap();
+        let zip = zip_folder(&dir).unwrap();
+        assert_eq!(zip.file_name().unwrap(), "Rapports.zip");
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(&zip).unwrap()).unwrap();
+        let mut names: Vec<String> = (0..archive.len()).map(|i| archive.by_index(i).unwrap().name().unwrap().to_string()).collect();
+        names.sort();
+        assert_eq!(names, ["Rapports/", "Rapports/a.txt", "Rapports/logs/", "Rapports/logs/b.log"]);
+        let mut content = String::new();
+        std::io::Read::read_to_string(&mut archive.by_name("Rapports/a.txt").unwrap(), &mut content).unwrap();
+        assert_eq!(content, "bonjour");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+        let _ = std::fs::remove_dir_all(zip.parent().unwrap());
+    }
+
+    #[test]
     fn adresses() {
         assert_eq!(split_address("gate.acme.local").unwrap(), ("gate.acme.local".into(), 8443));
         assert_eq!(split_address("https://10.0.0.5:9443/").unwrap(), ("10.0.0.5".into(), 9443));
