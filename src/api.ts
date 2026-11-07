@@ -651,7 +651,14 @@ export interface ServerStats {
   failedServices: string[];
 }
 
-export const serverStats = (connectionId: string) => invoke<ServerStats>('server_stats', { connectionId });
+// ---------- Extensions de fonction : une seule entrée, licence vérifiée par le cœur ----------
+
+export interface ExtInfo { id: string; name: string; feature: string | null; allowed: boolean }
+export const extList = () => invoke<ExtInfo[]>('ext_list');
+export const extCall = <T>(extension: string, method: string, args: Record<string, unknown> = {}) =>
+  invoke<T>('ext_call', { extension, method, args });
+
+export const serverStats = (connectionId: string) => extCall<ServerStats>('dashboard', 'stats', { connectionId });
 
 // ---------- Commande sur plusieurs serveurs ----------
 
@@ -674,11 +681,11 @@ export type Source<T> = { state: 'absent' } | { state: 'error'; message: string 
 export interface Inventory { docker: Source<Container>; kube: Source<Pod> }
 
 export const containers = {
-  list: (connectionId: string) => invoke<Inventory>('containers_list', { connectionId }),
+  list: (connectionId: string) => extCall<Inventory>('containers', 'list', { connectionId }),
   action: (connectionId: string, kind: 'docker' | 'kube', action: string, id: string, namespace?: string) =>
-    invoke<string>('container_action', { connectionId, kind, action, id, namespace: namespace ?? null }),
+    extCall<string>('containers', 'action', { connectionId, kind, action, id, namespace: namespace ?? null }),
   command: (kind: 'docker' | 'kube', what: 'shell' | 'logs', id: string, namespace?: string) =>
-    invoke<string>('container_command', { kind, what, id, namespace: namespace ?? null }),
+    extCall<string>('containers', 'command', { kind, what, id, namespace: namespace ?? null }),
 };
 
 /** Session enregistrée ouverte avec des valeurs en plus (commande distante…). */

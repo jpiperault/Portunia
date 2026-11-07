@@ -2,9 +2,12 @@
 //! lus par la connexion SSH ouverte ; commandes pour un shell ou les journaux.
 
 use anyhow::{anyhow, bail, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::connector::RemoteExec;
+use crate::connector::{BoxFuture, RemoteExec};
+use crate::extension::{self, ExtManifest, Extension, Host};
+use crate::license::Feature;
 
 /// Docker si présent, sinon Podman (mêmes commandes).
 const ENGINE: &str = "$(command -v docker || command -v podman)";
@@ -186,6 +189,62 @@ pub async fn action(exec: &dyn RemoteExec, kind: &str, action: &str, id: &str, n
         bail!("{}", explain(if kind == "docker" { "Docker" } else { "kubectl" }, &out.stdout));
     }
     Ok(out.stdout.trim().to_string())
+}
+
+/// Extension « Conteneurs » (Pro) : méthodes `list`, `action` et `command`.
+pub struct Containers;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListArgs {
+    connection_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ActionArgs {
+    connection_id: String,
+    kind: String,
+    action: String,
+    id: String,
+    namespace: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct CommandArgs {
+    kind: String,
+    what: String,
+    id: String,
+    namespace: Option<String>,
+}
+
+impl Extension for Containers {
+    fn manifest(&self) -> ExtManifest {
+        ExtManifest { id: "containers", name: t!("Docker and Kubernetes containers", "Conteneurs Docker et Kubernetes").into(), feature: Some(Feature::Containers) }
+    }
+
+    fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {
+        Box::pin(async move {
+            match method {
+                "list" => {
+                    let a: ListArgs = extension::args(args)?;
+                    let exec = host.exec(&a.connection_id)?;
+                    extension::reply(list(exec.as_ref()).await?)
+                }
+                "action" => {
+                    let a: ActionArgs = extension::args(args)?;
+                    let exec = host.exec(&a.connection_id)?;
+                    extension::reply(action(exec.as_ref(), &a.kind, &a.action, &a.id, a.namespace.as_deref()).await?)
+                }
+                // Commande de terminal pour un shell ou les journaux (vérifiée ici).
+                "command" => {
+                    let a: CommandArgs = extension::args(args)?;
+                    extension::reply(terminal_command(&a.kind, &a.what, &a.id, a.namespace.as_deref())?)
+                }
+                _ => Err(extension::unknown("containers", method)),
+            }
+        })
+    }
 }
 
 #[cfg(test)]

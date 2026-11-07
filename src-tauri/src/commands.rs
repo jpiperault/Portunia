@@ -23,8 +23,6 @@ use crate::keys;
 use crate::notes::Notes;
 use crate::credentials::{Credential, Credentials};
 use crate::nettools;
-use crate::serverstats;
-use crate::containers;
 use crate::connector::RemoteExec;
 use crate::license::{Feature, License};
 use crate::recording::{self, Recorder};
@@ -36,6 +34,8 @@ use crate::store::{Session, Snippet, Store};
 
 pub struct AppState {
     registry: Registry,
+    /// Extensions de fonction (tableau de bord, conteneurs…).
+    extensions: crate::extension::Extensions,
     store: Mutex<Store>,
     connections: Mutex<HashMap<String, Box<dyn TerminalConnection>>>,
     pub(crate) data_dir: PathBuf,
@@ -53,6 +53,7 @@ impl AppState {
     pub fn new(registry: Registry, store: Store, data_dir: PathBuf) -> Self {
         Self {
             registry,
+            extensions: crate::extension::Extensions::with_builtins(),
             store: Mutex::new(store),
             connections: Mutex::new(HashMap::new()),
             license: Mutex::new(License::load(&data_dir)),
@@ -1708,12 +1709,45 @@ fn exec_of(state: &AppState, connection_id: &str) -> CmdResult<Arc<dyn RemoteExe
     connection.exec().ok_or_else(|| t!("This protocol cannot run commands", "Ce protocole ne permet pas de lancer des commandes").into())
 }
 
+// ---------- Extensions de fonction (voir extension.rs) ----------
+
+/// Ce que le cœur prête aux extensions de fonction.
+struct StateHost<'a>(&'a AppState);
+
+impl crate::extension::Host for StateHost<'_> {
+    fn exec(&self, connection_id: &str) -> anyhow::Result<Arc<dyn RemoteExec>> {
+        exec_of(self.0, connection_id).map_err(|e| anyhow::anyhow!(e))
+    }
+}
+
+/// Extension de fonction connue, avec ce que la licence permet.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtInfo {
+    #[serde(flatten)]
+    manifest: crate::extension::ExtManifest,
+    allowed: bool,
+}
+
 #[tauri::command]
-pub async fn server_stats(state: State<'_, AppState>, connection_id: String) -> CmdResult<serverstats::ServerStats> {
+pub fn ext_list(state: State<'_, AppState>) -> Vec<ExtInfo> {
+    let license = state.license.lock().unwrap();
+    state.extensions.manifests().into_iter().map(|m| {
+        let allowed = m.feature.is_none_or(|f| license.allows(f));
+        ExtInfo { manifest: m, allowed }
+    }).collect()
+}
+
+/// Seule entrée des extensions de fonction : verrouillage et licence vérifiés ici, une fois.
+#[tauri::command]
+pub async fn ext_call(state: State<'_, AppState>, extension: String, method: String, args: Value) -> CmdResult<Value> {
     state.unlocked()?;
-    state.license.lock().unwrap().require(Feature::ServerDashboard).map_err(full)?;
-    let exec = exec_of(&state, &connection_id)?;
-    serverstats::collect(exec.as_ref()).await.map_err(full)
+    let ext = state.extensions.get(&extension).ok_or_else(|| t!(format!("Unknown extension: {extension}"), format!("Extension inconnue : {extension}")))?;
+    if let Some(feature) = ext.manifest().feature {
+        state.license.lock().unwrap().require(feature).map_err(full)?;
+    }
+    let host = StateHost(&state);
+    ext.call(&host, &method, args).await.map_err(full)
 }
 
 // ---------- Commande sur plusieurs serveurs (Pro) ----------
@@ -1809,38 +1843,6 @@ pub fn multi_exec(
         let _ = on_event.send(MultiEvent::Done { ok, failed });
     });
     Ok(job_id)
-}
-
-// ---------- Conteneurs Docker / Kubernetes (Pro) ----------
-
-#[tauri::command]
-pub async fn containers_list(state: State<'_, AppState>, connection_id: String) -> CmdResult<containers::Inventory> {
-    state.unlocked()?;
-    state.license.lock().unwrap().require(Feature::Containers).map_err(full)?;
-    let exec = exec_of(&state, &connection_id)?;
-    containers::list(exec.as_ref()).await.map_err(full)
-}
-
-#[tauri::command]
-pub async fn container_action(
-    state: State<'_, AppState>,
-    connection_id: String,
-    kind: String,
-    action: String,
-    id: String,
-    namespace: Option<String>,
-) -> CmdResult<String> {
-    state.unlocked()?;
-    state.license.lock().unwrap().require(Feature::Containers).map_err(full)?;
-    let exec = exec_of(&state, &connection_id)?;
-    containers::action(exec.as_ref(), &kind, &action, &id, namespace.as_deref()).await.map_err(full)
-}
-
-/// Commande de terminal pour un shell ou les journaux d'un conteneur (vérifiée ici).
-#[tauri::command]
-pub fn container_command(state: State<'_, AppState>, kind: String, what: String, id: String, namespace: Option<String>) -> CmdResult<String> {
-    state.license.lock().unwrap().require(Feature::Containers).map_err(full)?;
-    containers::terminal_command(&kind, &what, &id, namespace.as_deref()).map_err(full)
 }
 
 /// Session enregistrée ouverte avec des valeurs en plus (ex. remoteCommand pour un conteneur).

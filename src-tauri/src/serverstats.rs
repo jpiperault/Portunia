@@ -2,9 +2,12 @@
 //! connexion SSH ouverte (canal séparé), sa sortie analysée ici.
 
 use anyhow::{bail, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::connector::RemoteExec;
+use crate::connector::{BoxFuture, RemoteExec};
+use crate::extension::{self, ExtManifest, Extension, Host};
+use crate::license::Feature;
 
 /// Sections séparées par « @@nom ». Deux relevés de /proc/stat à 1 s d'écart
 /// donnent l'occupation du processeur.
@@ -153,6 +156,34 @@ pub fn parse(text: &str) -> Result<ServerStats> {
 pub async fn collect(exec: &dyn RemoteExec) -> Result<ServerStats> {
     let out = exec.run(SCRIPT.to_string()).await?;
     parse(&out.stdout)
+}
+
+/// Extension « Tableau de bord » (Pro) : méthode `stats`.
+pub struct Dashboard;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OnConnection {
+    connection_id: String,
+}
+
+impl Extension for Dashboard {
+    fn manifest(&self) -> ExtManifest {
+        ExtManifest { id: "dashboard", name: t!("Server dashboard", "Tableau de bord du serveur").into(), feature: Some(Feature::ServerDashboard) }
+    }
+
+    fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {
+        Box::pin(async move {
+            match method {
+                "stats" => {
+                    let a: OnConnection = extension::args(args)?;
+                    let exec = host.exec(&a.connection_id)?;
+                    extension::reply(collect(exec.as_ref()).await?)
+                }
+                _ => Err(extension::unknown("dashboard", method)),
+            }
+        })
+    }
 }
 
 #[cfg(test)]

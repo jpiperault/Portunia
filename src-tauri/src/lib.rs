@@ -14,6 +14,7 @@ mod connector;
 mod connectors;
 mod containers;
 mod credentials;
+mod extension;
 mod importers;
 mod keys;
 mod filesync;
@@ -231,11 +232,9 @@ pub fn run() {
             commands::credentials_list,
             commands::credential_save,
             commands::credential_delete,
-            commands::server_stats,
+            commands::ext_list,
+            commands::ext_call,
             commands::multi_exec,
-            commands::containers_list,
-            commands::container_action,
-            commands::container_command,
             commands::connect_with,
             commands::confirm_answer,
         ])
