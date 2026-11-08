@@ -14,8 +14,122 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use serde::Serialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
+
+use crate::connector::BoxFuture;
+use crate::extension::{self, ExtManifest, Extension, Host, SessionObserver};
+use crate::license::Feature;
+
+/// Extension « Enregistrement des sessions » (Pro). Seul le départ demande la licence :
+/// arrêter, revoir et effacer ses enregistrements restent toujours possibles.
+pub struct Recording;
+
+/// Clé de l'enregistrement parmi les observateurs d'une session.
+const KEY: &str = "recording";
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StartArgs {
+    connection_id: String,
+    stamp: String,
+    title: String,
+    cols: u16,
+    rows: u16,
+    dir: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StopArgs {
+    connection_id: String,
+}
+
+#[derive(Deserialize)]
+struct DirArgs {
+    dir: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FileArgs {
+    dir: Option<String>,
+    path: String,
+}
+
+/// Dossier des enregistrements : choisi dans les Paramètres, sinon Documents\Portunia\Enregistrements.
+fn folder(host: &dyn Host, custom: Option<String>) -> Result<PathBuf> {
+    match custom.filter(|d| !d.trim().is_empty()) {
+        Some(dir) => Ok(PathBuf::from(dir)),
+        None => {
+            let documents = host.documents_dir()?;
+            // Enregistrements faits sous l'ancien nom : on continue d'utiliser ce dossier.
+            let old = documents.join("Termoria").join("Enregistrements");
+            let new = documents.join("Portunia").join("Enregistrements");
+            Ok(if old.is_dir() && !new.exists() { old } else { new })
+        }
+    }
+}
+
+impl Extension for Recording {
+    fn manifest(&self) -> ExtManifest {
+        ExtManifest {
+            id: "recording",
+            name: t!("Session recording", "Enregistrement des sessions").into(),
+            feature: Some(Feature::SessionRecording),
+            free: &["defaultDir", "stop", "list", "read", "remove"],
+        }
+    }
+
+    fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {
+        Box::pin(async move {
+            match method {
+                "defaultDir" => extension::reply(folder(host, None)?.display().to_string()),
+                "start" => {
+                    let a: StartArgs = extension::args(args)?;
+                    let dir = folder(host, a.dir)?;
+                    host.observe(&a.connection_id, KEY, &mut || {
+                        Ok(Box::new(Recorder::start(&dir, &a.stamp, &a.title, a.cols, a.rows)?) as Box<dyn SessionObserver>)
+                    })
+                }
+                "stop" => {
+                    let a: StopArgs = extension::args(args)?;
+                    extension::reply(host.unobserve(&a.connection_id, KEY)?)
+                }
+                "list" => {
+                    let a: DirArgs = extension::args(args)?;
+                    extension::reply(list(&folder(host, a.dir)?))
+                }
+                "read" => {
+                    let a: FileArgs = extension::args(args)?;
+                    extension::reply(read(&folder(host, a.dir)?, &a.path)?)
+                }
+                "remove" => {
+                    let a: FileArgs = extension::args(args)?;
+                    extension::reply(delete(&folder(host, a.dir)?, &a.path)?)
+                }
+                _ => Err(extension::unknown("recording", method)),
+            }
+        })
+    }
+}
+
+impl SessionObserver for Recorder {
+    fn output(&mut self, bytes: &[u8]) {
+        Recorder::output(self, bytes)
+    }
+
+    fn resize(&mut self, cols: u16, rows: u16) {
+        Recorder::resize(self, cols, rows)
+    }
+
+    fn info(&self) -> Value {
+        json!(self.path().display().to_string())
+    }
+
+    fn finish(self: Box<Self>) -> Result<Value> {
+        Ok(json!(Recorder::finish(*self)?.display().to_string()))
+    }
+}
 
 pub struct Recorder {
     path: PathBuf,

@@ -25,7 +25,6 @@ use crate::credentials::{Credential, Credentials};
 use crate::nettools;
 use crate::connector::RemoteExec;
 use crate::license::{Feature, License};
-use crate::recording::{self, Recorder};
 use crate::transfer;
 use crate::lock::{self, Lock};
 use crate::registry::Registry;
@@ -42,7 +41,7 @@ pub struct AppState {
     pub license: Mutex<License>,
     lock: Mutex<Lock>,
     /// Enregistrements en cours, par connexion.
-    recordings: Mutex<HashMap<String, Recorder>>,
+    observers: Mutex<crate::extension::Observers>,
     /// Fichiers distants ouverts dans un éditeur local : (connexion, surveillance).
     edits: Mutex<HashMap<String, (String, tauri::async_runtime::JoinHandle<()>)>>,
     notes: Mutex<Notes>,
@@ -58,7 +57,7 @@ impl AppState {
             connections: Mutex::new(HashMap::new()),
             license: Mutex::new(License::load(&data_dir)),
             lock: Mutex::new(Lock::load(&data_dir)),
-            recordings: Mutex::new(HashMap::new()),
+            observers: Mutex::new(crate::extension::Observers::default()),
             edits: Mutex::new(HashMap::new()),
             notes: Mutex::new(Notes::load(data_dir.join("notes.json"))),
             credentials: Mutex::new(Credentials::load(data_dir.join("credentials.json"))),
@@ -289,9 +288,7 @@ impl Sink for ChannelSink {
             }
         }
         if let Some(state) = self.app.try_state::<AppState>() {
-            if let Some(recorder) = state.recordings.lock().unwrap().get_mut(&self.connection_id) {
-                recorder.output(bytes);
-            }
+            state.observers.lock().unwrap().output(&self.connection_id, bytes);
         }
     }
 
@@ -315,10 +312,7 @@ impl Sink for ChannelSink {
             state.edits.lock().unwrap().retain(|_, (conn, task)| {
                 if *conn == self.connection_id { task.abort(); false } else { true }
             });
-            let recorder = state.recordings.lock().unwrap().remove(&self.connection_id);
-            if let Some(recorder) = recorder {
-                let _ = recorder.finish();
-            }
+            state.observers.lock().unwrap().close(&self.connection_id);
         }
     }
 }
@@ -442,9 +436,7 @@ pub fn term_resize(
     cols: u16,
     rows: u16,
 ) -> CmdResult<()> {
-    if let Some(recorder) = state.recordings.lock().unwrap().get_mut(&connection_id) {
-        recorder.resize(cols.max(2), rows.max(2));
-    }
+    state.observers.lock().unwrap().resize(&connection_id, cols.max(2), rows.max(2));
     let connections = state.connections.lock().unwrap();
     match connections.get(&connection_id) {
         Some(connection) => connection.resize(cols.max(2), rows.max(2)).map_err(err),
@@ -1046,82 +1038,6 @@ pub async fn unlock_hello(app: AppHandle, state: State<'_, AppState>) -> CmdResu
         apply_data_change(&state, lock::DataChange::None)?;
     }
     Ok(verified)
-}
-
-// ---------- Enregistrement des sessions (Pro) ----------
-
-/// Dossier des enregistrements : choisi dans les Paramètres, sinon Documents\Portunia\Enregistrements.
-fn recording_dir(app: &AppHandle, custom: Option<String>) -> CmdResult<PathBuf> {
-    match custom.filter(|d| !d.trim().is_empty()) {
-        Some(dir) => Ok(PathBuf::from(dir)),
-        None => {
-            let documents = app.path().document_dir().map_err(err)?;
-            // Enregistrements faits sous l'ancien nom : on continue d'utiliser ce dossier.
-            let old = documents.join("Termoria").join("Enregistrements");
-            let new = documents.join("Portunia").join("Enregistrements");
-            Ok(if old.is_dir() && !new.exists() { old } else { new })
-        }
-    }
-}
-
-#[tauri::command]
-pub fn recording_default_dir(app: AppHandle) -> CmdResult<String> {
-    Ok(recording_dir(&app, None)?.display().to_string())
-}
-
-#[tauri::command]
-#[allow(clippy::too_many_arguments)]
-pub fn recording_start(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    connection_id: String,
-    stamp: String,
-    title: String,
-    cols: u16,
-    rows: u16,
-    dir: Option<String>,
-) -> CmdResult<String> {
-    state.unlocked()?;
-    state.license.lock().unwrap().require(Feature::SessionRecording).map_err(full)?;
-    if !state.connections.lock().unwrap().contains_key(&connection_id) {
-        return Err(t!("Session closed", "Session fermée").into());
-    }
-    let mut recordings = state.recordings.lock().unwrap();
-    if let Some(existing) = recordings.get(&connection_id) {
-        return Ok(existing.path().display().to_string());
-    }
-    let recorder = Recorder::start(&recording_dir(&app, dir)?, &stamp, &title, cols, rows).map_err(full)?;
-    let path = recorder.path().display().to_string();
-    recordings.insert(connection_id, recorder);
-    Ok(path)
-}
-
-#[tauri::command]
-pub fn recording_stop(state: State<'_, AppState>, connection_id: String) -> CmdResult<Option<String>> {
-    state.unlocked()?;
-    let recorder = state.recordings.lock().unwrap().remove(&connection_id);
-    match recorder {
-        Some(r) => Ok(Some(r.finish().map_err(full)?.display().to_string())),
-        None => Ok(None),
-    }
-}
-
-#[tauri::command]
-pub fn recordings_list(app: AppHandle, state: State<'_, AppState>, dir: Option<String>) -> CmdResult<Vec<recording::RecordingInfo>> {
-    state.unlocked()?;
-    Ok(recording::list(&recording_dir(&app, dir)?))
-}
-
-#[tauri::command]
-pub fn recording_read(app: AppHandle, state: State<'_, AppState>, dir: Option<String>, path: String) -> CmdResult<String> {
-    state.unlocked()?;
-    recording::read(&recording_dir(&app, dir)?, &path).map_err(full)
-}
-
-#[tauri::command]
-pub fn recording_delete(app: AppHandle, state: State<'_, AppState>, dir: Option<String>, path: String) -> CmdResult<()> {
-    state.unlocked()?;
-    recording::delete(&recording_dir(&app, dir)?, &path).map_err(full)
 }
 
 // ---------- Supervision ----------
@@ -1779,6 +1695,25 @@ impl crate::extension::Host for StateHost<'_> {
 
     fn data_dir(&self) -> PathBuf {
         self.state.data_dir.clone()
+    }
+
+    fn documents_dir(&self) -> anyhow::Result<PathBuf> {
+        Ok(self.app.path().document_dir()?)
+    }
+
+    fn observe(&self, connection_id: &str, key: &str, make: &mut dyn FnMut() -> anyhow::Result<Box<dyn crate::extension::SessionObserver>>) -> anyhow::Result<Value> {
+        // Verrou des connexions tenu pendant l'ajout : une session qui se ferme en même temps
+        // ne laisse pas d'observateur orphelin.
+        let connections = self.state.connections.lock().unwrap();
+        if !connections.contains_key(connection_id) {
+            anyhow::bail!("{}", t!("Session closed", "Session fermée"));
+        }
+        self.state.observers.lock().unwrap().add(connection_id, key, make)
+    }
+
+    fn unobserve(&self, connection_id: &str, key: &str) -> anyhow::Result<Option<Value>> {
+        let observer = self.state.observers.lock().unwrap().remove(connection_id, key);
+        observer.map(|o| o.finish()).transpose()
     }
 
     fn open_connection<'a>(&'a self, protocol: &'a str, name: String, values: HashMap<String, Value>, cols: u16, rows: u16) -> crate::connector::BoxFuture<'a, Value> {

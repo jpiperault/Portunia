@@ -69,6 +69,72 @@ pub trait Host: Send + Sync {
     /// Ouvre un onglet avec un protocole de Portunia (VNC, Telnet…) ; ses évènements partent
     /// dans le canal de l'appel. Rend la réponse de connexion (identifiant, vue…).
     fn open_connection<'a>(&'a self, protocol: &'a str, name: String, values: HashMap<String, Value>, cols: u16, rows: u16) -> BoxFuture<'a, Value>;
+    /// Dossier Documents de l'utilisateur.
+    fn documents_dir(&self) -> Result<PathBuf>;
+    /// Branche un observateur sur une session ouverte, sous une clé (une par extension et
+    /// par usage). S'il y en a déjà un sous cette clé, il reste : rend son `info`, sinon
+    /// celui de l'observateur créé par `make`.
+    fn observe(&self, connection_id: &str, key: &str, make: &mut dyn FnMut() -> Result<Box<dyn SessionObserver>>) -> Result<Value>;
+    /// Débranche l'observateur et rend ce que donne sa fin (`None` : il n'y en avait pas).
+    fn unobserve(&self, connection_id: &str, key: &str) -> Result<Option<Value>>;
+}
+
+/// Ce qui regarde passer une session : le cœur lui donne tout ce que le serveur affiche,
+/// les changements de taille, puis la fin (session fermée ou observateur débranché).
+pub trait SessionObserver: Send {
+    fn output(&mut self, bytes: &[u8]);
+    fn resize(&mut self, cols: u16, rows: u16);
+    /// Ce qu'il observe (chemin du fichier…), rendu à qui le rebranche.
+    fn info(&self) -> Value;
+    fn finish(self: Box<Self>) -> Result<Value>;
+}
+
+/// Observateurs des sessions ouvertes, par connexion puis par clé (tenus par le cœur).
+#[derive(Default)]
+pub struct Observers {
+    by_connection: HashMap<String, Vec<(String, Box<dyn SessionObserver>)>>,
+}
+
+impl Observers {
+    pub fn add(&mut self, connection_id: &str, key: &str, make: &mut dyn FnMut() -> Result<Box<dyn SessionObserver>>) -> Result<Value> {
+        let list = self.by_connection.entry(connection_id.to_string()).or_default();
+        if let Some((_, existing)) = list.iter().find(|(k, _)| k == key) {
+            return Ok(existing.info());
+        }
+        let observer = make()?;
+        let info = observer.info();
+        list.push((key.to_string(), observer));
+        Ok(info)
+    }
+
+    pub fn remove(&mut self, connection_id: &str, key: &str) -> Option<Box<dyn SessionObserver>> {
+        let list = self.by_connection.get_mut(connection_id)?;
+        let i = list.iter().position(|(k, _)| k == key)?;
+        let (_, observer) = list.remove(i);
+        if list.is_empty() {
+            self.by_connection.remove(connection_id);
+        }
+        Some(observer)
+    }
+
+    pub fn output(&mut self, connection_id: &str, bytes: &[u8]) {
+        for (_, o) in self.by_connection.get_mut(connection_id).into_iter().flatten() {
+            o.output(bytes);
+        }
+    }
+
+    pub fn resize(&mut self, connection_id: &str, cols: u16, rows: u16) {
+        for (_, o) in self.by_connection.get_mut(connection_id).into_iter().flatten() {
+            o.resize(cols, rows);
+        }
+    }
+
+    /// Session fermée : chaque observateur finit (un enregistrement est sauvegardé).
+    pub fn close(&mut self, connection_id: &str) {
+        for (_, o) in self.by_connection.remove(connection_id).into_iter().flatten() {
+            let _ = o.finish();
+        }
+    }
 }
 
 /// Session enregistrée qui lance des commandes.
@@ -125,6 +191,7 @@ impl Extensions {
                 Arc::new(crate::multiexec::MultiExec),
                 Arc::new(crate::proxmox::Proxmox),
                 Arc::new(crate::filesync::FileSync),
+                Arc::new(crate::recording::Recording),
             ],
         }
     }
@@ -199,6 +266,15 @@ mod tests {
         fn open_connection<'a>(&'a self, _: &'a str, _: String, _: HashMap<String, Value>, _: u16, _: u16) -> BoxFuture<'a, Value> {
             Box::pin(async { anyhow::bail!("pas d'onglet") })
         }
+        fn documents_dir(&self) -> Result<PathBuf> {
+            Ok(self.data_dir())
+        }
+        fn observe(&self, _: &str, _: &str, _: &mut dyn FnMut() -> Result<Box<dyn SessionObserver>>) -> Result<Value> {
+            anyhow::bail!("session fermée")
+        }
+        fn unobserve(&self, _: &str, _: &str) -> Result<Option<Value>> {
+            Ok(None)
+        }
     }
 
     fn call(host: &dyn Host, ext: &str, method: &str, args: Value) -> Result<Value> {
@@ -221,6 +297,12 @@ mod tests {
         assert_eq!(pve.needs("api"), Some(Feature::Proxmox));
         assert_eq!(pve.needs("console"), Some(Feature::Proxmox));
         assert!(m.iter().any(|m| m.id == "filesync" && m.feature == Some(Feature::FileSync)));
+        // Enregistrement : seul le départ demande la licence ; arrêter, revoir et effacer restent permis.
+        let rec = m.iter().find(|m| m.id == "recording").unwrap();
+        assert_eq!(rec.needs("start"), Some(Feature::SessionRecording));
+        for method in ["stop", "list", "read", "remove", "defaultDir"] {
+            assert_eq!(rec.needs(method), None, "{method}");
+        }
         assert!(exts.get("inconnue").is_none());
     }
 
@@ -245,6 +327,48 @@ mod tests {
         // Commande sur plusieurs serveurs : sans canal d'évènements, refusée.
         assert!(call(&host, "multiexec", "run", json!({ "sessionIds": ["s1"], "command": "uptime" })).is_err());
         assert!(call(&host, "multiexec", "run", json!({ "sessionIds": ["s1"], "command": "  " })).is_err());
+    }
+
+    /// Observateur factice : compte ce qu'il voit, note sa fin.
+    struct Counter {
+        seen: Arc<std::sync::Mutex<Vec<String>>>,
+        name: &'static str,
+    }
+
+    impl SessionObserver for Counter {
+        fn output(&mut self, bytes: &[u8]) {
+            self.seen.lock().unwrap().push(format!("{}:{}", self.name, String::from_utf8_lossy(bytes)));
+        }
+        fn resize(&mut self, cols: u16, rows: u16) {
+            self.seen.lock().unwrap().push(format!("{}:{cols}x{rows}", self.name));
+        }
+        fn info(&self) -> Value {
+            json!(self.name)
+        }
+        fn finish(self: Box<Self>) -> Result<Value> {
+            self.seen.lock().unwrap().push(format!("{}:fin", self.name));
+            Ok(json!("fini"))
+        }
+    }
+
+    #[test]
+    fn observateurs() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut obs = Observers::default();
+        let s = seen.clone();
+        assert_eq!(obs.add("c1", "rec", &mut || Ok(Box::new(Counter { seen: s.clone(), name: "a" }))).unwrap(), json!("a"));
+        // Même clé : le premier reste.
+        assert_eq!(obs.add("c1", "rec", &mut || Ok(Box::new(Counter { seen: s.clone(), name: "b" }))).unwrap(), json!("a"));
+        obs.add("c1", "autre", &mut || Ok(Box::new(Counter { seen: s.clone(), name: "c" }))).unwrap();
+        obs.output("c1", b"ls");
+        obs.output("c2", b"rien");
+        obs.resize("c1", 80, 24);
+        let a = obs.remove("c1", "rec").unwrap();
+        assert_eq!(a.finish().unwrap(), json!("fini"));
+        obs.output("c1", b"pwd");
+        obs.close("c1");
+        assert!(obs.remove("c1", "autre").is_none());
+        assert_eq!(*seen.lock().unwrap(), ["a:ls", "c:ls", "a:80x24", "c:80x24", "a:fin", "c:pwd", "c:fin"]);
     }
 
     #[test]

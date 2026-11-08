@@ -265,13 +265,13 @@ export const security = {
 export interface RecordingInfo { path: string; name: string; size: number; modified: number }
 
 export const recordings = {
-  defaultDir: () => invoke<string>('recording_default_dir'),
+  defaultDir: () => extCall<string>('recording', 'defaultDir'),
   start: (connectionId: string, stamp: string, title: string, cols: number, rows: number, dir: string | null) =>
-    invoke<string>('recording_start', { connectionId, stamp, title, cols, rows, dir }),
-  stop: (connectionId: string) => invoke<string | null>('recording_stop', { connectionId }),
-  list: (dir: string | null) => invoke<RecordingInfo[]>('recordings_list', { dir }),
-  read: (dir: string | null, path: string) => invoke<string>('recording_read', { dir, path }),
-  remove: (dir: string | null, path: string) => invoke<void>('recording_delete', { dir, path }),
+    extCall<string>('recording', 'start', { connectionId, stamp, title, cols, rows, dir }),
+  stop: (connectionId: string) => extCall<string | null>('recording', 'stop', { connectionId }),
+  list: (dir: string | null) => extCall<RecordingInfo[]>('recording', 'list', { dir }),
+  read: (dir: string | null, path: string) => extCall<string>('recording', 'read', { dir, path }),
+  remove: (dir: string | null, path: string) => extCall<void>('recording', 'remove', { dir, path }),
 };
 
 // ---------- Couleurs de dossier ----------

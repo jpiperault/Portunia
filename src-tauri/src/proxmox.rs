@@ -911,6 +911,9 @@ mod tests {
         fn spawn(&self, _: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'static>>) {}
         fn data_dir(&self) -> PathBuf { std::env::temp_dir() }
         fn open_connection<'a>(&'a self, _: &'a str, _: String, _: HashMap<String, Value>, _: u16, _: u16) -> BoxFuture<'a, Value> { Box::pin(async { bail!("non") }) }
+        fn documents_dir(&self) -> Result<PathBuf> { bail!("non") }
+        fn observe(&self, _: &str, _: &str, _: &mut dyn FnMut() -> Result<Box<dyn extension::SessionObserver>>) -> Result<Value> { bail!("non") }
+        fn unobserve(&self, _: &str, _: &str) -> Result<Option<Value>> { Ok(None) }
     }
 
     #[test]
