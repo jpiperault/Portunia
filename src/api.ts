@@ -206,7 +206,7 @@ export const api = {
     invoke<void>('fs_download', { connectionId, remote, local, onProgress: progressChannel(onProgress), modified: modified ?? null }),
   /** Écarts entre un dossier de ce PC et un dossier du serveur (Pro). */
   fsCompare: (connectionId: string, local: string, remote: string, bySize: boolean, exclude: string[]) =>
-    invoke<Comparison>('fs_compare', { connectionId, local, remote, bySize, exclude }),
+    extCall<Comparison>('filesync', 'compare', { connectionId, local, remote, bySize, exclude }),
   fsUpload: (connectionId: string, local: string, remote: string, onProgress: (p: TransferProgress) => void) =>
     invoke<void>('fs_upload', { connectionId, local, remote, onProgress: progressChannel(onProgress) }),
   fsMkdir: (connectionId: string, path: string) => invoke<void>('fs_mkdir', { connectionId, path }),

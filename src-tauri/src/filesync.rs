@@ -8,12 +8,12 @@ use std::{
     time::UNIX_EPOCH,
 };
 
-use anyhow::{bail, Result};
-use serde::Serialize;
-use tauri::State;
+use anyhow::{anyhow, bail, Result};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::commands::{files_of, full, AppState, CmdResult};
-use crate::connector::RemoteFiles;
+use crate::connector::{BoxFuture, RemoteFiles};
+use crate::extension::{self, ExtManifest, Extension, Host};
 use crate::license::Feature;
 
 /// Au-delà, la comparaison s'arrête : mieux vaut choisir un dossier plus précis.
@@ -217,18 +217,41 @@ fn compare(local: &Tree, remote: &Tree, by_size: bool) -> (Vec<Diff>, usize) {
     (diffs, same)
 }
 
-#[tauri::command]
-pub async fn fs_compare(
-    state: State<'_, AppState>,
+/// Extension « Comparer et synchroniser » (Pro) : méthode `compare`. La copie elle-même
+/// reprend les transferts ordinaires de la vue à deux volets.
+pub struct FileSync;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CompareArgs {
     connection_id: String,
     local: String,
     remote: String,
     by_size: bool,
     exclude: Vec<String>,
-) -> CmdResult<Comparison> {
-    state.unlocked()?;
-    state.license.lock().unwrap().require(Feature::FileSync).map_err(full)?;
-    let files = files_of(&state, &connection_id)?;
+}
+
+impl Extension for FileSync {
+    fn manifest(&self) -> ExtManifest {
+        ExtManifest { id: "filesync", name: t!("Compare and synchronise folders", "Comparer et synchroniser des dossiers").into(), feature: Some(Feature::FileSync), free: &[] }
+    }
+
+    fn call<'a>(&'a self, host: &'a dyn Host, method: &'a str, args: Value) -> BoxFuture<'a, Value> {
+        Box::pin(async move {
+            match method {
+                "compare" => {
+                    let a: CompareArgs = extension::args(args)?;
+                    extension::reply(fs_compare(host, a).await?)
+                }
+                _ => Err(extension::unknown("filesync", method)),
+            }
+        })
+    }
+}
+
+async fn fs_compare(host: &dyn Host, a: CompareArgs) -> Result<Comparison> {
+    let CompareArgs { connection_id, local, remote, by_size, exclude } = a;
+    let files = host.files(&connection_id)?;
     let patterns: Vec<String> = exclude.into_iter().map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect();
     let mut excluded_count = 0;
     let root = Path::new(&local).to_path_buf();
@@ -238,9 +261,8 @@ pub async fn fs_compare(
         walk_local(&root, &pats, &mut count).map(|t| (t, count))
     })
     .await
-    .map_err(|e| e.to_string())?
-    .map_err(full)?;
-    let remote_tree = walk_remote(files.as_ref(), &remote, &patterns, &mut excluded_count).await.map_err(full)?;
+    .map_err(|e| anyhow!("{e}"))??;
+    let remote_tree = walk_remote(files.as_ref(), &remote, &patterns, &mut excluded_count).await?;
     let (diffs, same) = compare(&local_tree, &remote_tree, by_size);
     Ok(Comparison { diffs, same, excluded: excluded_count + local_excluded })
 }

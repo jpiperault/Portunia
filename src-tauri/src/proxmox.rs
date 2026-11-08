@@ -904,6 +904,7 @@ mod tests {
 
     impl Host for NoHost {
         fn exec(&self, _: &str) -> Result<Arc<dyn crate::connector::RemoteExec>> { bail!("non") }
+        fn files(&self, _: &str) -> Result<Arc<dyn crate::connector::RemoteFiles>> { bail!("non") }
         fn ssh_session(&self, _: &str) -> Result<Arc<dyn extension::SessionExec>> { bail!("non") }
         fn events(&self) -> Result<extension::Emit> { bail!("non") }
         fn job(&self) -> Arc<extension::Job> { unreachable!() }

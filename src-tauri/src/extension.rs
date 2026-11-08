@@ -25,7 +25,7 @@ use anyhow::{anyhow, Result};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 
-use crate::connector::{BoxFuture, ExecOutput, RemoteExec};
+use crate::connector::{BoxFuture, ExecOutput, RemoteExec, RemoteFiles};
 use crate::license::Feature;
 
 /// Description d'une extension de fonction.
@@ -53,6 +53,8 @@ impl ExtManifest {
 pub trait Host: Send + Sync {
     /// Lance des commandes sur une connexion ouverte (SSH…).
     fn exec(&self, connection_id: &str) -> Result<Arc<dyn RemoteExec>>;
+    /// Fichiers d'une connexion ouverte (SFTP, FTP, S3…).
+    fn files(&self, connection_id: &str) -> Result<Arc<dyn RemoteFiles>>;
     /// Session SSH enregistrée, prête pour des commandes (une connexion dédiée par commande,
     /// sans terminal). Secrets, identifiants partagés et rebonds sont résolus par le cœur.
     fn ssh_session(&self, session_id: &str) -> Result<Arc<dyn SessionExec>>;
@@ -122,6 +124,7 @@ impl Extensions {
                 Arc::new(crate::containers::Containers),
                 Arc::new(crate::multiexec::MultiExec),
                 Arc::new(crate::proxmox::Proxmox),
+                Arc::new(crate::filesync::FileSync),
             ],
         }
     }
@@ -175,6 +178,9 @@ mod tests {
             }
             Ok(Arc::new(FakeExec(self.0)))
         }
+        fn files(&self, _: &str) -> Result<Arc<dyn RemoteFiles>> {
+            anyhow::bail!("session fermée")
+        }
         fn ssh_session(&self, _: &str) -> Result<Arc<dyn SessionExec>> {
             anyhow::bail!("aucune session")
         }
@@ -214,6 +220,7 @@ mod tests {
         assert_eq!(pve.needs("remove"), None);
         assert_eq!(pve.needs("api"), Some(Feature::Proxmox));
         assert_eq!(pve.needs("console"), Some(Feature::Proxmox));
+        assert!(m.iter().any(|m| m.id == "filesync" && m.feature == Some(Feature::FileSync)));
         assert!(exts.get("inconnue").is_none());
     }
 
@@ -229,6 +236,8 @@ mod tests {
         assert!(call(&host, "containers", "list", json!({})).is_err());
         assert!(call(&host, "dashboard", "effacer", json!({})).is_err());
         assert!(call(&host, "containers", "command", json!({ "kind": "docker", "what": "shell", "id": "x; rm -rf /" })).is_err());
+        // Comparaison de dossiers : session fermée.
+        assert!(call(&host, "filesync", "compare", json!({ "connectionId": "c1", "local": ".", "remote": "/", "bySize": false, "exclude": [] })).is_err());
         // Proxmox : serveur inconnu, nœud invalide, envoi aux paramètres faux.
         assert!(call(&host, "proxmox", "api", json!({ "id": "absent", "method": "GET", "path": "/version" })).is_err());
         assert!(call(&host, "proxmox", "list", json!({})).unwrap().as_array().is_some());

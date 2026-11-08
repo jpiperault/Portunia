@@ -1743,6 +1743,10 @@ impl crate::extension::Host for StateHost<'_> {
         exec_of(self.state, connection_id).map_err(|e| anyhow::anyhow!(e))
     }
 
+    fn files(&self, connection_id: &str) -> anyhow::Result<Arc<dyn RemoteFiles>> {
+        files_of(self.state, connection_id).map_err(|e| anyhow::anyhow!(e))
+    }
+
     fn ssh_session(&self, session_id: &str) -> anyhow::Result<Arc<dyn crate::extension::SessionExec>> {
         let state = self.state;
         let session = state.store.lock().unwrap().get(session_id).ok_or_else(|| anyhow::anyhow!(t!("Session not found", "Session introuvable")))?;
