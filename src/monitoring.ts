@@ -1,6 +1,6 @@
 // Supervision légère : pastilles dans l'arbre, vue d'ensemble, alertes (Pro).
-import { invoke } from './api';
-import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
+import { extCall, invoke } from './api';
+import { isPermissionGranted, requestPermission } from '@tauri-apps/plugin-notification';
 import { Session } from './api';
 import { h, icon } from './dom';
 import { settings, updateSettings } from './settings';
@@ -107,15 +107,10 @@ export class Monitor {
 
   /** Notification Windows quand un serveur tombe ou revient (édition Pro). */
   private async alert(changes: { session: Session; up: boolean; error: string | null }[]) {
-    if (!settings().monitorAlerts || !(await invoke<boolean>('monitor_alerts_allowed'))) return;
+    if (!settings().monitorAlerts) return;
     if (!(await isPermissionGranted()) && (await requestPermission()) !== 'granted') return;
-    for (const c of changes.slice(0, 5)) {
-      sendNotification({
-        title: c.up ? t(`${c.session.name} is answering again`, `${c.session.name} répond de nouveau`) : t(`${c.session.name} is not answering`, `${c.session.name} ne répond plus`),
-        body: c.up ? t('The server is reachable again.', 'Le serveur est de nouveau joignable.') : (c.error ?? t('The server is unreachable.', 'Le serveur est injoignable.')),
-      });
-    }
-    if (changes.length > 5) sendNotification({ title: 'Portunia', body: t(`${changes.length - 5} other status change(s).`, `${changes.length - 5} autre(s) changement(s) d'état.`) });
+    // Sans licence, l'appel est refusé : pas de notification.
+    await extCall('alerts', 'notify', { changes: changes.map((c) => ({ name: c.session.name, up: c.up, error: c.error })) }).catch(() => {});
   }
 
   /** Vue d'ensemble : tous les serveurs supervisés. */

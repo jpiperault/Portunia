@@ -914,6 +914,7 @@ mod tests {
         fn documents_dir(&self) -> Result<PathBuf> { bail!("non") }
         fn observe(&self, _: &str, _: &str, _: &mut dyn FnMut() -> Result<Box<dyn extension::SessionObserver>>) -> Result<Value> { bail!("non") }
         fn unobserve(&self, _: &str, _: &str) -> Result<Option<Value>> { Ok(None) }
+        fn notify(&self, _: &str, _: &str) -> Result<()> { bail!("non") }
     }
 
     #[test]

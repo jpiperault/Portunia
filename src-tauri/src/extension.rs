@@ -77,6 +77,8 @@ pub trait Host: Send + Sync {
     fn observe(&self, connection_id: &str, key: &str, make: &mut dyn FnMut() -> Result<Box<dyn SessionObserver>>) -> Result<Value>;
     /// Débranche l'observateur et rend ce que donne sa fin (`None` : il n'y en avait pas).
     fn unobserve(&self, connection_id: &str, key: &str) -> Result<Option<Value>>;
+    /// Notification du système (titre, texte).
+    fn notify(&self, title: &str, body: &str) -> Result<()>;
 }
 
 /// Ce qui regarde passer une session : le cœur lui donne tout ce que le serveur affiche,
@@ -192,6 +194,7 @@ impl Extensions {
                 Arc::new(crate::proxmox::Proxmox),
                 Arc::new(crate::filesync::FileSync),
                 Arc::new(crate::recording::Recording),
+                Arc::new(crate::monitor::Alerts),
             ],
         }
     }
@@ -275,6 +278,9 @@ mod tests {
         fn unobserve(&self, _: &str, _: &str) -> Result<Option<Value>> {
             Ok(None)
         }
+        fn notify(&self, _: &str, _: &str) -> Result<()> {
+            Ok(())
+        }
     }
 
     fn call(host: &dyn Host, ext: &str, method: &str, args: Value) -> Result<Value> {
@@ -297,6 +303,7 @@ mod tests {
         assert_eq!(pve.needs("api"), Some(Feature::Proxmox));
         assert_eq!(pve.needs("console"), Some(Feature::Proxmox));
         assert!(m.iter().any(|m| m.id == "filesync" && m.feature == Some(Feature::FileSync)));
+        assert!(m.iter().any(|m| m.id == "alerts" && m.feature == Some(Feature::MonitoringAlerts)));
         // Enregistrement : seul le départ demande la licence ; arrêter, revoir et effacer restent permis.
         let rec = m.iter().find(|m| m.id == "recording").unwrap();
         assert_eq!(rec.needs("start"), Some(Feature::SessionRecording));
@@ -318,6 +325,10 @@ mod tests {
         assert!(call(&host, "containers", "list", json!({})).is_err());
         assert!(call(&host, "dashboard", "effacer", json!({})).is_err());
         assert!(call(&host, "containers", "command", json!({ "kind": "docker", "what": "shell", "id": "x; rm -rf /" })).is_err());
+        // Alertes : deux changements, deux notifications ; arguments faux refusés.
+        let changes = json!({ "changes": [{ "name": "a", "up": false, "error": null }, { "name": "b", "up": true, "error": null }] });
+        assert_eq!(call(&host, "alerts", "notify", changes).unwrap(), json!(2));
+        assert!(call(&host, "alerts", "notify", json!({ "changes": "x" })).is_err());
         // Comparaison de dossiers : session fermée.
         assert!(call(&host, "filesync", "compare", json!({ "connectionId": "c1", "local": ".", "remote": "/", "bySize": false, "exclude": [] })).is_err());
         // Proxmox : serveur inconnu, nœud invalide, envoi aux paramètres faux.

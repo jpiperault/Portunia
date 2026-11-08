@@ -191,7 +191,6 @@ pub fn run() {
             commands::enable_touch_id,
             commands::biometric_kind,
             commands::monitor_check,
-            commands::monitor_alerts_allowed,
             commands::folder_colors,
             commands::set_folder_color,
             commands::fs_download_dir,

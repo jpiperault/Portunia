@@ -24,7 +24,7 @@ use crate::notes::Notes;
 use crate::credentials::{Credential, Credentials};
 use crate::nettools;
 use crate::connector::RemoteExec;
-use crate::license::{Feature, License};
+use crate::license::License;
 use crate::transfer;
 use crate::lock::{self, Lock};
 use crate::registry::Registry;
@@ -1048,12 +1048,6 @@ pub async fn monitor_check(targets: Vec<crate::monitor::Target>) -> Vec<crate::m
     crate::monitor::probe_all(targets).await
 }
 
-/// Les alertes (notifications) sont une fonction Pro.
-#[tauri::command]
-pub fn monitor_alerts_allowed(state: State<'_, AppState>) -> bool {
-    state.license.lock().unwrap().allows(Feature::MonitoringAlerts)
-}
-
 // ---------- Couleurs des dossiers ----------
 
 #[tauri::command]
@@ -1714,6 +1708,12 @@ impl crate::extension::Host for StateHost<'_> {
     fn unobserve(&self, connection_id: &str, key: &str) -> anyhow::Result<Option<Value>> {
         let observer = self.state.observers.lock().unwrap().remove(connection_id, key);
         observer.map(|o| o.finish()).transpose()
+    }
+
+    fn notify(&self, title: &str, body: &str) -> anyhow::Result<()> {
+        use tauri_plugin_notification::NotificationExt;
+        self.app.notification().builder().title(title).body(body).show()?;
+        Ok(())
     }
 
     fn open_connection<'a>(&'a self, protocol: &'a str, name: String, values: HashMap<String, Value>, cols: u16, rows: u16) -> crate::connector::BoxFuture<'a, Value> {
