@@ -17,16 +17,16 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Result};
 
-const VERSION: &str = "2026.9.1";
+const VERSION: &str = "2026.10.7";
 
 /// (système, architecture) → (fichier publié, empreinte SHA-256 donnée par GitHub).
 const ASSETS: &[(&str, &str, &str, &str)] = &[
-    ("windows", "x86_64", "cloudflared-windows-amd64.exe", "2837888cc0f5d58f15b6dc478376de90b4d3ba5241c7947455d1e0a0df429712"),
-    ("windows", "x86", "cloudflared-windows-386.exe", "11b6e4b2d306950bd87e7caa4deee8e80a32d71ffee555a96237a76651eeae4c"),
-    ("macos", "x86_64", "cloudflared-darwin-amd64.tgz", "ff0d3b51d5ff70eceef89d6b32145fee985018a2174596a5dbe405e2766e2ac4"),
-    ("macos", "aarch64", "cloudflared-darwin-arm64.tgz", "c27ab8fd0aa489449e3d201eb02f957ef460a13b613662928b1b23394bf1bcfe"),
-    ("linux", "x86_64", "cloudflared-linux-amd64", "03f1f25d1cc93b9ad6c60569d44060bc4f17ed97075760ed8cfca4b12dcd68cc"),
-    ("linux", "aarch64", "cloudflared-linux-arm64", "3d97437c71848bd8df68041e12436b484a661d95073ea1937f01a845ce88faa3"),
+    ("windows", "x86_64", "cloudflared-windows-amd64.exe", "2493dbc168923bb3e59e5e7716f71deced92992eea9acd6e9d74f84ac7751343"),
+    ("windows", "x86", "cloudflared-windows-386.exe", "88c6b972b410db0e26745f593510d772c825a13c5a2374819e3f13a05b333082"),
+    ("macos", "x86_64", "cloudflared-darwin-amd64.tgz", "02f3edfd87684dd5b705607688e4eb4b323f6e777b81e7b3a85af556aa356848"),
+    ("macos", "aarch64", "cloudflared-darwin-arm64.tgz", "3586ccf397e98e5f437e60e7c307ca6ac463e110580503af8bb8e6f9ebf831bd"),
+    ("linux", "x86_64", "cloudflared-linux-amd64", "1f99fb518b83dec2ba8d870a7cc991d82a77e6196295a3d2754ba17ab9f91872"),
+    ("linux", "aarch64", "cloudflared-linux-arm64", "3df43aedc9ff291d1735b5cb576cb97e0b157488796db2e32b28aecabb445775"),
 ];
 
 /// Un relais local inutilisé aussi longtemps est arrêté au prochain besoin d'un autre.

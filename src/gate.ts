@@ -1010,9 +1010,45 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
                 } catch (e) { checkResult.textContent = ''; fail(e); }
               }), checkResult)),
           g.jeton_defini && cfa && cfAccessBody(),
+          g.jeton_defini && 'maj_auto' in g && tunnelVersion(g),
           h('p', { class: 'muted small' }, t(
-            `cloudflared ${g.version} is downloaded by the Gate from Cloudflare's GitHub, its fingerprint checked, and run under the Gate's account: nothing to install, no root, no inbound port. The token is kept encrypted by the vault.`,
-            `cloudflared ${g.version} est téléchargé par la Gate depuis le GitHub de Cloudflare, son empreinte vérifiée, et lancé sous le compte de la Gate : rien à installer, pas de root, aucun port entrant. Le jeton est gardé chiffré par le coffre.`)),
+            `cloudflared ${g.version ?? ''} is downloaded by the Gate from Cloudflare's GitHub, its fingerprint checked, and run under the Gate's account: nothing to install, no root, no inbound port. The token is kept encrypted by the vault.`,
+            `cloudflared ${g.version ?? ''} est téléchargé par la Gate depuis le GitHub de Cloudflare, son empreinte vérifiée, et lancé sous le compte de la Gate : rien à installer, pas de root, aucun port entrant. Le jeton est gardé chiffré par le coffre.`)),
+        ].filter(Boolean) as HTMLElement[]);
+      };
+      // Gate 0.45 et plus : version de cloudflared suivie et mise à jour automatique.
+      const tunnelVersion = (g: any) => {
+        if (g.maj_systeme) return h('p', { class: 'muted small' }, t('cloudflared given by PORTUNIA_GATE_CLOUDFLARED: kept up to date by the system.', 'cloudflared donné par PORTUNIA_GATE_CLOUDFLARED : tenu à jour par le système.'));
+        const auto = h('input', { type: 'checkbox', id: 'p-tunnel-auto' }) as HTMLInputElement;
+        auto.checked = !!g.maj_auto;
+        auto.onchange = async () => {
+          try {
+            await call('PUT', '/admin/portail', { tunnel_maj_auto: auto.checked });
+            host.toast(auto.checked ? t('cloudflared updated automatically', 'cloudflared mis à jour automatiquement') : t('cloudflared updates: manual', 'Mises à jour de cloudflared : manuelles'));
+          } catch (e) { auto.checked = !auto.checked; fail(e); }
+        };
+        const status = g.maj_prete
+          ? h('span', { class: 'chip warn' }, t(`${g.maj_prete} installed, started when nobody is connected`, `${g.maj_prete} installée, lancée quand personne n'est connecté`))
+          : g.version_dispo
+            ? h('span', { class: 'chip warn' }, t(`${g.version_dispo} available`, `${g.version_dispo} disponible`))
+            : g.maj_verifiee && h('span', { class: 'chip ok' }, t('up to date', 'à jour'));
+        const checked = g.maj_verifiee ? ` · ${t('checked', 'vérifié le')} ${new Date(g.maj_verifiee).toLocaleString()}` : '';
+        return h('div', { class: 'admin-section' }, ...[
+          h('h3', {}, t('cloudflared version', 'Version de cloudflared')),
+          h('div', {}, h('b', {}, g.version ?? '—'), ' ', status || '', h('span', { class: 'muted small' }, checked)),
+          g.maj_erreur && h('p', { class: 'gate-warn' }, g.maj_erreur),
+          h('label', { class: 'check' }, auto, ' ', t('Update automatically', 'Mettre à jour automatiquement')),
+          h('p', { class: 'muted small' }, t(
+            'The Gate checks Cloudflare\'s releases every 6 hours, checks the fingerprint given twice by GitHub, then restarts the tunnel on the new version when no session is open; after a day of waiting, at night (3 to 5 am) with a notice to connected users. The restart cuts connections from outside for a few seconds.',
+            'La Gate consulte les versions de Cloudflare toutes les 6 heures, vérifie l\'empreinte donnée deux fois par GitHub, puis relance le tunnel sur la nouvelle version quand aucune session n\'est ouverte ; après un jour d\'attente, la nuit (3 h à 5 h) en prévenant les personnes connectées. La relance coupe les connexions de l\'extérieur quelques secondes.')),
+          small(t('Update now', 'Mettre à jour maintenant'), async () => {
+            if (!confirm(t('Install the latest cloudflared now? The tunnel restarts: connections from outside are cut for a few seconds.', 'Installer le dernier cloudflared maintenant ? Le tunnel redémarre : les connexions de l\'extérieur sont coupées quelques secondes.'))) return;
+            try {
+              await call('POST', '/admin/portail/tunnel-maj');
+              host.toast(t('The Gate checks and restarts the tunnel if a newer version exists', 'La Gate vérifie et relance le tunnel si une version plus récente existe'));
+              window.setTimeout(reload, 15000);
+            } catch (e) { fail(e); }
+          }),
         ].filter(Boolean) as HTMLElement[]);
       };
       const tokenRow = h('div', { class: 'tunnel-token' }, tunnelToken,
