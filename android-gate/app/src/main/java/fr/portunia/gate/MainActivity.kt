@@ -452,7 +452,7 @@ class MainActivity : Activity() {
         /** Connexion par mot de passe et code réussie dans le portail. */
         @JavascriptInterface
         fun connecte() {
-            runOnUiThread { offer() }
+            runOnUiThread { try { offer() } catch (_: Exception) {} }
         }
     }
 
@@ -461,9 +461,12 @@ class MainActivity : Activity() {
     private fun keyStore() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     private fun hasKey() = try { keyStore().containsAlias(alias) } catch (_: Exception) { false }
 
-    private fun biometricReady(): Boolean =
+    private fun biometricReady(): Boolean = try {
         Build.VERSION.SDK_INT >= 30 && getSystemService(BiometricManager::class.java)
             ?.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
+    } catch (_: Exception) {
+        false
+    }
 
     /** Oublie l'enrôlement sur ce téléphone (clé et identifiant). */
     private fun forget() {
