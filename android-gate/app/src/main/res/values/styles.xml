@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Pas de barre d'application : le portail a la sienne. -->
+    <style name="Gate" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/fond</item>
+    </style>
+    <color name="fond">#0F1115</color>
+    <color name="icone_fond">#1B1E24</color>
+</resources>

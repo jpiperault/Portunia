@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icône du portail : chevron rouge et curseur blanc (zone sûre : 66 dp au centre de 108). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F0443A"
+        android:strokeWidth="7.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M36,38 L53,54 L36,70" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#F2F3F5"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:pathData="M60,70 L74,70" />
+</vector>

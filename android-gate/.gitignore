@@ -1,0 +1,7 @@
+.gradle/
+build/
+app/build/
+local.properties
+signature.properties
+*.p12
+*.jks
