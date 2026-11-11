@@ -8,11 +8,20 @@ import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.hardware.biometrics.BiometricManager
+import android.hardware.biometrics.BiometricPrompt
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.provider.Settings
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import android.security.keystore.KeyProperties
+import android.security.keystore.StrongBoxUnavailableException
 import android.text.InputType
+import android.util.Base64
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -23,6 +32,7 @@ import android.view.WindowInsetsController
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.PermissionRequest
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
@@ -39,7 +49,16 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import java.security.KeyPairGenerator
+import java.security.KeyStore
+import java.security.PrivateKey
+import java.security.Signature
+import java.security.spec.ECGenParameterSpec
 import java.util.Locale
+import org.json.JSONObject
 
 /**
  * Portunia Gate pour Android : le portail web d'une Gate dans une application. Les écrans, les
@@ -47,6 +66,11 @@ import java.util.Locale
  * l'adresse retenue, le plein écran, l'écran gardé allumé pendant une session, le choix de
  * fichiers et les liens vers d'autres sites ouverts dans le navigateur.
  * L'adresse peut venir d'un lien portunia-gate://gate.exemple.fr.
+ *
+ * Téléphone enrôlé (Gate 0.47, Android 11 et plus) : après une connexion par mot de passe et
+ * code, l'application propose de créer une clé P-256 dans le Keystore, utilisable seulement
+ * après l'empreinte ; la Gate en garde la clé publique. Ensuite, l'empreinte suffit : la Gate
+ * envoie un défi, la clé le signe, la Gate ouvre la session du portail.
  */
 class MainActivity : Activity() {
     private lateinit var frame: FrameLayout
@@ -72,6 +96,9 @@ class MainActivity : Activity() {
     private val danger get() = if (dark) Color.rgb(255, 123, 123) else Color.rgb(194, 59, 59)
 
     private val base: String? get() = prefs.getString("adresse", null)
+    /** Agent utilisateur de la WebView, repris par les requêtes de l'application. */
+    private var userAgent = "PortuniaGate/${BuildConfig.VERSION_NAME}"
+    private var offered = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -340,6 +367,8 @@ class MainActivity : Activity() {
                 // Turnstile (anti-robot de Cloudflare) vit dans un cadre d'un autre site.
                 setAcceptThirdPartyCookies(w, true)
             }
+            userAgent = w.settings.userAgentString
+            w.addJavascriptInterface(Bridge(), "PortuniaGateApp")
             w.webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     if (!request.isForMainFrame || sameGate(request.url)) return false
@@ -353,6 +382,11 @@ class MainActivity : Activity() {
                 override fun onPageFinished(view: WebView, url: String?) {
                     keepAwake(url)
                     CookieManager.getInstance().flush()
+                    // Connexion par empreinte refusée : téléphone retiré, expiré ou compte changé.
+                    if (url?.contains("appareil=refuse") == true && deviceId() != null) {
+                        forget()
+                        Toast.makeText(this@MainActivity, t("This phone is no longer enrolled: sign in with your password and code.", "Ce téléphone n'est plus enrôlé : connectez-vous avec mot de passe et code."), Toast.LENGTH_LONG).show()
+                    }
                 }
 
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
@@ -409,7 +443,198 @@ class MainActivity : Activity() {
             }
         }
         w.visibility = View.VISIBLE
-        w.loadUrl("$addr/?accueil")
+        if (deviceId() != null && hasKey()) locked() else w.loadUrl("$addr/?accueil")
+    }
+
+    // ---------- Empreinte : téléphone enrôlé ----------
+
+    private inner class Bridge {
+        /** Connexion par mot de passe et code réussie dans le portail. */
+        @JavascriptInterface
+        fun connecte() {
+            runOnUiThread { offer() }
+        }
+    }
+
+    private val alias get() = "gate:${base ?: ""}"
+    private fun deviceId(): String? = prefs.getString("appareil:${base ?: ""}", null)
+    private fun keyStore() = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+    private fun hasKey() = try { keyStore().containsAlias(alias) } catch (_: Exception) { false }
+
+    private fun biometricReady(): Boolean =
+        Build.VERSION.SDK_INT >= 30 && getSystemService(BiometricManager::class.java)
+            ?.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS
+
+    /** Oublie l'enrôlement sur ce téléphone (clé et identifiant). */
+    private fun forget() {
+        try { keyStore().deleteEntry(alias) } catch (_: Exception) {}
+        prefs.edit().remove("appareil:${base ?: ""}").apply()
+    }
+
+    /** Requête de l'application vers le portail, avec les cookies de la WebView. Hors du fil principal. */
+    private fun http(method: String, path: String, body: JSONObject? = null): Pair<Int, JSONObject> {
+        val c = URL((base ?: "") + path).openConnection() as HttpURLConnection
+        c.requestMethod = method
+        c.connectTimeout = 10_000
+        c.readTimeout = 20_000
+        c.instanceFollowRedirects = false
+        CookieManager.getInstance().getCookie(base)?.let { c.setRequestProperty("Cookie", it) }
+        c.setRequestProperty("X-Portunia-Gate", "portail")
+        c.setRequestProperty("User-Agent", userAgent)
+        if (body != null) {
+            c.doOutput = true
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(body.toString().toByteArray()) }
+        }
+        val code = c.responseCode
+        val text = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
+        return code to (try { JSONObject(text) } catch (_: Exception) { JSONObject() })
+    }
+
+    private fun background(work: () -> Unit) = Thread {
+        try { work() } catch (e: Exception) {
+            runOnUiThread { Toast.makeText(this, e.message ?: t("Network error", "Erreur réseau"), Toast.LENGTH_LONG).show() }
+        }
+    }.start()
+
+    /** Demande l'empreinte, puis signe avec la clé du téléphone. */
+    private fun withFingerprint(title: String, data: ByteArray, done: (ByteArray) -> Unit, cancelled: () -> Unit) {
+        if (Build.VERSION.SDK_INT < 30) return cancelled()
+        val sig = try {
+            Signature.getInstance("SHA256withECDSA").apply { initSign(keyStore().getKey(alias, null) as PrivateKey) }
+        } catch (_: KeyPermanentlyInvalidatedException) {
+            // Empreinte ajoutée ou retirée sur le téléphone : la clé n'est plus utilisable.
+            forget()
+            Toast.makeText(this, t("The fingerprints of this phone changed: enrol it again after signing in.", "Les empreintes du téléphone ont changé : enrôlez-le de nouveau après la connexion."), Toast.LENGTH_LONG).show()
+            return cancelled()
+        } catch (_: Exception) {
+            forget()
+            return cancelled()
+        }
+        val prompt = BiometricPrompt.Builder(this)
+            .setTitle(title)
+            .setSubtitle(base?.removePrefix("https://") ?: "")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+            .setNegativeButton(t("Cancel", "Annuler"), mainExecutor) { _, _ -> cancelled() }
+            .build()
+        prompt.authenticate(BiometricPrompt.CryptoObject(sig), CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                val s = result.cryptoObject?.signature ?: return cancelled()
+                s.update(data)
+                done(s.sign())
+            }
+
+            override fun onAuthenticationError(code: Int, message: CharSequence?) {
+                if (code != BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED && code != BiometricPrompt.BIOMETRIC_ERROR_CANCELED) {
+                    Toast.makeText(this@MainActivity, message ?: "", Toast.LENGTH_SHORT).show()
+                }
+                cancelled()
+            }
+        })
+    }
+
+    /** Après une connexion par mot de passe et code : proposer l'empreinte pour la suite. */
+    private fun offer() {
+        if (offered || deviceId() != null || !biometricReady() || prefs.getBoolean("jamais:${base ?: ""}", false)) return
+        offered = true
+        AlertDialog.Builder(this)
+            .setTitle(t("Sign in with your fingerprint?", "Se connecter avec l'empreinte ?"))
+            .setMessage(t(
+                "Next time, your fingerprint will be enough to open the portal on this phone. A key is created in the phone's secure chip; the Gate keeps only its public part and you can remove it at any time.",
+                "La prochaine fois, votre empreinte suffira pour ouvrir le portail sur ce téléphone. Une clé est créée dans la puce sécurisée du téléphone ; la Gate n'en garde que la partie publique et vous pouvez la retirer à tout moment."))
+            .setPositiveButton(t("Enable", "Activer")) { _, _ -> enrol() }
+            .setNegativeButton(t("Later", "Plus tard"), null)
+            .setNeutralButton(t("Never on this phone", "Jamais sur ce téléphone")) { _, _ -> prefs.edit().putBoolean("jamais:${base ?: ""}", true).apply() }
+            .show()
+    }
+
+    private fun enrol() {
+        if (Build.VERSION.SDK_INT < 30) return
+        forget()
+        val pub = try {
+            fun spec(strongBox: Boolean) = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
+                .setAlgorithmParameterSpec(ECGenParameterSpec("secp256r1"))
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .setUserAuthenticationRequired(true)
+                .setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG)
+                .setInvalidatedByBiometricEnrollment(true)
+                .setIsStrongBoxBacked(strongBox)
+                .build()
+            val gen = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
+            try { gen.initialize(spec(true)); gen.generateKeyPair() } catch (_: StrongBoxUnavailableException) { gen.initialize(spec(false)); gen.generateKeyPair() }
+            keyStore().getCertificate(alias).publicKey.encoded
+        } catch (e: Exception) {
+            forget()
+            Toast.makeText(this, e.message ?: "", Toast.LENGTH_LONG).show()
+            return
+        }
+        // L'empreinte confirme que la clé est utilisable avant de la donner à la Gate.
+        withFingerprint(t("Enable fingerprint sign-in", "Activer la connexion par empreinte"), "enrolement".toByteArray(), {
+            val name = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)?.takeIf { it.isNotBlank() } ?: "${Build.MANUFACTURER} ${Build.MODEL}"
+            background {
+                val (code, r) = http("POST", "/api/appareils", JSONObject().put("nom", name).put("cle", Base64.encodeToString(pub, Base64.NO_WRAP)))
+                runOnUiThread {
+                    if (code == 200 && r.optString("id").isNotEmpty()) {
+                        prefs.edit().putString("appareil:${base ?: ""}", r.getString("id")).apply()
+                        Toast.makeText(this, t("Fingerprint sign-in enabled on this phone", "Connexion par empreinte activée sur ce téléphone"), Toast.LENGTH_LONG).show()
+                    } else {
+                        forget()
+                        AlertDialog.Builder(this).setTitle(t("Not enabled", "Pas activée")).setMessage(r.optString("erreur", "HTTP $code")).setPositiveButton("OK", null).show()
+                    }
+                }
+            }
+        }, { forget() })
+    }
+
+    /** Écran de déverrouillage : empreinte, ou connexion habituelle. */
+    private fun locked() {
+        show(page(
+            logo(),
+            text("Portunia Gate", 22f, fg, true).apply { gravity = Gravity.CENTER_HORIZONTAL },
+            text(base?.removePrefix("https://") ?: "", 14f, muted).apply { gravity = Gravity.CENTER_HORIZONTAL },
+            gap(16),
+            button(t("Unlock with fingerprint", "Déverrouiller avec l'empreinte")) { unlock() },
+            button(t("Sign in with password and code", "Se connecter avec mot de passe et code"), filled = false) {
+                hideOverlay()
+                web?.loadUrl("${base}/?accueil")
+            },
+        ))
+        unlock()
+    }
+
+    private fun unlock() {
+        val id = deviceId() ?: return
+        background {
+            val (code, r) = http("POST", "/api/appareil/defi", JSONObject().put("appareil", id))
+            val challenge = r.optString("defi")
+            runOnUiThread {
+                if (code != 200 || challenge.isEmpty()) {
+                    Toast.makeText(this, r.optString("erreur", t("Cannot reach the Gate", "Gate injoignable")), Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                withFingerprint(t("Sign in to the portal", "Connexion au portail"), "portunia-gate-appareil:$id:$challenge".toByteArray(), { sig ->
+                    hideOverlay()
+                    val form = "appareil=$id&defi=${URLEncoder.encode(challenge, "UTF-8")}&signature=${URLEncoder.encode(Base64.encodeToString(sig, Base64.NO_WRAP), "UTF-8")}"
+                    web?.postUrl("${base}/api/appareil/connexion", form.toByteArray())
+                }, {
+                    // Plus de clé (empreintes changées) : connexion habituelle.
+                    if (deviceId() == null) { hideOverlay(); web?.loadUrl("${base}/?accueil") }
+                })
+            }
+        }
+    }
+
+    /** Retire ce téléphone de la Gate (session du portail ouverte) et oublie la clé. */
+    private fun disableFingerprint() {
+        val id = deviceId() ?: return
+        background {
+            val (code, _) = http("DELETE", "/api/appareils/$id")
+            runOnUiThread {
+                forget()
+                Toast.makeText(this, if (code == 200) t("Fingerprint sign-in disabled", "Connexion par empreinte désactivée") else t("Disabled on this phone; the Gate will drop it after 90 days", "Désactivée sur ce téléphone ; la Gate l'oubliera après 90 jours"), Toast.LENGTH_LONG).show()
+                web?.loadUrl("${base}/?accueil")
+            }
+        }
     }
 
     /** Barres système affichées ou masquées (plein écran du terminal ou du Bureau à distance). */
@@ -447,13 +672,20 @@ class MainActivity : Activity() {
             custom != null -> (w?.webChromeClient as? WebChromeClient)?.onHideCustomView()
             overlay != null && base != null && w != null && w.visibility == View.VISIBLE -> hideOverlay()
             w != null && overlay == null && w.canGoBack() -> w.goBack()
-            w != null && overlay == null -> AlertDialog.Builder(this)
-                .setTitle("Portunia Gate")
-                .setMessage(base?.removePrefix("https://"))
-                .setPositiveButton(t("Quit", "Quitter")) { _, _ -> finish() }
-                .setNeutralButton(t("Change the address", "Changer d'adresse")) { _, _ -> setup() }
-                .setNegativeButton(t("Cancel", "Annuler"), null)
-                .show()
+            w != null && overlay == null -> {
+                val items = mutableListOf(t("Quit", "Quitter") to { finish() }, t("Change the address", "Changer d'adresse") to { setup() })
+                if (deviceId() != null) items.add(t("Disable fingerprint sign-in", "Désactiver la connexion par empreinte") to { disableFingerprint() })
+                else if (biometricReady()) items.add(t("Enable fingerprint sign-in (after signing in)", "Activer la connexion par empreinte (après connexion)") to {
+                    prefs.edit().remove("jamais:${base ?: ""}").apply()
+                    offered = false
+                    Toast.makeText(this, t("Sign in with your password and code: the app will offer it.", "Connectez-vous avec mot de passe et code : l'application le proposera."), Toast.LENGTH_LONG).show()
+                })
+                AlertDialog.Builder(this)
+                    .setTitle(base?.removePrefix("https://") ?: "Portunia Gate")
+                    .setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
+                    .setNegativeButton(t("Cancel", "Annuler"), null)
+                    .show()
+            }
             else -> @Suppress("DEPRECATION") super.onBackPressed()
         }
     }

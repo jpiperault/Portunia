@@ -570,7 +570,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
   };
   const table = (head: string[], rows: HTMLElement[]) =>
     h('div', { class: 'tbl-wrap' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, ...head.map((x) => h('th', {}, x)))), h('tbody', {}, ...rows)));
-  const actions = (...buttons: HTMLElement[]) => h('td', { class: 'acts' }, ...buttons);
+  const actions = (...buttons: (HTMLElement | null)[]) => h('td', { class: 'acts' }, ...buttons.filter((b): b is HTMLElement => !!b));
   const small = (label: string, onclick: () => void, danger = false) => h('button', { type: 'button', class: `btn sm${danger ? ' danger' : ''}`, onclick }, label);
   const toolbar = (text: string, button?: HTMLElement) => h('div', { class: 'admin-bar' }, h('p', { class: 'muted' }, text), button ?? null);
 
@@ -715,6 +715,41 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
           host.toast(t(`Key added: ${r.empreinte}`, `Clé ajoutée : ${r.empreinte}`));
         });
       };
+      // Téléphones enrôlés (application Android, connexion au portail par empreinte ; Gate 0.47).
+      const devicesDialog = async (u: any) => {
+        let list: any[] = [];
+        try { list = (await call<{ appareils: any[] }>('GET', `/admin/comptes/${u.id}/appareils`)).appareils; } catch (e) { fail(e); return; }
+        const when = (d?: string) => (d ? new Date(d).toLocaleString() : '—');
+        const close = h('button', { type: 'button', class: 'btn' }, t('Close', 'Fermer'));
+        const all = h('button', { type: 'button', class: 'btn danger' }, t('Remove all', 'Tout retirer'));
+        const body = list.length
+          ? list.map((d) => {
+            const remove = h('button', { type: 'button', class: 'btn small' }, t('Remove', 'Retirer'));
+            const row = h('div', { class: 'device-row' },
+              h('div', {}, h('strong', {}, d.nom), h('div', { class: 'muted small' },
+                t(`Enrolled ${when(d.enrole)} · last used ${when(d.utilise)}`, `Enrôlé le ${when(d.enrole)} · dernier usage ${when(d.utilise)}`), d.adresse ? ` · ${d.adresse}` : '')),
+              remove);
+            remove.addEventListener('click', async () => {
+              if (!confirm(t(`Remove the phone « ${d.nom} »? Its portal sessions close; fingerprint sign-in stops on it.`, `Retirer le téléphone « ${d.nom} » ? Ses sessions du portail se ferment ; la connexion par empreinte s'arrête sur lui.`))) return;
+              try { await call('DELETE', `/admin/appareils/${d.id}`); row.remove(); host.toast(t('Phone removed', 'Téléphone retiré')); } catch (e) { fail(e); }
+            });
+            return row;
+          })
+          : [h('p', { class: 'muted' }, t('No phone enrolled.', 'Aucun téléphone enrôlé.'))];
+        const { dialog } = modal(t(`Phones of ${u.login}`, `Téléphones de ${u.login}`), [
+          h('p', { class: 'muted small' }, t(
+            'Phones enrolled in the Portunia Gate Android app: they sign in to the web portal with a fingerprint, without password or code. Resetting the password or the code, or disabling the account, removes them too.',
+            'Téléphones enrôlés dans l\'application Android Portunia Gate : ils se connectent au portail web par empreinte, sans mot de passe ni code. Réinitialiser le mot de passe ou le code, ou désactiver le compte, les retire aussi.')),
+          ...body,
+        ], list.length ? [all, close] : [close], true);
+        close.addEventListener('click', () => dialog.close());
+        all.addEventListener('click', async () => {
+          if (!confirm(t(`Remove every phone of ${u.login}?`, `Retirer tous les téléphones de ${u.login} ?`))) return;
+          try { await call('DELETE', `/admin/comptes/${u.id}/appareils`); dialog.close(); host.toast(t('Phones removed', 'Téléphones retirés')); } catch (e) { fail(e); }
+        });
+        dialog.addEventListener('close', () => { dialog.remove(); reload(); });
+        dialog.showModal();
+      };
       const rows = comptes.map((u) => h('tr', { class: u.desactive ? 'off' : '' },
         h('td', {}, h('strong', {}, u.login)), h('td', {}, roleLabel(u.role)), h('td', {}, u.groupes.join(', ') || '—'),
         h('td', {}, POLICIES.find(([v]) => v === (u.politique ?? ''))?.[1] ?? u.politique),
@@ -731,6 +766,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
             await call('POST', `/admin/comptes/${u.id}/reinitialiser-code`).catch(fail); reload();
           }),
           small(t('SSH key', 'Clé SSH'), () => keyDialog(u)),
+          u.appareils ? small(t(`Phones (${u.appareils})`, `Téléphones (${u.appareils})`), () => devicesDialog(u)) : null,
           small(t('Delete', 'Supprimer'), async () => {
             if (!confirm(t(`Delete the account ${u.login}? Their session history is kept.`, `Supprimer le compte ${u.login} ? L'historique de ses sessions est gardé.`))) return;
             await call('DELETE', `/admin/comptes/${u.id}`).catch(fail); reload();

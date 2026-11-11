@@ -1153,3 +1153,6 @@ body.detached #relecture { height: 100vh; }
 .assist-drop[hidden] { display: none; }
 .assist-drop > div { display: flex; align-items: center; gap: 10px; max-width: min(460px, 90%); padding: 14px 18px; border-radius: 10px; background: var(--bg); color: var(--text); font-size: 13px; box-shadow: 0 8px 24px rgb(0 0 0 / .3); }
 .assist-send input { flex: 1; min-width: 0; }
+
+/* Téléphones enrôlés d'un compte (Administrer › Comptes) */
+.device-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
