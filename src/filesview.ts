@@ -1,13 +1,13 @@
 // Onglet « fichiers seulement » (SFTP, FTP, S3) : Ce PC à gauche, le serveur à droite,
 // la file de transferts en bas. Pas de terminal.
 import { handleConfirm } from './confirm';
-import { api, errorText, remoteFiles, RemoteEntry, TermEvent } from './api';
+import { api, errorText, extCall, remoteFiles, RemoteEntry, TermEvent } from './api';
 import { h, icon } from './dom';
 import { FilePanel } from './files';
 import { LocalPanel, localJoin, windowsName } from './localpanel';
 import type { Opener, TermState } from './terminal';
 import { t } from './i18n';
-import { proChip } from './security';
+import { allows, proChip } from './security';
 import { openSyncDialog } from './syncdialog';
 import { ExistsRule, TransferQueue } from './transfers';
 
@@ -106,9 +106,11 @@ export class DualFiles {
     if (!entries.length) return this.toast(t('Select files of this PC first (left pane).', 'Sélectionnez d\'abord des fichiers de ce PC (volet de gauche).'));
     const dir = this.remote.dir;
     for (const e of this.filter(entries, this.remote.listed, t('on the server', 'sur le serveur'))) {
+      const remote = `${dir.replace(/\/+$/, '')}/${e.name}`;
       this.queue.add({
         name: e.isDir ? `${e.name}/` : e.name, direction: 'up', target: dir,
         run: (cb) => remoteFiles.uploadAny(id, e.path, dir, cb),
+        resume: e.isDir || !allows('transferResume') ? undefined : (cb) => extCall('transfers', 'upload', { connectionId: id, local: e.path, remote }, cb),
         after: () => this.remote.refreshIf(dir),
       });
     }
@@ -125,6 +127,7 @@ export class DualFiles {
       this.queue.add({
         name: e.isDir ? `${e.name}/` : e.name, direction: 'down', target: dir,
         run: (cb) => (e.isDir ? remoteFiles.downloadDir(id, e.path, local, cb) : api.fsDownload(id, e.path, local, cb, e.modified)),
+        resume: e.isDir || !allows('transferResume') ? undefined : (cb) => extCall('transfers', 'download', { connectionId: id, remote: e.path, local, modified: e.modified ?? null }, cb),
         after: () => this.local.refreshIf(dir),
       });
     }

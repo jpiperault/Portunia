@@ -60,10 +60,12 @@ pub enum Feature {
     AssistLargeFiles,
     /// Navigation sur Internet par une sortie web de la Gate (navigateur dédié).
     GateBrowse,
+    /// Reprise des transferts de fichiers interrompus.
+    TransferResume,
 }
 
 impl Feature {
-    pub const ALL: [Feature; 15] = [
+    pub const ALL: [Feature; 16] = [
         Feature::SessionRecording,
         Feature::MonitoringAlerts,
         Feature::Sync,
@@ -79,6 +81,7 @@ impl Feature {
         Feature::GateUpdate,
         Feature::AssistLargeFiles,
         Feature::GateBrowse,
+        Feature::TransferResume,
     ];
 
     /// Édition minimale qui débloque la fonctionnalité.
@@ -106,6 +109,7 @@ impl Feature {
             Feature::GateUpdate => t!("Gate update from Portunia", "Mise à jour des Gates depuis Portunia"),
             Feature::AssistLargeFiles => t!("Files of any size in remote assistance", "Fichiers de toute taille dans l'assistance à distance"),
             Feature::GateBrowse => t!("Web browsing through the Gate", "Navigation web par la Gate"),
+            Feature::TransferResume => t!("Resume interrupted transfers", "Reprise des transferts interrompus"),
         }
     }
 }

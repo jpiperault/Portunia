@@ -196,6 +196,7 @@ impl Extensions {
                 Arc::new(crate::recording::Recording),
                 Arc::new(crate::monitor::Alerts),
                 Arc::new(crate::browse::Browse),
+                Arc::new(crate::resume::Resume),
             ],
         }
     }

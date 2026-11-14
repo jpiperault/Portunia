@@ -73,7 +73,7 @@ mod win {
     use ironrdp_server::{KeyboardEvent, MouseEvent};
     use windows::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY,
-        KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN,
+        KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, KEYEVENTF_UNICODE, MOUSEEVENTF_ABSOLUTE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_VIRTUALDESK, MOUSEEVENTF_LEFTDOWN,
         MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
         MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, MOUSEINPUT, MOUSE_EVENT_FLAGS, VIRTUAL_KEY,
     };
@@ -149,10 +149,21 @@ mod win {
     pub fn mouse(event: &MouseEvent, width: u16, height: u16) {
         match *event {
             MouseEvent::Move { x, y } => {
-                // Coordonnées absolues de l'écran principal, sur 0..65535.
-                let ax = (x as i32 * 65535) / (width.max(2) as i32 - 1);
-                let ay = (y as i32 * 65535) / (height.max(2) as i32 - 1);
-                mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, ax, ay, 0);
+                let (ox, oy, w, _) = crate::display::shown();
+                if w == 0 {
+                    // Coordonnées absolues de l'écran principal, sur 0..65535.
+                    let ax = (x as i32 * 65535) / (width.max(2) as i32 - 1);
+                    let ay = (y as i32 * 65535) / (height.max(2) as i32 - 1);
+                    mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE, ax, ay, 0);
+                } else {
+                    // Écran montré, placé sur le bureau entier (plusieurs écrans) : 0..65535 du bureau.
+                    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN};
+                    // SAFETY : simples lectures des dimensions du bureau.
+                    let (vx, vy, vw, vh) = unsafe { (GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN), GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN)) };
+                    let ax = ((ox + x as i32 - vx) as i64 * 65535 / (vw.max(2) as i64 - 1)) as i32;
+                    let ay = ((oy + y as i32 - vy) as i64 * 65535 / (vh.max(2) as i64 - 1)) as i32;
+                    mouse_input(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, ax, ay, 0);
+                }
             }
             MouseEvent::LeftPressed => {
                 button(MOUSEEVENTF_LEFTUP, true);

@@ -8,6 +8,7 @@ mod biometric_mac;
 mod appmenu;
 mod cloudflared;
 mod browse;
+mod resume;
 mod gate;
 mod proxmox;
 mod commands;

@@ -75,6 +75,8 @@ struct SessionView {
     rtt: Option<Duration>,
     reconnecting: bool,
     asking: bool,
+    /// Informations du PC demandées par le dépanneur, en attente d'accord.
+    info: Option<Vec<(String, String)>>,
     /// (message de la personne ?, texte)
     messages: Vec<(bool, String)>,
     unread: bool,
@@ -95,6 +97,7 @@ impl SessionView {
             rtt: None,
             reconnecting: false,
             asking: false,
+            info: None,
             messages: Vec::new(),
             unread: false,
             files: Vec::new(),
@@ -105,7 +108,15 @@ impl SessionView {
     }
 }
 
+/// Marque de l'entreprise : nom, et logo décodé (largeur, hauteur, pixels BGRA prémultipliés).
+#[derive(Clone, Default)]
+struct Brand {
+    name: String,
+    logo: Option<(u32, u32, Vec<u8>)>,
+}
+
 struct Shared {
+    brand: Mutex<Brand>,
     screen: Mutex<Screen>,
     session: Mutex<SessionView>,
     consent: Mutex<Option<mpsc::Sender<Option<bool>>>>,
@@ -209,6 +220,18 @@ impl crate::relay::Ui for WindowUi {
     fn code(&mut self, code: &str, valid: Option<Duration>) {
         set(Screen::Code { code: code.into(), until: valid.map(|v| Instant::now() + v) });
     }
+    fn brand(&mut self, name: &str, logo: Option<Vec<u8>>) {
+        // SAFETY : décodage WIC d'une image en mémoire, sans autre effet.
+        let logo = logo.and_then(|png| unsafe { decode_png(&png) });
+        *shared().brand.lock().unwrap() = Brand { name: name.chars().take(40).collect(), logo };
+        if let Some(m) = hwnd(&MAIN) {
+            let title = window_title();
+            // SAFETY : fenêtre de ce programme, texte terminé par zéro.
+            unsafe {
+                let _ = SetWindowTextW(m, PCWSTR(wide(&title).as_ptr()));
+            }
+        }
+    }
     fn consent(&mut self, who: &str, server: &str) -> Option<bool> {
         let (tx, rx) = mpsc::channel();
         *shared().consent.lock().unwrap() = Some(tx);
@@ -229,6 +252,15 @@ impl crate::relay::Ui for WindowUi {
                     s.unread = hwnd(&CHAT).is_none();
                 }
                 Event::ControlRequested => s.asking = true,
+                Event::InfoRequested(list) => {
+                    // La liste s'affiche dans la discussion : la personne voit tout avant d'accepter.
+                    let head = tr("The person helping you asks for these details about this PC:", "La personne qui vous aide demande ces informations sur ce PC :");
+                    let lines: Vec<String> = list.iter().map(|(k, v)| format!("• {k} : {v}")).collect();
+                    s.messages.push((false, format!("{head}\n{}", lines.join("\n"))));
+                    s.unread = hwnd(&CHAT).is_none();
+                    s.info = Some(list);
+                }
+                Event::ScreenShown => {}
                 Event::Control(on) => {
                     s.control = on;
                     s.asking = false;
@@ -390,6 +422,10 @@ enum Act {
     FileYes(u32),
     FileNo(u32),
     FileCancel(u32),
+    /// Informations du PC : voir la liste (discussion), l'envoyer, la refuser.
+    InfoSee,
+    InfoSend,
+    InfoDeny,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -439,6 +475,8 @@ enum Item {
     /// Pastille de fichier : extension, programme (orange).
     FileIcon { r: R, ext: String, program: bool },
     Progress { r: R, frac: f32 },
+    /// Logo de l'entreprise (marque réglée sur la Gate).
+    Logo { r: R },
 }
 
 impl Item {
@@ -701,6 +739,7 @@ fn main_layout(screen: &Screen, pulse: bool) -> (Vec<Item>, f32) {
             text(&mut items, &mut y, "", St::Body, p.muted, 10.0);
         }
         Screen::Code { code, until } => {
+            brand_header(&mut items, &mut y, pad, inner);
             text(&mut items, &mut y, tr("Read these digits to the person helping you", "Lisez ces chiffres à la personne qui vous aide"), St::Title, p.ink, 4.0);
             text(&mut items, &mut y, tr("Nobody sees your screen until you accept.", "Personne ne voit votre écran tant que vous n'avez pas accepté."), St::Muted, p.muted, 16.0);
             items.push(Item::Card { r: R::new(pad, y, inner, 84.0) });
@@ -729,6 +768,7 @@ fn main_layout(screen: &Screen, pulse: bool) -> (Vec<Item>, f32) {
             y += 22.0 + 6.0;
         }
         Screen::Consent { who, server, control, deadline } => {
+            brand_header(&mut items, &mut y, pad, inner);
             items.push(Item::Avatar { r: R::new(pad, y, 44.0, 44.0), initials: initials(who) });
             let name_w = inner - 56.0;
             let nh = measure(who, St::Strong, name_w).1;
@@ -825,6 +865,59 @@ fn main_layout(screen: &Screen, pulse: bool) -> (Vec<Item>, f32) {
     (items, y + 20.0)
 }
 
+/// En-tête de la marque : logo et « Assistance ACME » (rien sans marque réglée sur la Gate).
+fn brand_header(items: &mut Vec<Item>, y: &mut f32, pad: f32, inner: f32) {
+    let b = shared().brand.lock().unwrap().clone();
+    if b.name.is_empty() && b.logo.is_none() {
+        return;
+    }
+    let mut x = pad;
+    if b.logo.is_some() {
+        items.push(Item::Logo { r: R::new(x, *y, 28.0, 28.0) });
+        x += 38.0;
+    }
+    if !b.name.is_empty() {
+        let title = if shared().fr { format!("Assistance {}", b.name) } else { format!("{} support", b.name) };
+        items.push(Item::Text { r: R::new(x, *y, inner - (x - pad), 28.0), text: title, st: St::Strong, color: pal().ink, al: Al::Left });
+    }
+    *y += 28.0 + 14.0;
+}
+
+/// Titre de la fenêtre : la marque de l'entreprise, sinon Portunia Assistance.
+fn window_title() -> String {
+    let b = shared().brand.lock().unwrap().name.clone();
+    match (b.is_empty(), shared().fr) {
+        (true, _) => "Portunia Assistance".into(),
+        (false, true) => format!("Assistance {b}"),
+        (false, false) => format!("{b} support"),
+    }
+}
+
+/// PNG → pixels BGRA prémultipliés (WIC), 512 × 512 au plus.
+unsafe fn decode_png(png: &[u8]) -> Option<(u32, u32, Vec<u8>)> {
+    use windows::Win32::Graphics::Imaging::{
+        CLSID_WICImagingFactory, GUID_WICPixelFormat32bppPBGRA, IWICImagingFactory, WICBitmapDitherTypeNone, WICBitmapPaletteTypeCustom,
+        WICDecodeMetadataCacheOnDemand,
+    };
+    use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
+    let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+    let factory: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok()?;
+    let stream = factory.CreateStream().ok()?;
+    stream.InitializeFromMemory(png).ok()?;
+    let decoder = factory.CreateDecoderFromStream(&stream, std::ptr::null(), WICDecodeMetadataCacheOnDemand).ok()?;
+    let frame = decoder.GetFrame(0).ok()?;
+    let conv = factory.CreateFormatConverter().ok()?;
+    conv.Initialize(&frame, &GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, None, 0.0, WICBitmapPaletteTypeCustom).ok()?;
+    let (mut w, mut h) = (0u32, 0u32);
+    conv.GetSize(&mut w, &mut h).ok()?;
+    if w == 0 || h == 0 || w > 512 || h > 512 {
+        return None;
+    }
+    let mut buf = vec![0u8; (w * h * 4) as usize];
+    conv.CopyPixels(std::ptr::null(), w * 4, &mut buf).ok()?;
+    Some((w, h, buf))
+}
+
 /// Barre de session : éléments et largeur.
 fn bar_layout(s: &SessionView) -> (Vec<Item>, f32) {
     let p = pal();
@@ -834,6 +927,18 @@ fn bar_layout(s: &SessionView) -> (Vec<Item>, f32) {
     items.push(Item::Avatar { r: R::new(x, 9.0, 28.0, 28.0), initials: initials(&s.who) });
     x += 28.0 + 10.0;
     let name = short_name(&s.who);
+    if s.info.is_some() && !s.asking {
+        let t = if shared().fr { format!("{name} demande les informations du PC") } else { format!("{name} asks for this PC's details") };
+        let tw = measure(&t, St::Strong, 400.0).0;
+        items.push(Item::Text { r: R::new(x, 0.0, tw, h), text: t, st: St::Strong, color: p.ink, al: Al::Left });
+        x += tw + 12.0;
+        for (act, label, kind) in [(Act::InfoSee, tr("See", "Voir"), Kind::Secondary), (Act::InfoSend, tr("Send", "Envoyer"), Kind::Primary), (Act::InfoDeny, tr("Decline", "Refuser"), Kind::Secondary)] {
+            let bw = measure(label, St::Strong, 200.0).0 + 28.0;
+            items.push(Item::Button { r: R::new(x, 7.0, bw, 32.0), act, label: label.into(), kind, icon: None });
+            x += bw + 6.0;
+        }
+        return (items, x + 4.0);
+    }
     if s.asking {
         let t = if shared().fr { format!("{name} demande le contrôle") } else { format!("{name} asks for control") };
         let tw = measure(&t, St::Strong, 400.0).0;
@@ -1142,6 +1247,24 @@ unsafe fn draw(rt: &windows::Win32::Graphics::Direct2D::ID2D1RenderTarget, items
                 }
                 text(*r, initials, if r.w > 36.0 { St::Strong } else { St::Small }, p.accent_ink, Al::Center, true);
             }
+            Item::Logo { r } => {
+                let logo = shared().brand.lock().unwrap().logo.clone();
+                if let Some((w, h, px)) = logo {
+                    use windows::Win32::Graphics::Direct2D::{Common::{D2D1_ALPHA_MODE_PREMULTIPLIED, D2D1_PIXEL_FORMAT, D2D_SIZE_U}, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, D2D1_BITMAP_PROPERTIES};
+                    let props = D2D1_BITMAP_PROPERTIES {
+                        pixelFormat: D2D1_PIXEL_FORMAT { format: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },
+                        dpiX: 96.0,
+                        dpiY: 96.0,
+                    };
+                    if let Ok(bmp) = rt.CreateBitmap(D2D_SIZE_U { width: w, height: h }, Some(px.as_ptr().cast()), w * 4, &props) {
+                        // Image entière dans le carré, sans déformation.
+                        let k = (r.w / w as f32).min(r.h / h as f32);
+                        let (dw, dh) = (w as f32 * k, h as f32 * k);
+                        let dest = windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F { left: r.x + (r.w - dw) / 2.0, top: r.y + (r.h - dh) / 2.0, right: r.x + (r.w + dw) / 2.0, bottom: r.y + (r.h + dh) / 2.0 };
+                        rt.DrawBitmap(&bmp, Some(&dest), 1.0, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR, None);
+                    }
+                }
+            }
             Item::Dot { r, color: c } => {
                 if let Some(b) = brush(*c, 1.0) {
                     rt.FillEllipse(&D2D1_ELLIPSE { point: windows_numerics::Vector2 { X: r.x + r.w / 2.0, Y: r.y + r.h / 2.0 }, radiusX: r.w / 2.0, radiusY: r.h / 2.0 }, &b);
@@ -1314,6 +1437,16 @@ unsafe fn act(h: HWND, a: Act) {
             command(Command::Control(a == Act::Allow));
             post(&BAR);
         }
+        Act::InfoSee => {
+            if hwnd(&CHAT).is_none() {
+                toggle_chat();
+            }
+        }
+        Act::InfoSend | Act::InfoDeny => {
+            shared().session.lock().unwrap().info = None;
+            command(Command::SendInfo(a == Act::InfoSend));
+            post(&BAR);
+        }
         Act::Chat => toggle_chat(),
         Act::CloseChat => {
             if let Some(c) = hwnd(&CHAT) {
@@ -1432,6 +1565,7 @@ unsafe fn copy_text(h: HWND, text: &str) {
 /// Crée les fenêtres et fait tourner la boucle de messages (fil principal).
 pub fn run(commands: UnboundedSender<Command>) {
     let _ = SHARED.set(Arc::new(Shared {
+        brand: Mutex::new(Brand::default()),
         screen: Mutex::new(Screen::Connecting),
         session: Mutex::new(SessionView::new("", false)),
         consent: Mutex::new(None),
@@ -1727,6 +1861,14 @@ unsafe fn overlays(s: &SessionView) {
             let _ = SetLayeredWindowAttributes(frame, COLORREF(0x00ff00ff), 0, LWA_COLORKEY);
             exclude(frame);
             FRAME.store(frame.0 as isize, Ordering::Relaxed);
+        }
+    }
+    // Le cadre entoure l'écran montré au dépanneur (plusieurs écrans).
+    if let Some(frame) = hwnd(&FRAME) {
+        let (x, y, w, h) = crate::display::shown();
+        if w > 0 {
+            let _ = SetWindowPos(frame, Some(HWND_TOPMOST), x, y, w, h, SWP_NOACTIVATE);
+            let _ = InvalidateRect(Some(frame), None, true);
         }
     }
     if hwnd(&BAR).is_none() {

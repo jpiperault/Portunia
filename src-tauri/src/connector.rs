@@ -355,6 +355,21 @@ pub trait RemoteFiles: Send + Sync {
     fn set_modified(&self, _path: String, _secs: u64) -> BoxFuture<'_, ()> {
         Box::pin(async { Ok(()) })
     }
+    /// Reprise d'un téléchargement : `local` contient déjà les `offset` premiers octets.
+    fn download_from(&self, _remote: String, _local: PathBuf, _offset: u64, _progress: Progress) -> BoxFuture<'_, ()> {
+        Box::pin(async { anyhow::bail!("{}", t!("This protocol cannot resume a transfer", "Ce protocole ne sait pas reprendre un transfert")) })
+    }
+    /// Reprise d'un envoi : le fichier du serveur contient déjà les `offset` premiers octets.
+    fn upload_from(&self, _local: PathBuf, _remote: String, _offset: u64, _progress: Progress) -> BoxFuture<'_, ()> {
+        Box::pin(async { anyhow::bail!("{}", t!("This protocol cannot resume a transfer", "Ce protocole ne sait pas reprendre un transfert")) })
+    }
+}
+
+/// Fichier en cours de téléchargement, renommé à la fin : « rapport.pdf.partiel ».
+pub fn partial_path(local: &std::path::Path) -> PathBuf {
+    let mut name = local.file_name().map(|n| n.to_os_string()).unwrap_or_default();
+    name.push(".partiel");
+    local.with_file_name(name)
 }
 
 pub enum Outcome {

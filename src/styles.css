@@ -932,6 +932,7 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 
 /* Assistance à distance (Portunia Assist) */
 .assist-url { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.assist-logo { width: 48px; height: 48px; object-fit: contain; border-radius: 8px; background: var(--hover); }
 .assist-url code { padding: 6px 9px; border-radius: 6px; background: var(--hover); overflow-wrap: anywhere; }
 .assist-form { display: flex; flex-direction: column; gap: 14px; }
 .assist-say { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--hover); font-size: 13px; }
@@ -956,12 +957,13 @@ strong.lvl-warn, .lvl-warn:not(.dash-fill) { color: #d29922; } strong.lvl-crit, 
 .tq-rule { height: 28px; padding: 0 6px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--field); color: var(--text); font: inherit; font-size: 12px; }
 .tq-list { max-height: 150px; overflow-y: auto; padding: 0 8px 8px; }
 .tq-empty { margin: 0; padding: 2px 4px 4px; }
-.tq-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(60px, 160px) minmax(0, max-content) 26px; gap: 10px; align-items: center; min-height: 28px; padding: 0 4px; border-radius: 6px; font-size: 13px; }
+.tq-row { display: grid; grid-template-columns: 18px minmax(0, 1fr) minmax(60px, 160px) minmax(0, max-content) minmax(26px, max-content); gap: 10px; align-items: center; min-height: 28px; padding: 0 4px; border-radius: 6px; font-size: 13px; }
 .tq-row:hover { background: var(--hover); }
 .tq-dir { display: grid; place-items: center; color: var(--muted); }
 .tq-bar { height: 4px; border-radius: 2px; background: var(--chip-bg); overflow: hidden; }
 .tq-bar > .bar-fill { display: block; }
 .tq-row.error .tq-status { color: var(--danger); }
+.tq-again { display: flex; gap: 4px; }
 .tq-row.cancelled, .tq-row.done { color: var(--text-2); }
 .tq-row.done .bar-fill { background: var(--ok, #3fb67a); }
 .tq-status { white-space: nowrap; font-variant-numeric: tabular-nums; }

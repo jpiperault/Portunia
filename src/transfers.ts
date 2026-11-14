@@ -20,6 +20,8 @@ interface Job {
   error?: string;
   started?: number;
   run: (cb: (p: TransferProgress) => void) => Promise<unknown>;
+  /** Reprise d'où le transfert s'était arrêté (édition Pro, protocoles qui le permettent). */
+  resume?: (cb: (p: TransferProgress) => void) => Promise<unknown>;
   after?: () => void;
 }
 
@@ -44,7 +46,7 @@ export class TransferQueue {
     this.render();
   }
 
-  add(job: Pick<Job, 'name' | 'direction' | 'target' | 'run' | 'after'>) {
+  add(job: Pick<Job, 'name' | 'direction' | 'target' | 'run' | 'after' | 'resume'>) {
     this.jobs.push({ ...job, done: 0, total: 0, state: 'waiting' });
     this.render();
     this.next();
@@ -132,6 +134,22 @@ export class TransferQueue {
       h('span', { class: 'tq-status muted small' }, status),
       j.state === 'waiting'
         ? h('button', { type: 'button', class: 'icon-btn sm', 'aria-label': t(`Cancel ${j.name}`, `Annuler ${j.name}`), title: t('Cancel', 'Annuler'), onclick: () => { j.state = 'cancelled'; this.render(); } }, icon('close', 12))
-        : h('span', { class: 'tq-gap' }));
+        : j.state === 'error'
+          ? h('span', { class: 'tq-again' },
+            j.resume ? h('button', { type: 'button', class: 'btn sm', title: t('Continue from where it stopped', 'Continuer d\'où il s\'était arrêté'), onclick: () => this.again(j, true) }, t('Resume', 'Reprendre')) : null,
+            h('button', { type: 'button', class: 'btn sm', title: t('Start again from the beginning', 'Recommencer depuis le début'), onclick: () => this.again(j, false) }, t('Retry', 'Réessayer')))
+          : h('span', { class: 'tq-gap' }));
+  }
+
+  /** Transfert en échec remis dans la file : repris là où il s'était arrêté, ou recommencé. */
+  private again(j: Job, resume: boolean) {
+    if (resume && j.resume) {
+      const resumeRun = j.resume;
+      j.run = resumeRun;
+    }
+    j.state = 'waiting';
+    j.error = undefined;
+    this.render();
+    this.next();
   }
 }

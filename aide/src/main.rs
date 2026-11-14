@@ -15,6 +15,7 @@
 mod display;
 mod input;
 mod relay;
+mod sysinfo;
 mod ui;
 
 use std::{net::SocketAddr, sync::Arc};

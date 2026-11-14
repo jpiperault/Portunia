@@ -708,6 +708,38 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     });
   };
 
+  /** Marque de Portunia Assistance (Gate 0.52) : nom et logo montrés à la personne aidée. */
+  const brandBlock = (a: any): HTMLElement => {
+    if (a.marque === undefined) return h('p', { class: 'muted small' }, t('Needs Portunia Gate 0.52 or later.', 'Demande Portunia Gate 0.52 ou suivante.'));
+    const name = input({ id: 'a-marque', value: a.marque ?? '', maxlength: 40, placeholder: 'ACME' });
+    let logo: string = a.logo ?? '';
+    const preview = h('img', { class: 'assist-logo', alt: '', hidden: !logo, src: logo ? `data:image/png;base64,${logo}` : '' }) as HTMLImageElement;
+    const file = h('input', { type: 'file', accept: 'image/png', class: 'input', 'aria-label': t('Logo (PNG)', 'Logo (PNG)') }) as HTMLInputElement;
+    const remove = small(t('Remove the logo', 'Retirer le logo'), () => { logo = ''; preview.hidden = true; remove.hidden = true; file.value = ''; });
+    remove.hidden = !logo;
+    file.addEventListener('change', async () => {
+      const chosen = file.files?.[0];
+      if (!chosen) return;
+      if (chosen.size > 96 * 1024) { host.toast(t('Logo: 96 KiB at most', 'Logo : 96 Kio au plus'), 'error'); file.value = ''; return; }
+      const bytes = new Uint8Array(await chosen.arrayBuffer());
+      let bin = '';
+      for (const x of bytes) bin += String.fromCharCode(x);
+      logo = btoa(bin);
+      preview.src = `data:image/png;base64,${logo}`;
+      preview.hidden = false;
+      remove.hidden = false;
+    });
+    const saveBrand = h('button', { class: 'btn primary', onclick: async () => {
+      try { await call('PUT', '/admin/assistance', { marque: name.value.trim(), logo }); host.toast(t('Brand saved: shown from the next assistance', 'Marque enregistrée : montrée dès la prochaine assistance')); reload(); } catch (e) { fail(e); }
+    } }, t('Save the brand', 'Enregistrer la marque'));
+    return h('div', { class: 'stack' },
+      h('p', { class: 'muted small' }, t('Portunia Assistance shows « Your company support » and its logo instead of Portunia, from the code screen on (Pro and Teams editions). PNG, 96 KiB and 512 × 512 pixels at most; a square image of 64 pixels or more looks best.', 'Portunia Assistance affiche « Assistance Votre entreprise » et son logo à la place de Portunia, dès l\'écran du code (éditions Pro et Équipes). PNG, 96 Kio et 512 × 512 pixels au plus ; une image carrée de 64 pixels ou plus rend le mieux.')),
+      field(t('Company name', 'Nom de l\'entreprise'), name, t('empty: Portunia', 'vide : Portunia')),
+      field(t('Logo (PNG)', 'Logo (PNG)'), file),
+      h('div', { class: 'assist-url' }, preview, remove),
+      h('div', {}, saveBrand));
+  };
+
   const SECTION_RENDER: Record<Section, () => Promise<HTMLElement>> = {
     etat: async () => {
       const { renderGateStatus } = await import('./gatestatus');
@@ -722,6 +754,22 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         h('td', {}, tg.secret === 'key' ? t('SSH key', 'Clé SSH') : tg.secret === 'password' ? t('Password', 'Mot de passe') : '—'),
         h('td', { title: tg.empreinte ?? '' }, tg.empreinte ? t('known', 'connue') : t('at first connection', 'à la 1ʳᵉ connexion')),
         actions(small(t('Edit', 'Modifier'), () => targetDialog(tg)),
+          ...(tg.protocole === 'rdp' ? [small(t('Confirm the fingerprint', 'Confirmer l\x27empreinte'), async () => {
+            // Gate 0.50 : en coffre, le mot de passe ne part vers le serveur qu\x27après cette confirmation.
+            const p = await call<{ empreinte: string; memorisee: string | null }>('GET', `/admin/cibles/${tg.id}/empreinte`).catch(fail);
+            if (!p) return;
+            const before = p.memorisee && p.memorisee !== p.empreinte ? t(`
+Remembered today: ${p.memorisee}`, `
+Mémorisée aujourd\x27hui : ${p.memorisee}`) : '';
+            if (!confirm(t(`${tg.nom} presents this certificate:
+${p.empreinte}${before}
+
+Compare it with the one of the server (Remote Desktop certificate). Remember it?`, `${tg.nom} présente ce certificat :
+${p.empreinte}${before}
+
+Comparez-la avec celle du serveur (certificat Bureau à distance). La mémoriser ?`))) return;
+            await call('POST', `/admin/cibles/${tg.id}/empreinte`, { empreinte: p.empreinte }).catch(fail); reload();
+          })] : []),
           small(t('Forget the fingerprint', 'Oublier l\'empreinte'), async () => {
             if (!confirm(t(`Forget the fingerprint of ${tg.nom}? Only do this after the server was reinstalled.`, `Oublier l'empreinte de ${tg.nom} ? À faire seulement après la réinstallation du serveur.`))) return;
             await call('POST', `/admin/cibles/${tg.id}/oublier-empreinte`).catch(fail); reload();
@@ -1448,7 +1496,9 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
         h('h3', {}, t('Who and for how long', 'Qui et combien de temps')),
         field(t('Group of helpers', 'Groupe des dépanneurs'), groupe, groupMissing ? t(`the group « ${a.groupe} » does not exist yet: create it in Groups and add the accounts to it`, `le groupe « ${a.groupe} » n'existe pas encore : créez-le dans Groupes et ajoutez-y les comptes`) : t('only its members can start an assistance from Portunia', 'seuls ses membres peuvent lancer une assistance depuis Portunia')),
         field(t('Maximum duration of an assistance', 'Durée maximale d\'une assistance'), duree),
-        h('div', {}, save));
+        h('div', {}, save),
+        h('h3', {}, t('Company name and logo', 'Nom et logo de l\'entreprise')),
+        brandBlock(a));
     },
 
     // Entrée RDP native (Gate 0.31) : mstsc, Remmina, FreeRDP ou Windows App avec un fichier .rdp à usage unique.

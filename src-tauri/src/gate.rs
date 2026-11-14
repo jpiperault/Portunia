@@ -1019,7 +1019,7 @@ fn assists() -> &'static Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSende
 }
 
 /// Fonctions de Portunia annoncées au programme de la personne aidée.
-const ASSIST_FEATURES: [&str; 6] = ["liaison", "discussion", "pause", "controle", "reprise", "fichiers"];
+const ASSIST_FEATURES: [&str; 8] = ["liaison", "discussion", "pause", "controle", "reprise", "fichiers", "ecrans", "infos"];
 
 /// Fichiers reçus pendant les assistances (« assistance:numéro » → fichier), pour Ouvrir et
 /// Enregistrer, même après la fin de la session.
@@ -1097,7 +1097,7 @@ pub fn gate_assist_file(app: AppHandle, assist: String, id: u32, dest: Option<St
 /// ou `{type: "fichier_annuler", id}`.
 #[tauri::command]
 pub fn gate_assist_send(assist: String, message: Value) -> CmdResult<()> {
-    let allowed = matches!(message["type"].as_str(), Some("message" | "demande_controle" | "fichier_annuler"));
+    let allowed = matches!(message["type"].as_str(), Some("message" | "demande_controle" | "fichier_annuler" | "ecran" | "demande_infos"));
     if !allowed {
         return Err(t!("Unknown message", "Message inconnu").into());
     }
@@ -1368,6 +1368,10 @@ pub async fn gate_assist(
                                         notify(json!({ "type": "pause", "actif": paused }));
                                     }
                                     Some("controle") => notify(json!({ "type": "controle", "actif": v["actif"].as_bool().unwrap_or(false) })),
+                                    // Écrans de la personne (plusieurs écrans) et informations du PC qu'elle a acceptées.
+                                    Some("ecrans") => notify(json!({ "type": "ecrans", "liste": v["liste"], "actuel": v["actuel"] })),
+                                    Some("infos") => notify(json!({ "type": "infos", "liste": v["liste"] })),
+                                    Some("infos_refusees") => notify(json!({ "type": "infos_refusees" })),
                                     _ => {}
                                 }
                             }

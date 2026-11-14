@@ -11,11 +11,11 @@ use anyhow::{anyhow, Result};
 use russh::client;
 use russh_sftp::client::SftpSession;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
     sync::Mutex,
 };
 
-use crate::connector::{BoxFuture, Progress, RemoteEntry, RemoteFiles};
+use crate::connector::{partial_path, BoxFuture, Progress, RemoteEntry, RemoteFiles};
 
 const CHUNK: usize = 256 * 1024;
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
@@ -129,14 +129,47 @@ impl<H: client::Handler> RemoteFiles for SftpFiles<H> {
             let sftp = self.session().await?;
             let mut source = sftp.open(remote).await.map_err(err)?;
             let total = source.metadata().await.ok().and_then(|m| m.size).unwrap_or(0);
-            let mut target = tokio::fs::File::create(&local).await?;
-            let result = copy(&mut source, &mut target, total, &progress).await;
+            // Écrit à côté puis renomme : jamais de fichier à moitié téléchargé sous son vrai nom ;
+            // en cas d'échec, la partie reçue reste (« .partiel ») pour une reprise.
+            let partial = partial_path(&local);
+            let mut target = tokio::fs::File::create(&partial).await?;
+            let result = copy(&mut source, &mut target, total, &progress, 0).await;
             drop(target);
-            if result.is_err() {
-                // Pas de fichier à moitié téléchargé.
-                let _ = tokio::fs::remove_file(&local).await;
-            }
-            result
+            finish_download(result, &partial, &local).await
+        })
+    }
+
+    fn download_from(&self, remote: String, local: PathBuf, offset: u64, progress: Progress) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            let sftp = self.session().await?;
+            let mut source = sftp.open(remote).await.map_err(err)?;
+            let total = source.metadata().await.ok().and_then(|m| m.size).unwrap_or(0);
+            let partial = partial_path(&local);
+            let have = tokio::fs::metadata(&partial).await.map(|m| m.len()).unwrap_or(0);
+            // La partie gardée fait foi ; plus longue que le fichier du serveur : tout recommence.
+            let offset = if have == offset && offset <= total { offset } else { 0 };
+            let mut target = if offset > 0 { tokio::fs::OpenOptions::new().append(true).open(&partial).await? } else { tokio::fs::File::create(&partial).await? };
+            source.seek(std::io::SeekFrom::Start(offset)).await?;
+            let result = copy(&mut source, &mut target, total, &progress, offset).await;
+            drop(target);
+            finish_download(result, &partial, &local).await
+        })
+    }
+
+    fn upload_from(&self, local: PathBuf, remote: String, offset: u64, progress: Progress) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            let sftp = self.session().await?;
+            let mut source = tokio::fs::File::open(&local).await?;
+            let total = source.metadata().await?.len();
+            let have = sftp.metadata(remote.clone()).await.ok().and_then(|m| m.size).unwrap_or(0);
+            let offset = if have == offset && offset <= total { offset } else { 0 };
+            let flags = if offset > 0 { russh_sftp::protocol::OpenFlags::WRITE } else { russh_sftp::protocol::OpenFlags::CREATE | russh_sftp::protocol::OpenFlags::TRUNCATE | russh_sftp::protocol::OpenFlags::WRITE };
+            let mut target = sftp.open_with_flags(remote, flags).await.map_err(err)?;
+            target.seek(std::io::SeekFrom::Start(offset)).await?;
+            source.seek(std::io::SeekFrom::Start(offset)).await?;
+            copy(&mut source, &mut target, total, &progress, offset).await?;
+            target.shutdown().await?;
+            Ok(())
         })
     }
 
@@ -146,7 +179,7 @@ impl<H: client::Handler> RemoteFiles for SftpFiles<H> {
             let mut source = tokio::fs::File::open(&local).await?;
             let total = source.metadata().await?.len();
             let mut target = sftp.create(remote).await.map_err(err)?;
-            copy(&mut source, &mut target, total, &progress).await?;
+            copy(&mut source, &mut target, total, &progress, 0).await?;
             target.shutdown().await?;
             Ok(())
         })
@@ -178,15 +211,33 @@ impl<H: client::Handler> RemoteFiles for SftpFiles<H> {
     }
 }
 
-async fn copy<R, W>(source: &mut R, target: &mut W, total: u64, progress: &Progress) -> Result<()>
+/// Fin d'un téléchargement : complet, la partie reçue prend le vrai nom ; sinon elle reste
+/// pour une reprise (rien à garder si rien n'est arrivé).
+async fn finish_download(result: Result<()>, partial: &std::path::Path, local: &std::path::Path) -> Result<()> {
+    match result {
+        Ok(()) => {
+            tokio::fs::rename(partial, local).await?;
+            Ok(())
+        }
+        Err(e) => {
+            if tokio::fs::metadata(partial).await.map(|m| m.len()).unwrap_or(0) == 0 {
+                let _ = tokio::fs::remove_file(partial).await;
+            }
+            Err(e)
+        }
+    }
+}
+
+/// Copie avec avancement ; `start` : octets déjà transférés (reprise).
+async fn copy<R, W>(source: &mut R, target: &mut W, total: u64, progress: &Progress, start: u64) -> Result<()>
 where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
     let mut buf = vec![0u8; CHUNK];
-    let mut done = 0u64;
+    let mut done = start;
     let mut last = Instant::now();
-    progress(0, total);
+    progress(start, total);
     loop {
         let n = source.read(&mut buf).await?;
         if n == 0 {
@@ -214,4 +265,66 @@ fn join(dir: &str, name: &str) -> String {
 
 fn err(e: impl std::fmt::Display) -> anyhow::Error {
     anyhow!("{e}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connector::RemoteFiles;
+
+    struct AnyKey;
+    impl client::Handler for AnyKey {
+        type Error = russh::Error;
+        async fn check_server_key(&mut self, _: &russh::keys::PublicKeyOrCertificate) -> Result<bool, Self::Error> {
+            Ok(true)
+        }
+    }
+
+    /// Reprise réelle contre un serveur SFTP d'essai (banc) :
+    /// SFTP_ESSAI=root@hôte:22 SFTP_CLE=~/.ssh/cle cargo test --lib reprise_reelle -- --ignored
+    #[tokio::test]
+    #[ignore]
+    async fn reprise_reelle() {
+        let target = std::env::var("SFTP_ESSAI").expect("SFTP_ESSAI");
+        let (user, addr) = target.split_once('@').unwrap();
+        let key = russh::keys::load_secret_key(std::env::var("SFTP_CLE").expect("SFTP_CLE"), None).unwrap();
+        let config = Arc::new(client::Config::default());
+        let mut handle = client::connect(config, addr, AnyKey).await.unwrap();
+        let hash = handle.best_supported_rsa_hash().await.ok().flatten().flatten();
+        assert!(handle.authenticate_publickey(user, russh::keys::PrivateKeyWithHashAlg::new(Arc::new(key), hash)).await.unwrap().success());
+        let files = SftpFiles::new(Arc::new(handle));
+        let dir = std::env::temp_dir().join(format!("portunia-reprise-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let data: Vec<u8> = (0..3_000_000u32).map(|i| (i.wrapping_mul(2654435761) >> 24) as u8).collect();
+        let local = dir.join("source.bin");
+        std::fs::write(&local, &data).unwrap();
+        let remote = "/tmp/portunia-reprise.bin".to_string();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let s = seen.clone();
+        let progress: Progress = Arc::new(move |d, t| s.lock().unwrap().push((d, t)));
+        // Envoi complet, puis serveur tronqué à 1 Mo et envoi repris.
+        files.upload(local.clone(), remote.clone(), progress.clone()).await.unwrap();
+        {
+            let sftp = files.session().await.unwrap();
+            let mut f = sftp.open_with_flags(remote.clone(), russh_sftp::protocol::OpenFlags::WRITE | russh_sftp::protocol::OpenFlags::TRUNCATE).await.unwrap();
+            f.write_all(&data[..1_000_000]).await.unwrap();
+            f.shutdown().await.unwrap();
+        }
+        seen.lock().unwrap().clear();
+        files.upload_from(local.clone(), remote.clone(), 1_000_000, progress.clone()).await.unwrap();
+        assert_eq!(seen.lock().unwrap().first().copied(), Some((1_000_000, 3_000_000)), "l'avancement part de la reprise");
+        // Téléchargement repris depuis une partie de 1,5 Mo.
+        let back = dir.join("retour.bin");
+        std::fs::write(partial_path(&back), &data[..1_500_000]).unwrap();
+        files.download_from(remote.clone(), back.clone(), 1_500_000, progress.clone()).await.unwrap();
+        assert_eq!(std::fs::read(&back).unwrap(), data, "fichier reconstitué à l'identique");
+        assert!(!partial_path(&back).exists(), "la partie a pris le vrai nom");
+        // Téléchargement complet ordinaire : pas de « .partiel » qui reste.
+        let full = dir.join("complet.bin");
+        files.download(remote.clone(), full.clone(), progress).await.unwrap();
+        assert_eq!(std::fs::read(&full).unwrap(), data);
+        assert!(!partial_path(&full).exists());
+        let _ = files.remove(remote, false).await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

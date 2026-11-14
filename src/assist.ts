@@ -115,6 +115,9 @@ export type AssistEvent =
   | { type: 'reconnexion'; actif: boolean }
   | { type: 'qualite'; ms: number }
   | { type: 'fichiers'; liste: AssistFile[]; max: number | null }
+  | { type: 'ecrans'; liste: { nom: string; largeur: number; hauteur: number; principal: boolean }[]; actuel: number }
+  | { type: 'infos'; liste: [string, string][] }
+  | { type: 'infos_refusees' }
   | { type: 'fin'; raison: string };
 
 /** Un fichier de la session d'assistance (voir assist-proto/src/transfer.rs). */
@@ -130,7 +133,7 @@ export interface AssistFile {
   programme: boolean;
 }
 
-type AssistMessage = { type: 'message'; texte: string } | { type: 'demande_controle' } | { type: 'fichier_annuler'; id: number };
+type AssistMessage = { type: 'message'; texte: string } | { type: 'demande_controle' } | { type: 'fichier_annuler'; id: number } | { type: 'ecran'; index: number } | { type: 'demande_infos' };
 
 /** Ce que le bandeau demande pour les fichiers. */
 export interface AssistFiles {
@@ -158,6 +161,9 @@ export class AssistPanel {
   private readonly askBtn = h('button', { type: 'button', class: 'btn small', hidden: true }, icon('pointer', 14), t('Ask for control', 'Demander le contrôle')) as HTMLButtonElement;
   private readonly chatBtn = h('button', { type: 'button', class: 'btn small', hidden: true, 'aria-expanded': 'false' }, icon('chat', 14), t('Chat', 'Discussion')) as HTMLButtonElement;
   private readonly fileBtn = h('button', { type: 'button', class: 'btn small', hidden: true }, icon('upload', 14), t('Send a file', 'Envoyer un fichier')) as HTMLButtonElement;
+  /** Plusieurs écrans chez la personne : celui qu'on regarde. */
+  private readonly screenSel = h('select', { class: 'input small assist-screen', hidden: true, 'aria-label': t('Screen shown', 'Écran montré') }) as HTMLSelectElement;
+  private readonly infoBtn = h('button', { type: 'button', class: 'btn small', hidden: true, title: t('The person sees the list and accepts before it is sent', 'La personne voit la liste et accepte avant l\'envoi') }, icon('desktop', 14), t('PC details', 'Infos du PC')) as HTMLButtonElement;
   /** Voile affiché pendant qu'on glisse des fichiers sur l'écran. */
   readonly drop = h('div', { class: 'assist-drop', hidden: true });
   private readonly cards = new Map<number, HTMLElement>();
@@ -177,7 +183,15 @@ export class AssistPanel {
 
   constructor(private readonly send: (m: AssistMessage) => Promise<void>, private readonly notify: (m: string, kind?: 'info' | 'error') => void, private readonly files: AssistFiles) {
     this.chatBtn.append(this.badge);
-    this.bar.append(h('span', { class: 'assist-dot' }), this.status, this.quality, h('span', { class: 'spacer' }), this.askBtn, this.fileBtn, this.chatBtn);
+    this.bar.append(h('span', { class: 'assist-dot' }), this.status, this.quality, h('span', { class: 'spacer' }), this.screenSel, this.askBtn, this.infoBtn, this.fileBtn, this.chatBtn);
+    this.screenSel.addEventListener('change', () => {
+      this.send({ type: 'ecran', index: Number(this.screenSel.value) }).catch((e) => this.notify(String(e), 'error'));
+    });
+    this.infoBtn.addEventListener('click', () => {
+      this.send({ type: 'demande_infos' })
+        .then(() => this.notify(t('Request sent: the person sees the list and accepts or declines.', 'Demande envoyée : la personne voit la liste puis accepte ou refuse.')))
+        .catch((e) => this.notify(String(e), 'error'));
+    });
     this.fileBtn.addEventListener('click', async () => {
       if (this.fileBtn.getAttribute('aria-disabled') === 'true') return this.notify(this.fileBtn.title, 'error');
       const chosen = await pickFiles({ multiple: true, directory: false, title: t('Files to send to the person', 'Fichiers à envoyer à la personne') });
@@ -223,6 +237,16 @@ export class AssistPanel {
         }
         return;
       case 'fichiers': this.showFiles(e.liste, e.max); return;
+      case 'ecrans':
+        this.screenSel.replaceChildren(...e.liste.map((s, i) => h('option', { value: String(i), selected: i === e.actuel },
+          `${t('Screen', 'Écran')} ${i + 1}${s.principal ? t(' (main)', ' (principal)') : ''} · ${s.largeur}×${s.hauteur}`)));
+        this.screenSel.hidden = e.liste.length < 2;
+        return;
+      case 'infos':
+        this.addMessage(false, [t('PC details sent by the person:', 'Informations du PC envoyées par la personne :'), ...e.liste.map(([k, v]) => `• ${k} : ${v}`)].join('\n'));
+        this.toggleChat(true);
+        return;
+      case 'infos_refusees': this.notify(t('The person declined to send the PC details.', 'La personne a refusé d\'envoyer les informations du PC.')); return;
       case 'fin': this.ended = e.raison || t('Assistance ended.', 'Assistance terminée.'); this.reconnecting = false; break;
     }
     this.render();
@@ -328,6 +352,8 @@ export class AssistPanel {
     this.askBtn.hidden = !!this.ended || this.control || !this.features.includes('controle');
     this.askBtn.disabled = this.asked || this.paused || this.reconnecting;
     this.chatBtn.hidden = !this.features.includes('discussion');
+    this.infoBtn.hidden = !!this.ended || !this.features.includes('infos');
+    if (this.ended) this.screenSel.hidden = true;
     // Programme de la personne trop ancien (avant 0.82) : le bouton reste visible, grisé, avec la raison.
     const oldProgram = this.started && !this.ended && !this.features.includes('fichiers');
     this.fileBtn.hidden = !this.acceptsFiles() && !oldProgram;

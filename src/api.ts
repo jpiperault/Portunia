@@ -442,7 +442,7 @@ export function connectAssist(id: string, code: string, assist: string, cols: nu
 }
 
 /** Message de l'onglet d'assistance vers la personne aidée (discussion, demande de contrôle, annulation d'un fichier). */
-export function assistSend(assist: string, message: { type: 'message'; texte: string } | { type: 'demande_controle' } | { type: 'fichier_annuler'; id: number }) {
+export function assistSend(assist: string, message: { type: 'message'; texte: string } | { type: 'demande_controle' } | { type: 'fichier_annuler'; id: number } | { type: 'ecran'; index: number } | { type: 'demande_infos' }) {
   return invoke<void>('gate_assist_send', { assist, message });
 }
 

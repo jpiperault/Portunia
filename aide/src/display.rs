@@ -30,6 +30,67 @@ const MIN_FRAME: Duration = Duration::from_millis(33);
 const GDI_FAST: Duration = Duration::from_millis(66);
 const GDI_IDLE: Duration = Duration::from_millis(250);
 
+/// Écran montré au dépanneur (rang dans `screens()` : le principal d'abord).
+pub static SCREEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// Écran changé : la capture repart sur le nouveau.
+static SWITCH: AtomicBool = AtomicBool::new(false);
+/// Position et taille de l'écran montré, sur le bureau de Windows (x, y, largeur, hauteur).
+static SHOWN: Mutex<(i32, i32, i32, i32)> = Mutex::new((0, 0, 0, 0));
+
+/// Un écran du PC.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScreenInfo {
+    pub name: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub primary: bool,
+}
+
+/// Écrans du PC : le principal d'abord, puis de gauche à droite.
+pub fn screens() -> Vec<ScreenInfo> {
+    let mut list: Vec<ScreenInfo> = xcap::Monitor::all()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|m| {
+            Some(ScreenInfo {
+                name: m.name().unwrap_or_default(),
+                x: m.x().ok()?,
+                y: m.y().ok()?,
+                width: m.width().ok()? as i32,
+                height: m.height().ok()? as i32,
+                primary: m.is_primary().unwrap_or(false),
+            })
+        })
+        .collect();
+    list.sort_by_key(|s| (!s.primary, s.x, s.y));
+    list
+}
+
+/// Montre cet écran au dépanneur ; faux s'il n'existe pas.
+pub fn select(index: usize) -> bool {
+    if index >= screens().len() {
+        return false;
+    }
+    SCREEN.store(index, Ordering::Relaxed);
+    SWITCH.store(true, Ordering::Relaxed);
+    true
+}
+
+/// Écran montré : position et taille sur le bureau (0 partout avant la première capture).
+pub fn shown() -> (i32, i32, i32, i32) {
+    *SHOWN.lock().unwrap()
+}
+
+/// L'écran choisi, ou le principal s'il a disparu ; retenu pour la souris et le cadre.
+fn chosen() -> Option<ScreenInfo> {
+    let list = screens();
+    let s = list.get(SCREEN.load(Ordering::Relaxed)).or(list.first()).cloned()?;
+    *SHOWN.lock().unwrap() = (s.x, s.y, s.width, s.height);
+    Some(s)
+}
+
 /// D'où vient l'image.
 #[derive(Clone, Copy)]
 pub enum Source {
@@ -238,9 +299,16 @@ struct Gdi {
 }
 
 impl Gdi {
-    fn new() -> Result<Self> {
+    fn new(screen: Option<&ScreenInfo>) -> Result<Self> {
         let monitors = xcap::Monitor::all()?;
-        let monitor = monitors.iter().find(|m| m.is_primary().unwrap_or(false)).or(monitors.first()).cloned().ok_or_else(|| anyhow!("aucun écran"))?;
+        let wanted = |m: &&xcap::Monitor| screen.is_some_and(|s| m.x().ok() == Some(s.x) && m.y().ok() == Some(s.y));
+        let monitor = monitors
+            .iter()
+            .find(wanted)
+            .or_else(|| monitors.iter().find(|m| m.is_primary().unwrap_or(false)))
+            .or(monitors.first())
+            .cloned()
+            .ok_or_else(|| anyhow!("aucun écran"))?;
         let size = (monitor.width()? as usize, monitor.height()? as usize);
         Ok(Self { monitor, size, previous: Vec::new(), calm: 0 })
     }
@@ -303,7 +371,10 @@ fn win_cursor() -> Option<(u16, u16)> {
     let mut p = POINT::default();
     // SAFETY : simple lecture de la position du pointeur.
     unsafe { GetCursorPos(&mut p).ok()? };
-    (p.x >= 0 && p.y >= 0).then_some((p.x as u16, p.y as u16))
+    // Relative à l'écran montré ; ailleurs, pas de pointeur à montrer.
+    let (ox, oy, w, h) = shown();
+    let (x, y) = (p.x - ox, p.y - oy);
+    (x >= 0 && y >= 0 && (w == 0 || (x < w && y < h))).then_some((x as u16, y as u16))
 }
 
 #[cfg(windows)]
@@ -351,8 +422,8 @@ mod dxgi {
     }
 
     impl Duplication {
-        /// Écran principal (celui qui contient le point 0,0).
-        pub fn new() -> Result<Self> {
+        /// Écran à cette position du bureau (le principal est en 0,0).
+        pub fn new(at: (i32, i32)) -> Result<Self> {
             // SAFETY : appels COM classiques ; les objets rendus sont gardés par leurs interfaces.
             unsafe {
                 let factory: IDXGIFactory1 = CreateDXGIFactory1()?;
@@ -364,7 +435,7 @@ mod dxgi {
                         j += 1;
                         let desc = output.GetDesc()?;
                         let r = desc.DesktopCoordinates;
-                        if !desc.AttachedToDesktop.as_bool() || r.left != 0 || r.top != 0 {
+                        if !desc.AttachedToDesktop.as_bool() || r.left != at.0 || r.top != at.1 {
                             continue;
                         }
                         let mut device = None;
@@ -396,7 +467,7 @@ mod dxgi {
                         });
                     }
                 }
-                Err(anyhow!("aucun écran principal pour la duplication du bureau"))
+                Err(anyhow!("écran introuvable pour la duplication du bureau"))
             }
         }
 
@@ -603,12 +674,13 @@ fn grabber(source: Source) -> Result<Box<dyn Grabber>> {
     if let Source::Pattern = source {
         return Ok(Box::new(Pattern { tick: 0 }));
     }
+    let screen = chosen();
     #[cfg(windows)]
-    match dxgi::Duplication::new() {
+    match dxgi::Duplication::new(screen.as_ref().map(|s| (s.x, s.y)).unwrap_or((0, 0))) {
         Ok(d) => return Ok(Box::new(d)),
         Err(e) => tracing::info!("duplication du bureau impossible, capture GDI : {e:#}"),
     }
-    Ok(Box::new(Gdi::new()?))
+    Ok(Box::new(Gdi::new(screen.as_ref())?))
 }
 
 pub struct Display {
@@ -635,6 +707,10 @@ fn capture(source: Source, shared: Arc<Shared>) {
     let mut was_paused = false;
     let mut last = Instant::now() - MIN_FRAME;
     while !shared.stop.load(Ordering::Relaxed) {
+        // Autre écran demandé : la capture repart dessus (taille nouvelle : redimensionnement).
+        if SWITCH.swap(false, Ordering::Relaxed) {
+            grab = None;
+        }
         if PAUSED.load(Ordering::Relaxed) {
             was_paused = true;
             std::thread::sleep(Duration::from_millis(100));

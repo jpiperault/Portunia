@@ -28,7 +28,16 @@ use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 type Ws = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
 /// Fonctions de ce programme, annoncées au dépanneur avec l'accord.
-const FEATURES: [&str; 6] = ["liaison", "discussion", "pause", "controle", "reprise", "fichiers"];
+const FEATURES: [&str; 8] = ["liaison", "discussion", "pause", "controle", "reprise", "fichiers", "ecrans", "infos"];
+
+/// Écrans du PC pour le dépanneur, avec celui qui est montré.
+fn screens_message() -> Value {
+    let list: Vec<Value> = crate::display::screens()
+        .iter()
+        .map(|s| json!({ "nom": s.name, "largeur": s.width, "hauteur": s.height, "principal": s.primary }))
+        .collect();
+    json!({ "type": "ecrans", "liste": list, "actuel": crate::display::SCREEN.load(Ordering::Relaxed) })
+}
 /// Durée pendant laquelle une session coupée peut reprendre.
 const RESUME_FOR: Duration = Duration::from_secs(120);
 
@@ -45,6 +54,8 @@ pub enum Command {
     /// Accepter ou refuser un fichier proposé par le dépanneur.
     FileAnswer(u32, bool),
     FileCancel(u32),
+    /// Envoyer (après accord de la personne) ou refuser les informations du PC.
+    SendInfo(bool),
 }
 
 /// Ce qui arrive pendant la session.
@@ -62,6 +73,10 @@ pub enum Event {
     Quality(Duration),
     /// Fichiers de la session (tous, dans l'ordre), et taille maximale d'un fichier.
     Files(Vec<Snapshot>, Option<u64>),
+    /// Le dépanneur demande les informations du PC : la liste, montrée avant l'accord.
+    InfoRequested(Vec<(String, String)>),
+    /// Le dépanneur montre un autre écran (le cadre suit).
+    ScreenShown,
 }
 
 /// Bilan de fin, montré à la personne.
@@ -84,6 +99,8 @@ pub trait Ui: Send {
     /// Session en cours (barre de session).
     fn connected(&mut self, who: &str, control: bool);
     fn event(&mut self, event: Event);
+    /// Nom et logo (PNG) de l'entreprise, réglés sur la Gate (édition Pro) : montrés à la place de Portunia.
+    fn brand(&mut self, _name: &str, _logo: Option<Vec<u8>>) {}
     /// Fin de la session, avec son bilan.
     fn ended(&mut self, summary: &Summary);
     /// Fichiers proposés acceptés d'office (essai seulement).
@@ -119,6 +136,11 @@ pub async fn run(url: &str, preset: Option<Code>, ui: &mut dyn Ui, serve: impl F
                     let v: Value = serde_json::from_str(&t)?;
                     match v["type"].as_str() {
                         Some("place") => {
+                            if let Some(b) = v.get("marque").filter(|b| b.is_object()) {
+                                use base64::Engine;
+                                let logo = b["logo"].as_str().filter(|l| !l.is_empty()).and_then(|l| base64::engine::general_purpose::STANDARD.decode(l).ok());
+                                ui.brand(b["nom"].as_str().unwrap_or_default(), logo);
+                            }
                             break (v["place"].as_str().unwrap_or_default().to_string(), v["attente_s"].as_u64().map(Duration::from_secs));
                         }
                         Some("erreur") => bail!("{}", v["message"].as_str().unwrap_or("?")),
@@ -226,6 +248,8 @@ async fn session(
     // Fichiers : rangés dans Téléchargements, limite annoncée par Portunia (offre gratuite sinon).
     let mut files = Transfers::new(Role::Agent, crate::ui::downloads_dir().join("Portunia Assistance"), Some(transfer::FREE_LIMIT), ui.auto_accept_files());
     let mut waiting_files: Vec<PathBuf> = Vec::new();
+    // Informations du PC lues pour le dépanneur, envoyées seulement après l'accord.
+    let mut pending_info: Option<Vec<(String, String)>> = None;
     let mut files_ok = false;
     let mut out: Vec<Vec<u8>> = Vec::new();
     let reason = 'session: loop {
@@ -282,6 +306,10 @@ async fn session(
                                     if files_ok {
                                         ui.event(Event::Files(files.all(), files.limit()));
                                     }
+                                    // Plusieurs écrans : la liste, pour passer de l'un à l'autre.
+                                    if peer_features.iter().any(|f| f == "ecrans") {
+                                        out.push(send_control(link, screens_message()));
+                                    }
                                     for p in std::mem::take(&mut waiting_files).into_iter().filter(|_| files_ok) {
                                         if let Ok(o) = files.offer(&p) {
                                             out.push(send_control(link, o));
@@ -298,6 +326,16 @@ async fn session(
                                         summary.messages += 1;
                                         ui.event(Event::Message(t.chars().take(4000).collect()));
                                     }
+                                }
+                                Some("ecran") => {
+                                    if crate::display::select(v["index"].as_u64().unwrap_or(0) as usize) {
+                                        out.push(send_control(link, screens_message()));
+                                        ui.event(Event::ScreenShown);
+                                    }
+                                }
+                                Some("demande_infos") => {
+                                    pending_info = Some(crate::sysinfo::collect());
+                                    ui.event(Event::InfoRequested(pending_info.clone().unwrap_or_default()));
                                 }
                                 Some("demande_controle") => {
                                     if !crate::input::CONTROL.load(Ordering::Relaxed) {
@@ -333,6 +371,14 @@ async fn session(
                         summary.control |= on;
                         let f = send_control(link, json!({ "type": "controle", "actif": on }));
                         ui.event(Event::Control(on));
+                        if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
+                    }
+                    Some(Command::SendInfo(yes)) => {
+                        let msg = match (yes, pending_info.take()) {
+                            (true, Some(list)) => json!({ "type": "infos", "liste": list.iter().map(|(k, v)| json!([k, v])).collect::<Vec<_>>() }),
+                            _ => json!({ "type": "infos_refusees" }),
+                        };
+                        let f = send_control(link, msg);
                         if tx.send(Message::Binary(f.into())).await.is_err() { break true; }
                     }
                     Some(Command::Message(text)) => {

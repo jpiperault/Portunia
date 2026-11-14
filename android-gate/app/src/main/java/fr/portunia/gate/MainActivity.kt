@@ -111,11 +111,16 @@ class MainActivity : Activity() {
         val link = intent?.data?.let { address(it.toString()) }
         if (link != null) prefs.edit().putString("adresse", link).apply()
         val b = base
-        if (b == null) setup() else portal(b)
+        if (b == null) setup() else portal(b, intent?.getStringExtra("chemin"))
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Notification d'une demande d'accès : le portail sur la liste « À décider ».
+        intent.getStringExtra("chemin")?.let { path ->
+            if (path.startsWith("/") && !path.startsWith("//")) base?.let { web?.loadUrl(it + path) }
+            return
+        }
         val link = intent.data?.let { address(it.toString()) } ?: return
         if (link == base) return
         AlertDialog.Builder(this)
@@ -347,7 +352,7 @@ class MainActivity : Activity() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    private fun portal(addr: String) {
+    private fun portal(addr: String, path: String? = null) {
         hideOverlay()
         val w = web ?: WebView(this).also { w ->
             web = w
@@ -445,7 +450,8 @@ class MainActivity : Activity() {
             }
         }
         w.visibility = View.VISIBLE
-        if (deviceId() != null && hasKey()) locked() else w.loadUrl("$addr/?accueil")
+        val start = path?.takeIf { it.startsWith("/") && !it.startsWith("//") } ?: "/?accueil"
+        if (deviceId() != null && hasKey()) locked() else w.loadUrl("$addr$start")
     }
 
     // ---------- Empreinte : téléphone enrôlé ----------
@@ -456,6 +462,20 @@ class MainActivity : Activity() {
         fun connecte() {
             // Gate antérieure à la 0.49 : pas de jeton, l'enrôlement y est encore permis.
             runOnUiThread { try { offer() } catch (_: Exception) {} }
+        }
+
+        /** Compte approbateur (Gate 0.51) : notifications des demandes à décider. */
+        @JavascriptInterface
+        fun approbateur(enAttente: Int) {
+            runOnUiThread {
+                if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED && !prefs.getBoolean("notifications-demandees", false)) {
+                    prefs.edit().putBoolean("notifications-demandees", true).apply()
+                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 7)
+                }
+                ApprovalJob.schedule(this@MainActivity)
+            }
+            // Ce qui est déjà affiché dans le portail ne sera pas notifié une seconde fois.
+            background { ApprovalJob.check(this@MainActivity) }
         }
 
         /** Connexion avec mot de passe et code : jeton d'enrôlement remis par la Gate (0.49). */
