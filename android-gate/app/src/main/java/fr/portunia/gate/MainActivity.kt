@@ -99,6 +99,8 @@ class MainActivity : Activity() {
     /** Agent utilisateur de la WebView, repris par les requêtes de l'application. */
     private var userAgent = "PortuniaGate/${BuildConfig.VERSION_NAME}"
     private var offered = false
+    /** Jeton d'enrôlement remis par la dernière connexion avec code (Gate 0.49). */
+    private var enrolToken: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -452,7 +454,17 @@ class MainActivity : Activity() {
         /** Connexion par mot de passe et code réussie dans le portail. */
         @JavascriptInterface
         fun connecte() {
+            // Gate antérieure à la 0.49 : pas de jeton, l'enrôlement y est encore permis.
             runOnUiThread { try { offer() } catch (_: Exception) {} }
+        }
+
+        /** Connexion avec mot de passe et code : jeton d'enrôlement remis par la Gate (0.49). */
+        @JavascriptInterface
+        fun connecteAvec(jeton: String) {
+            runOnUiThread {
+                enrolToken = jeton
+                try { offer() } catch (_: Exception) {}
+            }
         }
     }
 
@@ -575,7 +587,8 @@ class MainActivity : Activity() {
         withFingerprint(t("Enable fingerprint sign-in", "Activer la connexion par empreinte"), "enrolement".toByteArray(), {
             val name = Settings.Global.getString(contentResolver, Settings.Global.DEVICE_NAME)?.takeIf { it.isNotBlank() } ?: "${Build.MANUFACTURER} ${Build.MODEL}"
             background {
-                val (code, r) = http("POST", "/api/appareils", JSONObject().put("nom", name).put("cle", Base64.encodeToString(pub, Base64.NO_WRAP)))
+                val (code, r) = http("POST", "/api/appareils", JSONObject().put("nom", name).put("cle", Base64.encodeToString(pub, Base64.NO_WRAP)).put("jeton", enrolToken ?: ""))
+                enrolToken = null
                 runOnUiThread {
                     if (code == 200 && r.optString("id").isNotEmpty()) {
                         prefs.edit().putString("appareil:${base ?: ""}", r.getString("id")).apply()
