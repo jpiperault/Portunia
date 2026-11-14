@@ -340,8 +340,8 @@ export interface GateServer {
   nom: string;
   dossier: string;
   mode: 'coffre' | 'enregistre' | 'rebond';
-  /** Absent sur une Gate antérieur à la 0.6 : SSH. */
-  protocole?: 'ssh' | 'rdp' | 'http' | 'https';
+  /** Absent sur une Gate antérieur à la 0.6 : SSH. « sortie » : navigation par la Gate (0.48). */
+  protocole?: 'ssh' | 'rdp' | 'http' | 'https' | 'sortie';
   hote: string;
   port: number;
   compte: string | null;
@@ -351,6 +351,8 @@ export interface GateServer {
   rdp_natif?: boolean;
   /** Gate 0.33 : texte choisi par l'administrateur (vignette du portail, info-bulle). */
   description?: string;
+  /** Gate 0.48, sortie web : filtre appliqué par la Gate (domaines autorisés, vide : tous). */
+  sortie?: { domaines: string; bloques: string; ports: string } | null;
 }
 
 export interface Gate {
@@ -656,6 +658,38 @@ export function extCall<T>(extension: string, method: string, args: Record<strin
 }
 
 export const serverStats = (connectionId: string) => extCall<ServerStats>('dashboard', 'stats', { connectionId });
+
+// ---------- Navigation par la Gate (sortie web, Gate 0.48) ----------
+
+export interface Browsing {
+  id: string;
+  gateId: string;
+  server: string;
+  gateName: string;
+  port: number;
+  browser: string;
+  started: string;
+  open: number;
+  total: number;
+  refused: number;
+  bytes: number;
+}
+
+export type BrowseEvent =
+  | { type: 'started'; navigation: Browsing }
+  | { type: 'stats'; id: string; open: number; total: number; bytes: number; refused: number }
+  | { type: 'closed'; id: string; reason: string };
+
+export interface BrowserInfo { id: string; name: string; path: string }
+
+export const browse = {
+  /** Ouvre le navigateur dédié (ou une fenêtre de plus s'il est déjà ouvert pour cette sortie). */
+  start: (gateId: string, server: string, url: string | null, browser: string | null, onEvent: (e: BrowseEvent) => void) =>
+    extCall<Browsing>('browse', 'start', { gateId, server, url, browser }, onEvent),
+  stop: (id: string) => extCall<boolean>('browse', 'stop', { id }),
+  list: () => extCall<Browsing[]>('browse', 'list'),
+  browsers: () => extCall<BrowserInfo[]>('browse', 'browsers'),
+};
 
 // ---------- Commande sur plusieurs serveurs ----------
 

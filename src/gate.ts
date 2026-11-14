@@ -22,6 +22,10 @@ export const GATE_EXTENSION: Manifest = {
 export interface GateHost {
   toast(message: string, kind?: 'info' | 'error'): void;
   openServer(b: Gate, s: GateServer): void;
+  /** Sortie web : navigation en cours pour ce serveur, ouverture d'une adresse, arrêt. */
+  browsing(b: Gate, s: GateServer): { id: string; open: number; total: number; bytes: number } | undefined;
+  browseTo(b: Gate, s: GateServer): void;
+  stopBrowsing(id: string): void;
   sessions(): Session[];
   removeSessions(ids: string[]): Promise<void>;
   openAdmin(b: Gate): void;
@@ -276,7 +280,30 @@ export class GatePanel {
     return out;
   }
 
+  /** Sortie web : ouvre le navigateur dédié ; la ligne montre la navigation en cours. */
+  private renderEgress(b: Gate, s: GateServer, depth: number): HTMLElement {
+    const open = () => (b.connected ? this.host.openServer(b, s) : this.reconnect(b.id).then((ok) => ok && this.host.openServer(b, s)));
+    const now = this.host.browsing(b, s);
+    const filter = s.sortie?.domaines ? t(`Allowed sites: ${s.sortie.domaines.split(',').join(', ')}`, `Sites autorisés : ${s.sortie.domaines.split(',').join(', ')}`) : t('All of Internet (internal networks refused)', 'Tout Internet (réseaux internes refusés)');
+    const title = t(`Browse the Internet through the Gate, in a dedicated browser. Sites see the Gate's address; sites visited are logged.\n${filter}`, `Naviguer sur Internet par la Gate, dans un navigateur dédié. Les sites voient l'adresse de la Gate ; les sites visités sont journalisés.\n${filter}`);
+    const menu = (): (MenuItem | 'separator')[] => [
+      { label: now ? t('New window', 'Nouvelle fenêtre') : t('Browse', 'Naviguer'), icon: 'play', action: open },
+      { label: t('Open an address…', 'Ouvrir une adresse…'), icon: 'search', action: () => (b.connected ? this.host.browseTo(b, s) : this.reconnect(b.id).then((ok) => ok && this.host.browseTo(b, s))) },
+      ...(now ? [{ label: t('Stop browsing', 'Arrêter la navigation'), icon: 'power' as const, action: () => this.host.stopBrowsing(now.id) }] : []),
+    ];
+    const row = h('div', { class: `tree-row${b.connected ? '' : ' disabled'}` },
+      h('button', { class: 'tree-item session', style: `padding-left: ${16 + depth * 16}px`, title: s.description ? `${s.description}\n${title}` : title, onclick: open },
+        h('span', { class: `dot${now ? ' on' : ''}` }),
+        h('span', { class: 'grow ellipsis' }, s.nom),
+        now ? h('span', { class: 'muted small', title: t(`${now.total} connection(s) since the start`, `${now.total} connexion(s) depuis le début`) }, `${now.open} · ${bytesText(now.bytes)}`) : null,
+        h('span', { class: 'badge proto-rdp' }, t('BROWSE', 'NAVIGUER'))),
+      now ? h('button', { class: 'icon-btn sm', title: t('Stop browsing', 'Arrêter la navigation'), 'aria-label': t(`Stop browsing through ${s.nom}`, `Arrêter la navigation par ${s.nom}`), onclick: () => this.host.stopBrowsing(now.id) }, icon('close', 12)) : null);
+    row.addEventListener('contextmenu', (e) => { e.preventDefault(); showMenu(e.clientX, e.clientY, menu()); });
+    return row;
+  }
+
   private renderServer(b: Gate, s: GateServer, depth: number): HTMLElement {
+    if (s.protocole === 'sortie') return this.renderEgress(b, s, depth);
     const rdp = s.protocole === 'rdp';
     const web = s.protocole === 'http' || s.protocole === 'https';
     // Sans l'extension Bureau à distance (ou Interface web), le serveur reste visible mais ne s'ouvre pas.
@@ -313,6 +340,14 @@ ${command}`) : missing ? t('Enable the Remote Desktop extension to open this ser
     try { localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...this.collapsed])); } catch { /* ignoré */ }
     this.render();
   }
+}
+
+/** Octets lisibles : 812 o, 3,4 Mo… */
+function bytesText(n: number): string {
+  const units = [t('B', 'o'), t('KB', 'Ko'), t('MB', 'Mo'), t('GB', 'Go')];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return `${i ? n.toLocaleString(undefined, { maximumFractionDigits: 1 }) : n} ${units[i]}`;
 }
 
 function roleLabel(role: string): string {
@@ -599,7 +634,16 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     const webLoginField = field(t('Sign-in', 'Connexion'), webLogin, t('form: also for applications that sign in with JavaScript; HTTP authentication is also sent when the server asks for it', 'formulaire : aussi pour les applications qui se connectent en JavaScript ; l\'authentification HTTP est aussi envoyée si le serveur la demande'));
     const passField = field(t('Account\'s current password', 'Mot de passe actuel du compte'), secretPass, t('used only once', 'utilisé une seule fois'));
     const keyField = field(t('Private key (without passphrase)', 'Clé privée (sans phrase de passe)'), secretKey);
-    const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', t('Remote Desktop (RDP)', 'Bureau à distance (RDP)')], ['https', t('Web interface (HTTPS)', 'Interface web (HTTPS)')], ['http', t('Web interface (HTTP)', 'Interface web (HTTP)')]], cur?.protocole ?? 'ssh');
+    const proto = select('t-proto', [['ssh', 'SSH'], ['rdp', t('Remote Desktop (RDP)', 'Bureau à distance (RDP)')], ['https', t('Web interface (HTTPS)', 'Interface web (HTTPS)')], ['http', t('Web interface (HTTP)', 'Interface web (HTTP)')], ['sortie', t('Web egress (browsing through the Gate)', 'Sortie web (navigation par la Gate)')]], cur?.protocole ?? 'ssh');
+    // Sortie web (Gate 0.48) : filtre des sites, ni adresse, ni compte, ni secret.
+    const egressAllow = h('textarea', { id: 't-sortie-dom', class: 'input', rows: 3, spellcheck: 'false', placeholder: 'microsoft.com, github.com' }, (cur?.sortie_domaines ?? '').split(',').filter(Boolean).join(', ')) as HTMLTextAreaElement;
+    const egressBlock = h('textarea', { id: 't-sortie-bloq', class: 'input', rows: 2, spellcheck: 'false' }, (cur?.sortie_bloques ?? '').split(',').filter(Boolean).join(', ')) as HTMLTextAreaElement;
+    const egressPorts = input({ id: 't-sortie-ports', value: cur?.sortie_ports ?? '80,443' });
+    const egressFields = h('div', { class: 'stack', hidden: true },
+      h('p', { class: 'muted small' }, t('Web egress: members of the groups given this server browse the Internet from Portunia through the Gate, in a dedicated Edge or Chrome. Sites see the Gate\'s address; each site visited is logged (connections, bytes), not the pages (HTTPS stays encrypted). Internal networks (10.x, 192.168.x, 127.x…) are always refused. Gate 0.48 and later.', 'Sortie web : les membres des groupes qui ont ce serveur naviguent sur Internet depuis Portunia par la Gate, dans un Edge ou un Chrome dédié. Les sites voient l\'adresse de la Gate ; chaque site visité est journalisé (connexions, octets), pas les pages (le HTTPS reste chiffré). Les réseaux internes (10.x, 192.168.x, 127.x…) sont toujours refusés. Gate 0.48 et suivantes.')),
+      field(t('Allowed domains', 'Domaines autorisés'), egressAllow, t('comma separated; a domain covers its subdomains; empty: all of Internet', 'séparés par des virgules ; un domaine couvre ses sous-domaines ; vide : tout Internet')),
+      field(t('Blocked domains', 'Domaines bloqués'), egressBlock, t('refused even when allowed above', 'refusés même s\'ils sont autorisés plus haut')),
+      field(t('Allowed ports', 'Ports permis'), egressPorts, t('80,443 by default; * for all', '80,443 par défaut ; * pour tous')));
     const webNote = h('p', { class: 'muted small', hidden: true }, t('Web interface: administration consoles (vCenter, iDRAC, firewall…) and internal applications. The Gate relays every request and logs the pages opened. Opens from Portunia (dedicated window) and from the web portal. Recorded: credentials are typed in the page. Vault (Gate 0.32 and later): the Gate signs the user in with the vault account; the password never reaches the browser.', 'Interface web : consoles d\'administration (vCenter, iDRAC, pare-feu…) et applications internes. La Gate relaie chaque requête et journalise les pages ouvertes. S\'ouvre depuis Portunia (fenêtre dédiée) et depuis le portail web. Enregistré : les identifiants se tapent dans la page. Coffre (Gate 0.32 et suivantes) : la Gate connecte l\'utilisateur avec le compte du coffre ; le mot de passe n\'arrive jamais dans le navigateur.'));
     const rdpNote = h('p', { class: 'muted small', hidden: true }, t('Remote Desktop. Jump: the Gate relays the encrypted connection without reading it from Portunia; from the web portal it relays without recording. Recorded: the Gate relays and records the session, without seeing the password. In both, the user types their Windows credentials at each opening. Vault: the Gate signs in to Windows with the account it keeps (NLA required on the server) and records; the user never sees the password (Gate 0.29 and later).', 'Bureau à distance. Rebond : depuis Portunia, la Gate relaie la connexion chiffrée sans la lire ; depuis le portail web, elle relaie sans enregistrer. Enregistré : la Gate relaie et enregistre la session, sans voir le mot de passe. Dans les deux cas, l\'utilisateur tape ses identifiants Windows à chaque ouverture. Coffre : la Gate ouvre la session Windows avec le compte qu\'elle garde (NLA exigé sur le serveur) et enregistre ; l\'utilisateur ne voit jamais le mot de passe (Gate 0.29 et suivantes).'));
     // Port par défaut du protocole, tant que l'administrateur ne l'a pas changé.
@@ -607,7 +651,14 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       if (['22', '3389', '443', '80', ''].includes(port.value.trim())) port.value = ({ rdp: '3389', https: '443', http: '80' } as Record<string, string>)[proto.value] ?? '22';
       sync();
     });
+    const addressRow = h('div', { class: 'quick-row' }, field(t('Address', 'Adresse'), hote), field('Port', port));
     const sync = () => {
+      const egress = proto.value === 'sortie';
+      addressRow.hidden = egress;
+      egressFields.hidden = !egress;
+      mode.closest('label')!.hidden = egress;
+      compte.closest('label')!.hidden = egress;
+      if (egress) mode.value = 'enregistre';
       const rdp = proto.value === 'rdp';
       const web = proto.value === 'http' || proto.value === 'https';
       // Interface web : mode enregistré ou coffre (pas de rebond : la Gate lit chaque requête).
@@ -618,7 +669,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       for (const o of secretKind.options) o.disabled = (rdp || web) && ['generer', 'cle'].includes(o.value);
       if ((rdp || web) && ['generer', 'cle'].includes(secretKind.value)) secretKind.value = 'mot_de_passe';
       rdpNote.hidden = !rdp;
-      const vault = mode.value === 'coffre';
+      const vault = mode.value === 'coffre' && !egress;
       webLoginField.hidden = !(web && vault);
       secretKind.closest('label')!.hidden = !vault;
       passField.hidden = !vault || !['generer', 'mot_de_passe'].includes(secretKind.value);
@@ -630,7 +681,7 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     const body = [
       field(t('Protocol', 'Protocole'), proto),
       h('div', { class: 'row2' }, field(t('Name', 'Nom'), nom, t('no spaces', 'sans espace')), field(t('Folder', 'Dossier'), dossier)),
-      h('div', { class: 'quick-row' }, field(t('Address', 'Adresse'), hote), field('Port', port)),
+      addressRow, egressFields,
       field(t('Description', 'Description'), description, t('shown on the server\'s tile in the web portal and in Portunia; empty: automatic text (Gate 0.33)', 'affichée sur la vignette du serveur dans le portail web et dans Portunia ; vide : texte automatique (Gate 0.33)')),
       field('Mode', mode), rdpNote, webNote, field(t('Account on the server', 'Compte sur le serveur'), compte, t('required in vault mode; for Remote Desktop: DOMAIN\\account, offered at opening', 'obligatoire en mode coffre ; en Bureau à distance : DOMAINE\\compte, proposé à l\'ouverture')),
       webLoginField, field(t('Vault secret', 'Secret du coffre'), secretKind), passField, keyField,
@@ -642,7 +693,11 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
       const secret = kind === 'generer' ? { type: 'generer', mot_de_passe: secretPass.value }
         : kind === 'mot_de_passe' ? { type: 'mot_de_passe', valeur: secretPass.value }
         : kind === 'cle' ? { type: 'cle', valeur: secretKey.value } : undefined;
-      const payload = {
+      const egress = proto.value === 'sortie';
+      const payload = egress ? {
+        nom: nom.value.trim(), dossier: dossier.value.trim(), hote: 'internet', port: 443, mode: 'enregistre', compte: null, protocole: 'sortie',
+        description: description.value.trim(), sortie_domaines: egressAllow.value, sortie_bloques: egressBlock.value, sortie_ports: egressPorts.value.trim() || '80,443',
+      } : {
         nom: nom.value.trim(), dossier: dossier.value.trim(), hote: hote.value.trim(), port: Number(port.value) || (({ rdp: 3389, https: 443, http: 80 } as Record<string, number>)[proto.value] ?? 22),
         mode: mode.value, compte: compte.value.trim() || null, secret, protocole: proto.value,
         ...(proto.value === 'http' || proto.value === 'https' ? { connexion_web: webLogin.value } : {}),
@@ -661,8 +716,9 @@ export function renderGateAdmin(b: Gate, host: GateHost): HTMLElement {
     cibles: async () => {
       const { cibles } = await call<{ cibles: any[] }>('GET', '/admin/cibles');
       const rows = cibles.map((tg) => h('tr', {},
-        h('td', {}, h('strong', {}, tg.nom)), h('td', {}, tg.dossier), h('td', {}, h('code', {}, `${tg.hote}:${tg.port}`)),
-        h('td', {}, tg.protocole === 'rdp' ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null, h('span', { class: `badge mode-${tg.mode}` }, MODE_LABEL[tg.mode as GateServer['mode']])), h('td', {}, tg.compte ?? '—'),
+        h('td', {}, h('strong', {}, tg.nom)), h('td', {}, tg.dossier),
+        h('td', {}, tg.protocole === 'sortie' ? h('span', { class: 'muted small', title: tg.sortie_bloques ? t(`Blocked: ${tg.sortie_bloques}`, `Bloqués : ${tg.sortie_bloques}`) : '' }, `${tg.sortie_domaines || t('all of Internet', 'tout Internet')} · ports ${tg.sortie_ports}`) : h('code', {}, `${tg.hote}:${tg.port}`)),
+        h('td', {}, tg.protocole === 'rdp' ? h('span', { class: 'badge proto-rdp' }, 'RDP') : null, tg.protocole === 'sortie' ? h('span', { class: 'badge proto-rdp' }, t('EGRESS', 'SORTIE')) : h('span', { class: `badge mode-${tg.mode}` }, MODE_LABEL[tg.mode as GateServer['mode']])), h('td', {}, tg.compte ?? '—'),
         h('td', {}, tg.secret === 'key' ? t('SSH key', 'Clé SSH') : tg.secret === 'password' ? t('Password', 'Mot de passe') : '—'),
         h('td', { title: tg.empreinte ?? '' }, tg.empreinte ? t('known', 'connue') : t('at first connection', 'à la 1ʳᵉ connexion')),
         actions(small(t('Edit', 'Modifier'), () => targetDialog(tg)),

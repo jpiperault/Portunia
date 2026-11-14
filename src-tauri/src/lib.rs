@@ -7,6 +7,7 @@ mod biometric_mac;
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod appmenu;
 mod cloudflared;
+mod browse;
 mod gate;
 mod proxmox;
 mod commands;
@@ -232,6 +233,7 @@ fn handle_run_event(event: &tauri::RunEvent) {
     if matches!(event, tauri::RunEvent::Exit) {
         vault::clear_key();
         cloudflared::stop_all();
+        browse::stop_all();
     }
 }
 

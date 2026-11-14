@@ -195,6 +195,7 @@ impl Extensions {
                 Arc::new(crate::filesync::FileSync),
                 Arc::new(crate::recording::Recording),
                 Arc::new(crate::monitor::Alerts),
+                Arc::new(crate::browse::Browse),
             ],
         }
     }
@@ -304,6 +305,12 @@ mod tests {
         assert_eq!(pve.needs("console"), Some(Feature::Proxmox));
         assert!(m.iter().any(|m| m.id == "filesync" && m.feature == Some(Feature::FileSync)));
         assert!(m.iter().any(|m| m.id == "alerts" && m.feature == Some(Feature::MonitoringAlerts)));
+        // Navigation par la Gate : seul le départ demande la licence.
+        let browse = m.iter().find(|m| m.id == "browse").unwrap();
+        assert_eq!(browse.needs("start"), Some(Feature::GateBrowse));
+        for method in ["stop", "list", "browsers"] {
+            assert_eq!(browse.needs(method), None, "{method}");
+        }
         // Enregistrement : seul le départ demande la licence ; arrêter, revoir et effacer restent permis.
         let rec = m.iter().find(|m| m.id == "recording").unwrap();
         assert_eq!(rec.needs("start"), Some(Feature::SessionRecording));

@@ -180,7 +180,7 @@ async fn serve<H: client::Handler>(
 }
 
 /// Négociation SOCKS5 (RFC 1928), sans authentification, commande CONNECT seulement.
-async fn socks5_handshake(socket: &mut TcpStream) -> Result<(String, u16)> {
+pub(crate) async fn socks5_handshake(socket: &mut TcpStream) -> Result<(String, u16)> {
     let mut head = [0u8; 2];
     socket.read_exact(&mut head).await?;
     if head[0] != 5 {

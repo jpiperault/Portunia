@@ -701,6 +701,39 @@ pub async fn gate_connect(
     start_connection(&app, &state, "ssh", name, values, cols, rows, on_event).await
 }
 
+/// Accès à une sortie web de la Gate (0.48) : où joindre son SSH (direct ou par cloudflared),
+/// sous quel nom, avec quel jeton à usage unique, et l'empreinte attendue du serveur SSH.
+pub(crate) struct EgressRoute {
+    pub gate_name: String,
+    pub host: String,
+    pub port: u16,
+    pub user: String,
+    pub ticket: String,
+    pub fingerprint: String,
+}
+
+pub(crate) async fn egress_route(data_dir: &Path, id: &str, server: &str) -> Result<EgressRoute> {
+    let mut b = find(data_dir, id)?;
+    if b.ssh_fingerprint.is_empty() {
+        bail!(t!("Sign in to this Gate again: its SSH fingerprint is unknown", "Reconnectez-vous à cette Gate : l'empreinte de son SSH est inconnue"));
+    }
+    let path = format!("/serveurs/{}/ticket", urlencode(server));
+    let t = authed(data_dir, &mut b, reqwest::Method::POST, &path, None).await?;
+    if t["protocole"].as_str() != Some("sortie") {
+        bail!(t!(format!("{server} is not a web egress"), format!("{server} n'est pas une sortie web")));
+    }
+    let ticket = t["ticket"].as_str().ok_or_else(|| anyhow!(t!("The Gate gave no token", "La Gate n'a pas donné de jeton")))?.to_string();
+    let (host, port) = reach(data_dir, &b, Svc::Ssh).await?;
+    Ok(EgressRoute {
+        gate_name: b.name.clone(),
+        host,
+        port,
+        user: t["utilisateur_ssh"].as_str().unwrap_or_default().to_string(),
+        ticket,
+        fingerprint: b.ssh_fingerprint.clone(),
+    })
+}
+
 /// Entrée RDP native de la Gate (0.31) : fichier .rdp à usage unique, ouvert dans le client RDP
 /// du système (mstsc, Windows App). Mode enregistré : les identifiants Windows donnés ici sont
 /// confiés à la Gate, qui les garde en mémoire le temps du jeton et ouvre la session avec.

@@ -1,6 +1,6 @@
 import '@xterm/xterm/css/xterm.css';
 import './styles.css';
-import { api, assistFile, assistOffer, assistSend, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectProxmoxTerminal, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
+import { api, assistFile, assistOffer, assistSend, browse, BrowseEvent, Browsing, Gate, gates, GateServer, connectAssist, connectGate, connectProxmox, connectProxmoxTerminal, connectQuick, connectWith, ConnectResponse, errorText, Manifest, notes, Pve, Session, Snippet, TermEvent } from './api';
 import { GatePanel, GATE_EXTENSION, renderGateAdmin } from './gate';
 import { ProxmoxPanel, PROXMOX_EXTENSION } from './proxmox';
 import { ASSIST_EXTENSION, AssistPanel, openAssistDialog } from './assist';
@@ -225,6 +225,9 @@ const gateHealth = new Map<string, string>();
 const gatePanel = new GatePanel($('gates'), {
   toast,
   openServer: (b, s) => openGateServer(b, s),
+  browsing: (b, s) => [...browsings.values()].find((n) => n.gateId === b.id && n.server === s.nom),
+  browseTo: (b, s) => askBrowseAddress(b, s),
+  stopBrowsing: (id) => { browse.stop(id).catch((e) => toast(errorText(e), 'error')); },
   sessions: () => state.sessions,
   removeSessions: async (ids) => {
     for (const id of ids) {
@@ -251,8 +254,63 @@ const gatePanel = new GatePanel($('gates'), {
   clearFilter: () => { search.value = ''; state.filter = ''; renderTree(); },
 });
 
+// ---------- Navigation par la Gate (sortie web) ----------
+
+/** Navigations en cours, par identifiant (mises à jour par les évènements de l'extension). */
+const browsings = new Map<string, Browsing>();
+
+/** Ouvre le navigateur dédié de cette sortie web (une fenêtre de plus s'il est déjà ouvert). */
+async function startBrowsing(b: Gate, s: GateServer, url: string | null) {
+  if (!allows('gateBrowse')) {
+    toast(tr('Browsing through the Gate is part of the Pro edition', 'La navigation par la Gate fait partie de l’édition Pro'), 'error');
+    return;
+  }
+  const onEvent = (e: BrowseEvent) => {
+    if (e.type === 'started') browsings.set(e.navigation.id, e.navigation);
+    else if (e.type === 'stats') {
+      const n = browsings.get(e.id);
+      if (n) Object.assign(n, { open: e.open, total: e.total, bytes: e.bytes, refused: e.refused });
+    } else if (e.type === 'closed') {
+      browsings.delete(e.id);
+      toast(e.reason, /coup|cut|lost|perdue|aussitôt|at once/i.test(e.reason) ? 'error' : undefined);
+    }
+    gatePanel.render();
+  };
+  try {
+    const n = await browse.start(b.id, s.nom, url, null, onEvent);
+    if (!browsings.has(n.id)) browsings.set(n.id, n);
+    gatePanel.render();
+    toast(tr(`${n.browser} opened: browsing through ${b.name}`, `${n.browser} ouvert : navigation par ${b.name}`));
+  } catch (e) {
+    toast(errorText(e), 'error');
+  }
+}
+
+/** Adresse à ouvrir dans le navigateur dédié. */
+function askBrowseAddress(b: Gate, s: GateServer) {
+  const field = h('input', { class: 'input', type: 'text', spellcheck: 'false', autocomplete: 'off', placeholder: 'https://…', 'aria-label': tr('Address', 'Adresse') }) as HTMLInputElement;
+  const form = h('form', { method: 'dialog' },
+    h('header', { class: 'dlg-head' }, h('h2', {}, tr(`Open through ${b.name}`, `Ouvrir par ${b.name}`))),
+    h('div', { class: 'dlg-body' }, h('label', { class: 'fld' }, h('span', {}, tr('Address', 'Adresse')), field)),
+    h('footer', { class: 'dlg-foot' },
+      h('button', { class: 'btn', type: 'button', onclick: () => dialog.close() }, tr('Cancel', 'Annuler')),
+      h('button', { class: 'btn primary', type: 'submit' }, tr('Open', 'Ouvrir'))));
+  const dialog = h('dialog', { class: 'dialog narrow', 'aria-label': tr('Open an address', 'Ouvrir une adresse') }, form) as HTMLDialogElement;
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const url = field.value.trim();
+    dialog.close();
+    if (url) void startBrowsing(b, s, url);
+  });
+  dialog.addEventListener('close', () => dialog.remove());
+  document.body.append(dialog);
+  dialog.showModal();
+  field.focus();
+}
+
 /** Serveur d'une Gate : session SSH par la Gate, avec un jeton à usage unique par connexion. */
 function openGateServer(b: Gate, s: GateServer) {
+  if (s.protocole === 'sortie') return void startBrowsing(b, s, null);
   if (s.protocole === 'rdp') return openGateDesktop(b, s);
   if (s.protocole === 'http' || s.protocole === 'https') return openGateWeb(b, s);
   const rebond = s.mode === 'rebond';
